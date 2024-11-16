@@ -1,5 +1,5 @@
-2024-11-15 currency USD
-2024-11-15 currency CAD
+2024-11-15 ! currency USD
+2024-11-15 ! currency CAD
 
 2024-11-15 First Entry
     Assets:Cash     200.00 USD
@@ -12,4 +12,4 @@
 2024-11-15 Foreign Exchange
     Assets:Cash  198.44 CAD
     Expenses:ExchangeFees 1.56 CAD
-    Assets:Cash -200.00 USD
+    Assets:Cash -200.00 USD @ 1 CAD

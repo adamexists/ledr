@@ -7,8 +7,6 @@ use chrono::NaiveDate;
 use crate::models::currency::Currency;
 use crate::models::ledger::Ledger;
 
-// TODO: In general, the parser is quick and dirty and could use a lot of work
-//  to become reliable. It's not nearly good enough at sanitizing the input yet.
 pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
     let path = Path::new(file_path);
     let file = File::open(&path)?;
@@ -19,55 +17,80 @@ pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
     while let Some(Ok(line)) = lines.next() {
         let line = line.trim_end();
 
-        // Skip blank lines or lines containing only whitespace, or process them as a signal to finish an entry
+        // Skip blank lines or process them as a signal to finish an entry
         if line.trim().is_empty() {
             ledger.finish_entry()?;
             continue;
         }
 
-        if line.starts_with(|c: char| c.is_whitespace()) && !line.starts_with("  ") && !line.starts_with("\t") {
-            // Line starts with whitespace but not enough for an entry detail - invalid format
-            bail!("Invalid line format: {}", line);
+        // Handle directive lines starting with a date and '!'
+        if let Some((date_str, remainder)) = line.split_once('!') {
+            let date = NaiveDate::parse_from_str(date_str.trim(), "%Y-%m-%d")?;
+            let parts: Vec<&str> = remainder.trim().split_whitespace().collect();
+
+            if parts.is_empty() {
+                bail!("Invalid directive format: {}", line);
+            }
+
+            match parts[0] {
+                "currency" if parts.len() == 2 => {
+                    let symbol = parts[1].to_string();
+                    ledger.declare_currency(symbol, date)?;
+                }
+                _ => bail!("Unknown directive or invalid arguments: {}", line),
+            }
+            continue;
         }
 
-        if line.split_whitespace().nth(1) == Some("currency") {
-            // Currency declaration
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() != 3 {
-                bail!("Invalid currency declaration format: {}", line);
+        // Handle entry declaration lines with a date and description
+        if let Some((date_str, desc)) = line.split_once(' ') {
+            if let Ok(date) = NaiveDate::parse_from_str(date_str.trim(), "%Y-%m-%d") {
+                ledger.new_entry(date, desc.trim().to_string())?;
+                continue;
             }
-            let date = NaiveDate::parse_from_str(parts[0], "%Y-%m-%d")?;
-            let symbol = parts[2].to_string();
-            ledger.declare_currency(symbol, date)?;
-        } else if !line.starts_with("  ") && !line.starts_with("\t") {
-            // Entry declaration line
-            let parts: Vec<&str> = line.splitn(2, ' ').collect();
-            if parts.len() != 2 {
-                bail!("Invalid entry declaration format: {}", line);
-            }
-            let date = NaiveDate::parse_from_str(parts[0], "%Y-%m-%d")?;
-            let desc = parts[1].to_string();
-            ledger.new_entry(date, desc)?;
-        } else {
-            // Entry detail line
-            let parts: Vec<&str> = line.trim().splitn(2, |c| c == ' ' || c == '\t').collect();
-            if parts.len() < 1 {
-                bail!("Invalid entry detail format: {}", line);
-            }
+        }
+
+        // Handle entry detail lines
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 3 {
             let account = parts[0].to_string();
-            let amount_currency = if parts.len() == 2 { parts[1].split_whitespace().collect::<Vec<&str>>() } else { vec![] };
+            let amount = parts[1].to_string();
+            let currency_symbol = parts[2].to_string();
+            let currency = Currency::new(currency_symbol);
 
-            if amount_currency.is_empty() {
-                // Virtual detail case (no amount, only account)
-                ledger.set_virtual_detail(account)?;
+            // Handle optional cost basis
+            let cost_basis = if parts.len() > 3 {
+                let basis_str = parts[3..].join(" ");
+                if let Some((symbol, basis_amount_currency)) = basis_str.split_once(' ') {
+                    if symbol == "@" {
+                        let basis_parts: Vec<&str> = basis_amount_currency.split_whitespace().collect();
+                        if basis_parts.len() == 2 {
+                            Some((basis_parts[0].to_string(), basis_parts[1].to_string()))
+                        } else {
+                            bail!("Invalid cost basis format: {}", line);
+                        }
+                    } else {
+                        bail!("Invalid cost basis format: {}", line);
+                    }
+                } else {
+                    bail!("Invalid cost basis format: {}", line);
+                }
             } else {
-                // Regular detail with amount and currency
-                let amount = amount_currency[0].to_string();
-                let currency_symbol = amount_currency[1].to_string();
-                let currency = Currency::new(currency_symbol);
-                ledger.add_detail(account, amount, currency)?;
-            }
+                None
+            };
+
+            ledger.add_detail(account, amount, currency, cost_basis)?;
+            continue;
         }
+
+        // Handle virtual entry detail lines (only account)
+        if parts.len() == 1 {
+            let account = parts[0].to_string();
+            ledger.set_virtual_detail(account)?;
+            continue;
+        }
+
+        bail!("Invalid line format: {}", line);
     }
 
     // Make sure to finish the last pending entry if the file ends without an empty line

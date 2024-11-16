@@ -50,7 +50,7 @@ impl Ledger {
         Ok(())
     }
 
-    pub fn add_detail(&mut self, account: String, amount: String, currency: Currency) -> Result<(), Error> {
+    pub fn add_detail(&mut self, account: String, amount: String, mut currency: Currency, cost_basis: Option<(String, String)>) -> Result<(), Error> {
         let declaration_date = match self.declared_currencies.get(currency.symbol()) {
             Some(d) => d,
             None => bail!("currency {} used without declaration", currency.symbol())
@@ -62,6 +62,16 @@ impl Ledger {
 
         if self.pending_entry.as_ref().unwrap().get_date() < declaration_date {
             bail!("currency {} used prior to declaration on {}", currency.symbol(), declaration_date)
+        }
+
+        if let Some((amt, sym)) = cost_basis {
+            if self.declared_currencies.get(&sym).is_none() {
+                bail!("cost-basis currency {} used without declaration", sym)
+            };
+
+            let cost_basis_ident = *self.ident_lookup.get(&Currency::new(sym)).unwrap();
+
+            currency.add_cost_basis(amt, cost_basis_ident)?;
         }
 
         let ident = match self.ident_lookup.get(&currency) {
@@ -112,6 +122,7 @@ impl Ledger {
             .collect();
 
         total.ingest_details(&self.currency_lookup, &all_details);
+        total.provide_currency_lookup(self.currency_lookup);
         total
     }
 }

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::MulAssign;
 use anyhow::{bail, Error};
 use crate::models::amount::Amount;
 use crate::models::currency::Currency;
@@ -26,11 +27,17 @@ pub struct Total {
     amounts: HashMap<Currency, Amount>,
     subtotals: HashMap<String, Total>, // account name -> next total
     depth: u32, // top level total has depth 0; Assets/Liabilities depth 1, etc.
+
+    currency_lookup: HashMap<u32, Currency>,
 }
 
 impl Total {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn provide_currency_lookup(&mut self, currency_lookup: HashMap<u32, Currency>) {
+        self.currency_lookup = currency_lookup
     }
 
     pub fn ingest_details(&mut self, currency_lookup: &HashMap<u32, Currency>, details: &Vec<Detail>) {
@@ -52,6 +59,7 @@ impl Total {
                         amounts: HashMap::new(),
                         subtotals: HashMap::new(),
                         depth: current_total.depth + 1,
+                        currency_lookup: HashMap::new(),
                     });
             }
 
@@ -86,21 +94,27 @@ impl Total {
     }
 
     pub fn dump_contents(&self) {
-        self.dump_contents_recursive(0);
+        self.dump_contents_recursive(0, &self.currency_lookup);
     }
 
-    fn dump_contents_recursive(&self, indent: usize) {
+    fn dump_contents_recursive(&self, indent: usize, currency_lookup: &HashMap<u32, Currency>) {
         let indentation = "\t".repeat(indent);
         if !self.account.is_empty() {
             println!("{}{}", indentation, self.account);
             if self.subtotals.len() == 0 {
                 for (currency, amount) in &self.amounts {
-                    println!("{}  {:>10} {}", indentation, format!("{:.2}", amount), currency.symbol());
+                    match currency.cost_basis() {
+                        None => println!("{}  {:>10} {}", indentation, format!("{:.2}", amount), currency.symbol()),
+                        Some(c) => {
+                            let cost_basis_cur = currency_lookup.get(&c.ident()).unwrap();
+                            println!("{}  {:>10} {} {}", indentation, format!("{:.2}", amount), currency.symbol(), currency.print_cost_basis(cost_basis_cur.symbol()).unwrap());
+                        }
+                    }
                 }
             }
         }
         for (_, subtotal) in &self.subtotals {
-            subtotal.dump_contents_recursive(indent + 1);
+            subtotal.dump_contents_recursive(indent + 1, currency_lookup);
         }
     }
 }
