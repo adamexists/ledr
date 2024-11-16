@@ -1,8 +1,11 @@
+use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::string::ToString;
 use anyhow::{bail, Error};
 use chrono::NaiveDate;
 use crate::models::amount::Amount;
+use crate::models::money;
+use crate::models::money::Money;
 
 const VIRTUAL_CONVERSION_ACCOUNT: &str = "Equity:Conversions";
 
@@ -25,7 +28,7 @@ impl Entry {
         }
     }
 
-    pub fn add_detail(&mut self, account: String, amount: String, ident: u32) -> Result<(), Error> {
+    pub fn add_detail(&mut self, account: String, amount: String, currency: String, cost_basis: Option<(String, String)>) -> Result<(), Error> {
         if self.is_finalized {
             bail!("entry already finalized")
         }
@@ -38,9 +41,14 @@ impl Entry {
             bail!("amount is blank")
         }
 
+        let mut new_amount = Amount::new_from_str(amount, currency)?;
+        if let Some((amt, sym)) = cost_basis {
+            new_amount.add_cost_basis(amt, sym)
+        };
+
         self.details.push(Detail {
             account: account.split(':').map(|s| s.to_string()).collect(),
-            amount: Amount::new_from_str(amount, ident)?,
+            amount: new_amount,
         });
 
         Ok(())
@@ -74,19 +82,18 @@ impl Entry {
 
     pub fn finalize(&mut self) -> Result<(), Error> {
         // Step 1: Sum amounts for each currency
-        let mut currency_sums: HashMap<u32, Amount> = HashMap::new();
+        let mut currency_sums: HashMap<String, Money> = HashMap::new();
 
         for detail in &self.details {
-            let entry = currency_sums.entry(detail.amount.ident())
-                .or_insert(Amount::new(0, 0, detail.amount.ident()));
-            *entry += detail.amount;
+            let &mut mut entry = currency_sums.entry(detail.amount.currency())
+                .or_insert(money::ZERO);
+            entry += detail.amount.scalar();
         }
 
         // Step 2: Check if all currencies sum to zero
-        let mut unbalanced_currencies: Vec<(u32, Amount)> = currency_sums
-            .iter()
-            .filter(|(_, &sum)| !sum.is_zero())
-            .map(|(&ident, &sum)| (ident, sum))
+        let mut unbalanced_currencies: Vec<(String, Money)> = currency_sums
+            .into_iter()
+            .filter(|(currency, amount)| amount != 0f64)
             .collect();
 
         if unbalanced_currencies.is_empty() {
@@ -96,23 +103,22 @@ impl Entry {
         // Assume implicit currency conversion if exactly two currencies are
         // unbalanced and in opposite directions.
         if unbalanced_currencies.len() == 2 && self.virtual_detail_account.is_none() {
-            let (_, amount1) = unbalanced_currencies.remove(0);
-            let (_, amount2) = unbalanced_currencies.remove(0);
+            let (currency1, amount1) = unbalanced_currencies.remove(0);
+            let (currency2, amount2) = unbalanced_currencies.remove(0);
 
-            if (amount1.is_neg() && amount2.is_neg())
-                || (!amount1.is_neg() && !amount2.is_neg()) {
-
+            if (amount1 < 0f64 && amount2 < 0f64)
+                || (amount1 > 0f64 && amount2 > 0f64) {
                 bail!("Unbalanced entry")
             }
 
             let virtual_detail1 = Detail {
                 account: VIRTUAL_CONVERSION_ACCOUNT.split(':').map(|s| s.to_string()).collect(),
-                amount: -amount1,
+                amount: Amount::new(amount1, currency1),
             };
 
             let virtual_detail2 = Detail {
                 account: VIRTUAL_CONVERSION_ACCOUNT.split(':').map(|s| s.to_string()).collect(),
-                amount: -amount2,
+                amount: Amount::new(amount2, currency2),
             };
 
             self.details.push(virtual_detail1);
@@ -125,10 +131,10 @@ impl Entry {
         // Step 3: Handle the case where there's a virtual detail account
         if let Some(account) = &self.virtual_detail_account {
             return if unbalanced_currencies.len() == 1 {
-                let (_, sum) = unbalanced_currencies.pop().unwrap();
+                let (cur, sum) = unbalanced_currencies.pop().unwrap();
                 let new_detail = Detail {
                     account: account.clone(),
-                    amount: -sum,
+                    amount: Amount::new(sum, cur),
                 };
 
                 self.details.push(new_detail);

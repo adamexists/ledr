@@ -1,9 +1,8 @@
 use std::collections::HashMap;
-use std::ops::MulAssign;
 use anyhow::{bail, Error};
-use crate::models::amount::Amount;
-use crate::models::currency::Currency;
 use crate::models::entry::Detail;
+use crate::models::money;
+use crate::models::money::Money;
 
 // Each total represents one account or segment, one position on the hierarchy,
 // that may have a balance. For example, for the ledger
@@ -24,11 +23,9 @@ use crate::models::entry::Detail;
 #[derive(Default)]
 pub struct Total {
     account: String,
-    amounts: HashMap<Currency, Amount>,
+    amounts: HashMap<String, Money>,
     subtotals: HashMap<String, Total>, // account name -> next total
     depth: u32, // top level total has depth 0; Assets/Liabilities depth 1, etc.
-
-    currency_lookup: HashMap<u32, Currency>,
 }
 
 impl Total {
@@ -36,49 +33,40 @@ impl Total {
         Default::default()
     }
 
-    pub fn provide_currency_lookup(&mut self, currency_lookup: HashMap<u32, Currency>) {
-        self.currency_lookup = currency_lookup
-    }
-
-    pub fn ingest_details(&mut self, currency_lookup: &HashMap<u32, Currency>, details: &Vec<Detail>) {
+    pub fn ingest_details(&mut self, details: &Vec<Detail>) {
         for detail in details {
             let mut current_total = &mut *self;
 
-            // Traverse or create the hierarchy based on the detail's account vector
-            for (_, segment) in detail.account.iter().enumerate() {
+            for segment in &detail.account {
                 // Update each total along the hierarchy
-                let amount_entry = current_total.amounts
-                    .entry(currency_lookup.get(&detail.amount.ident()).unwrap().clone())
-                    .or_insert_with(|| Amount::new(0, 0, detail.amount.ident()));
-                *amount_entry += detail.amount;
+                *current_total.amounts
+                    .entry(detail.amount.currency())
+                    .or_insert_with(|| money::ZERO) += detail.amount.scalar();
 
-                // Traverse to the next subtotal or create a new one if it doesn't exist
                 current_total = current_total.subtotals.entry(segment.clone())
                     .or_insert_with(|| Total {
                         account: segment.clone(),
                         amounts: HashMap::new(),
                         subtotals: HashMap::new(),
                         depth: current_total.depth + 1,
-                        currency_lookup: HashMap::new(),
                     });
             }
 
-            // Add the detail's amount to the final current total's amounts map
-            let amount_entry = current_total.amounts
-                .entry(currency_lookup.get(&detail.amount.ident()).unwrap().clone())
-                .or_insert_with(|| Amount::new(0, 0, detail.amount.ident()));
-            *amount_entry += detail.amount;
+            // Update the leaf node with the final amount
+            *current_total.amounts
+                .entry(detail.amount.currency())
+                .or_insert_with(|| money::ZERO) += detail.amount.scalar();
         }
     }
 
     pub fn validate(&self) -> Result<(), Error> {
         for (currency, amount) in &self.amounts {
             if !self.subtotals.is_empty() {
-                let subtotal_sum = self.subtotals.values()
+                let subtotal_sum: Money = self.subtotals.values()
                     .filter_map(|subtotal| subtotal.amounts.get(currency))
-                    .fold(Amount::new(0, 0, amount.ident()), |acc, subtotal_amount| acc + *subtotal_amount);
+                    .map(|&a| a).sum();
 
-                if *amount != subtotal_sum {
+                if amount != &subtotal_sum {
                     // TODO: This rule might be stupid and contradict a lot of common cases.
                     //  But it makes reports easier, at least in the very short-term.
                     bail!("account that has its own balance ({}) cannot have subaccounts", self.account);
@@ -94,27 +82,21 @@ impl Total {
     }
 
     pub fn dump_contents(&self) {
-        self.dump_contents_recursive(0, &self.currency_lookup);
+        self.dump_contents_recursive(0);
     }
 
-    fn dump_contents_recursive(&self, indent: usize, currency_lookup: &HashMap<u32, Currency>) {
+    fn dump_contents_recursive(&self, indent: usize) {
         let indentation = "\t".repeat(indent);
         if !self.account.is_empty() {
             println!("{}{}", indentation, self.account);
             if self.subtotals.len() == 0 {
                 for (currency, amount) in &self.amounts {
-                    match currency.cost_basis() {
-                        None => println!("{}  {:>10} {}", indentation, format!("{:.2}", amount), currency.symbol()),
-                        Some(c) => {
-                            let cost_basis_cur = currency_lookup.get(&c.ident()).unwrap();
-                            println!("{}  {:>10} {} {}", indentation, format!("{:.2}", amount), currency.symbol(), currency.print_cost_basis(cost_basis_cur.symbol()).unwrap());
-                        }
-                    }
+                    println!("{}  {:>10} {}", indentation, format!("{:.2}", amount), currency)
                 }
             }
         }
         for (_, subtotal) in &self.subtotals {
-            subtotal.dump_contents_recursive(indent + 1, currency_lookup);
+            subtotal.dump_contents_recursive(indent + 1);
         }
     }
 }

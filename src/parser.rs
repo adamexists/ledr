@@ -4,7 +4,6 @@ use std::io::BufRead;
 use std::path::Path;
 use anyhow::{bail, Error};
 use chrono::NaiveDate;
-use crate::models::currency::Currency;
 use crate::models::ledger::Ledger;
 
 pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
@@ -34,8 +33,8 @@ pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
 
             match parts[0] {
                 "currency" if parts.len() == 2 => {
-                    let symbol = parts[1].to_string();
-                    ledger.declare_currency(symbol, date)?;
+                    let currency = parts[1].to_string();
+                    ledger.declare_currency(currency, date)?;
                 }
                 _ => bail!("Unknown directive or invalid arguments: {}", line),
             }
@@ -55,14 +54,13 @@ pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
         if parts.len() >= 3 {
             let account = parts[0].to_string();
             let amount = parts[1].to_string();
-            let currency_symbol = parts[2].to_string();
-            let currency = Currency::new(currency_symbol);
+            let currency = parts[2].to_string();
 
             // Handle optional cost basis
             let cost_basis = if parts.len() > 3 {
                 let basis_str = parts[3..].join(" ");
-                if let Some((symbol, basis_amount_currency)) = basis_str.split_once(' ') {
-                    if symbol == "@" {
+                if let Some((currency, basis_amount_currency)) = basis_str.split_once(' ') {
+                    if currency == "@" {
                         let basis_parts: Vec<&str> = basis_amount_currency.split_whitespace().collect();
                         if basis_parts.len() == 2 {
                             Some((basis_parts[0].to_string(), basis_parts[1].to_string()))

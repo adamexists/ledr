@@ -11,6 +11,7 @@ fn main() -> Result<(), Error> {
 
     let totals = ledger.to_totals();
     totals.validate()?;
+
     totals.dump_contents();
     Ok(())
 }
