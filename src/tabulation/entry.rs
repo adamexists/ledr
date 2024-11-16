@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use std::string::ToString;
 use anyhow::{bail, Error};
-use chrono::NaiveDate;
 use crate::tabulation::money;
 use crate::tabulation::money::Money;
+use crate::util::date::Date;
 
 const VIRTUAL_CONVERSION_ACCOUNT: &str = "Equity:Conversions";
 
 pub struct Entry {
-    date: NaiveDate,
+    date: Date,
     desc: String,
     details: Vec<Detail>,
     virtual_detail: Option<Vec<String>>,
@@ -16,7 +16,7 @@ pub struct Entry {
 }
 
 impl Entry {
-    pub fn new(date: NaiveDate, desc: String) -> Self {
+    pub fn new(date: Date, desc: String) -> Self {
         Self {
             date,
             desc,
@@ -75,7 +75,7 @@ impl Entry {
         Ok(())
     }
 
-    pub fn get_date(&self) -> &NaiveDate {
+    pub fn get_date(&self) -> &Date {
         &self.date
     }
 

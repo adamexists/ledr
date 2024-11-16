@@ -1,9 +1,10 @@
+use std::collections::HashMap;
 use crate::reports::total::Total;
 use crate::tabulation::ledger::VALID_PREFIXES;
 use crate::tabulation::money::Money;
 
-// When using this to display something, you should instantiate it from_total(),
-// then filter it, then sort it, then display it.
+/// When using this to display something, you should instantiate it, then sort
+/// it, then display it. Filters should be handled in the Total struct.
 pub struct OrderedTotal {
     account: String,
     amounts: Vec<(String, Money)>, // currency -> balance held
@@ -22,13 +23,17 @@ impl OrderedTotal {
         }
     }
 
-    // Sorts top-level by Assets, Liabilities, Equity, Income, Expenses, then
-    // recursively sort in the following way:
-    //
-    // Each ordered_total's amounts should be sorted by currency. Each
-    // ordered_total's subtotals beyond the first, which is the special case here,
-    // should be sorted in descending order by the absolute value of the sum of
-    // its amounts' Money components.
+    // -----------
+    // -- SORTS --
+    // -----------
+
+    /// Sorts top-level by Assets, Liabilities, Equity, Income, Expenses, then
+    /// recursively sort in the following way:
+    ///
+    /// Each ordered_total's amounts are first sorted by currency. Each
+    /// ordered_total's subtotals beyond the first, which is the special case,
+    /// are then sorted in descending order by the absolute value of the sum of
+    /// its amounts' Money components.
     pub fn sort_canonical(&mut self) {
         // Sort amounts by currency
         self.amounts.sort_by(|(a, _), (b, _)| a.cmp(b));
@@ -43,12 +48,11 @@ impl OrderedTotal {
 
         // Now, sort the rest of the subtotals recursively
         for (_, subtotal) in self.subtotals.iter_mut() {
-            subtotal.sort_recursive();
+            subtotal.sort_canonical_recursive();
         }
     }
 
-    // Helper method to sort subtotals recursively
-    fn sort_recursive(&mut self) {
+    fn sort_canonical_recursive(&mut self) {
         // Sort amounts by currency
         self.amounts.sort_by(|(a, _), (b, _)| a.cmp(b));
 
@@ -67,11 +71,14 @@ impl OrderedTotal {
             sum_b.partial_cmp(&sum_a).unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        // Recursively sort the subtotals
         for (_, subtotal) in &mut self.subtotals {
-            subtotal.sort_recursive();
+            subtotal.sort_canonical_recursive();
         }
     }
+
+    // ------------
+    // -- PRINTS --
+    // ------------
 
     pub fn calculate_column_width(&self) -> usize {
         let mut max_width = 0;
@@ -100,16 +107,16 @@ impl OrderedTotal {
         max_width + 1
     }
 
-    // Prints the contents of the ordered_totals like the classic Ledger does.
-    // We only expand the subtotals up to the max_depth, if present.
+    /// Prints the contents of the ordered_totals like the classic Ledger does.
+    /// We only expand the subtotals up to the max_depth, if present.
     pub fn print_ledger_format(&self, max_depth: Option<usize>) {
         let column_width = self.calculate_column_width();
 
         // Display all entries
-        self.print_ledger_format_recursive(0, column_width, max_depth);
+        self.ledger_fmt_recursive(0, column_width, max_depth);
 
         // Display the totals for each currency
-        println!("{:>width$}", "--------------------", width = column_width);
+        println!("{:>width$}", "------------------", width = column_width);
         for (currency, amount) in &self.amounts {
             println!(
                 "{:>width$}  {}",
@@ -120,24 +127,45 @@ impl OrderedTotal {
         }
     }
 
-    fn print_ledger_format_recursive(
+    fn ledger_fmt_recursive(
         &self,
         indent: usize,
-        column_width: usize,
+        col_width: usize,
         max_depth: Option<usize>,
     ) {
         let indentation = " ".repeat(indent * 2);
 
         // Iterate over amounts and print each one (except top-level)
         if indent != 0 {
-            for (currency, amount) in &self.amounts {
+            let amts = &mut self.amounts.iter().peekable();
+
+            let mut has_printed_acct = false;
+            while let Some((currency, amount)) = amts.next() {
+                // how to print the account name differs massively
+                let acct = match (has_printed_acct, amts.peek().is_some()) {
+                    (false, false) => &*{
+                        format!(" {}", &self.account)
+                    },
+                    (false, true) => &*{
+                        format!(" {}", &self.account)
+                    },
+                    (true, true) => {
+                        " ↩"
+                    }
+                    (true, false) => {
+                        " ↩"
+                    }
+                };
+
                 println!(
-                    "{:>width$}  {}{}",
+                    "{:>width$} {}{}",
                     format!("{} {}", currency, amount),
                     indentation,
-                    self.account,
-                    width = column_width
+                    acct,
+                    width = col_width
                 );
+
+                has_printed_acct = true;
             }
         }
 
@@ -149,7 +177,7 @@ impl OrderedTotal {
 
         // Recursively display each subtotal
         for (_, subtotal) in &self.subtotals {
-            subtotal.print_ledger_format_recursive(indent + 1, column_width, max_depth);
+            subtotal.ledger_fmt_recursive(indent + 1, col_width, max_depth);
         }
     }
 }

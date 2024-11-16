@@ -84,6 +84,10 @@ impl Money {
             resolution: self.resolution,
         }
     }
+
+    pub fn negate(&mut self) {
+        self.amount *= -1
+    }
 }
 
 impl fmt::Display for Money {

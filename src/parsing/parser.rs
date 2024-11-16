@@ -3,15 +3,15 @@ use std::io;
 use std::io::BufRead;
 use std::path::Path;
 use anyhow::{bail, Error};
-use chrono::NaiveDate;
 use crate::tabulation::ledger::Ledger;
+use crate::util::date::Date;
 
 pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
     let path = Path::new(file_path);
     let file = File::open(&path)?;
     let reader = io::BufReader::new(file);
 
-    let mut lines = reader.lines().peekable();
+    let mut lines = reader.lines();
 
     while let Some(Ok(line)) = lines.next() {
         let line = line.trim_end();
@@ -24,8 +24,8 @@ pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
 
         // Handle directive lines starting with a date and '!'
         if let Some((date_str, remainder)) = line.split_once('!') {
-            let date = NaiveDate::parse_from_str(
-                date_str.trim(), "%Y-%m-%d",
+            let date = Date::from_str(
+                date_str.trim(),
             )?;
             let parts: Vec<&str> = remainder.trim().split_whitespace().collect();
 
@@ -45,8 +45,8 @@ pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
 
         // Handle entry declaration lines with a date and description
         if let Some((date_str, desc)) = line.split_once(' ') {
-            if let Ok(date) = NaiveDate::parse_from_str(
-                date_str.trim(), "%Y-%m-%d",
+            if let Ok(date) = Date::from_str(
+                date_str.trim(),
             ) {
                 ledger.new_entry(date, desc.trim().to_string())?;
                 continue;

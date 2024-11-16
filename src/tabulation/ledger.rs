@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use anyhow::{bail, Error};
-use chrono::NaiveDate;
 use crate::reports::total::Total;
 use crate::tabulation::entry::{Detail, Entry};
+use crate::util::date::Date;
 
 pub const VALID_PREFIXES: [&'static str; 5] =
     ["Assets", "Liabilities", "Equity", "Income", "Expenses"];
@@ -14,7 +14,7 @@ pub struct Ledger {
     pending_entry: Option<Entry>, // entry currently being assembled, if any
 
     // currency -> the earliest date currency is allowed to appear
-    declared_currencies: HashMap<String, NaiveDate>,
+    declared_currencies: HashMap<String, Date>,
 
     is_finalized: bool,
 }
@@ -31,7 +31,7 @@ impl Ledger {
     pub fn declare_currency(
         &mut self,
         currency: String,
-        date: NaiveDate,
+        date: Date,
     ) -> Result<(), Error> {
         if self.declared_currencies.contains_key(&currency) {
             bail!("currency {} declared twice", currency)
@@ -44,7 +44,7 @@ impl Ledger {
 
     pub fn new_entry(
         &mut self,
-        date: NaiveDate,
+        date: Date,
         desc: String,
     ) -> Result<(), Error> {
         if self.pending_entry.is_some() {
@@ -147,7 +147,7 @@ impl Ledger {
         Ok(())
     }
 
-    // Consumes the Ledger, transforming it into a Total.
+    /// Consumes the Ledger, transforming it into a Total.
     pub fn to_totals(self) -> Result<Total, Error> {
         if !self.is_finalized {
             bail!("ledger not marked as finalized")
