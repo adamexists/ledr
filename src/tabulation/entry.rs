@@ -1,11 +1,9 @@
-use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::string::ToString;
 use anyhow::{bail, Error};
 use chrono::NaiveDate;
-use crate::models::amount::Amount;
-use crate::models::money;
-use crate::models::money::Money;
+use crate::tabulation::money;
+use crate::tabulation::money::Money;
 
 const VIRTUAL_CONVERSION_ACCOUNT: &str = "Equity:Conversions";
 
@@ -13,7 +11,7 @@ pub struct Entry {
     date: NaiveDate,
     desc: String,
     details: Vec<Detail>,
-    virtual_detail_account: Option<Vec<String>>,
+    virtual_detail: Option<Vec<String>>,
     is_finalized: bool,
 }
 
@@ -23,12 +21,17 @@ impl Entry {
             date,
             desc,
             details: vec![],
-            virtual_detail_account: None,
+            virtual_detail: None,
             is_finalized: false,
         }
     }
 
-    pub fn add_detail(&mut self, account: String, amount: String, currency: String, cost_basis: Option<(String, String)>) -> Result<(), Error> {
+    pub fn add_detail(
+        &mut self, account:
+        String, amount: String,
+        currency: String,
+        cost_basis: Option<(String, String)>,
+    ) -> Result<(), Error> {
         if self.is_finalized {
             bail!("entry already finalized")
         }
@@ -41,16 +44,16 @@ impl Entry {
             bail!("amount is blank")
         }
 
-        let mut new_amount = Amount::new_from_str(amount, currency)?;
+        let mut new_detail = Detail {
+            account: account.split(':').map(|s| s.to_string()).collect(),
+            amount: Money::new(&*amount)?,
+            currency,
+        };
         if let Some((amt, sym)) = cost_basis {
-            new_amount.add_cost_basis(amt, sym)
+            new_detail.add_cost_basis(amt, sym)
         };
 
-        self.details.push(Detail {
-            account: account.split(':').map(|s| s.to_string()).collect(),
-            amount: new_amount,
-        });
-
+        self.details.push(new_detail);
         Ok(())
     }
 
@@ -59,7 +62,7 @@ impl Entry {
             bail!("entry already finalized")
         }
 
-        if self.virtual_detail_account.is_some() {
+        if self.virtual_detail.is_some() {
             bail!("only one line per entry may omit amount and currency")
         }
 
@@ -67,7 +70,7 @@ impl Entry {
             bail!("account is blank")
         }
 
-        self.virtual_detail_account =
+        self.virtual_detail =
             Some(account.split(':').map(|s| s.to_string()).collect());
         Ok(())
     }
@@ -85,15 +88,15 @@ impl Entry {
         let mut currency_sums: HashMap<String, Money> = HashMap::new();
 
         for detail in &self.details {
-            let &mut mut entry = currency_sums.entry(detail.amount.currency())
+            let &mut mut entry = currency_sums.entry(detail.currency())
                 .or_insert(money::ZERO);
-            entry += detail.amount.scalar();
+            entry += detail.amount;
         }
 
         // Step 2: Check if all currencies sum to zero
         let mut unbalanced_currencies: Vec<(String, Money)> = currency_sums
             .into_iter()
-            .filter(|(currency, amount)| amount != 0f64)
+            .filter(|(_, amount)| amount != 0f64)
             .collect();
 
         if unbalanced_currencies.is_empty() {
@@ -102,7 +105,7 @@ impl Entry {
 
         // Assume implicit currency conversion if exactly two currencies are
         // unbalanced and in opposite directions.
-        if unbalanced_currencies.len() == 2 && self.virtual_detail_account.is_none() {
+        if unbalanced_currencies.len() == 2 && self.virtual_detail.is_none() {
             let (currency1, amount1) = unbalanced_currencies.remove(0);
             let (currency2, amount2) = unbalanced_currencies.remove(0);
 
@@ -112,13 +115,21 @@ impl Entry {
             }
 
             let virtual_detail1 = Detail {
-                account: VIRTUAL_CONVERSION_ACCOUNT.split(':').map(|s| s.to_string()).collect(),
-                amount: Amount::new(amount1, currency1),
+                account: VIRTUAL_CONVERSION_ACCOUNT
+                    .split(':')
+                    .map(|s| s.to_string())
+                    .collect(),
+                amount: amount1,
+                currency: currency1,
             };
 
             let virtual_detail2 = Detail {
-                account: VIRTUAL_CONVERSION_ACCOUNT.split(':').map(|s| s.to_string()).collect(),
-                amount: Amount::new(amount2, currency2),
+                account: VIRTUAL_CONVERSION_ACCOUNT
+                    .split(':')
+                    .map(|s| s.to_string())
+                    .collect(),
+                amount: amount2,
+                currency: currency2,
             };
 
             self.details.push(virtual_detail1);
@@ -129,16 +140,17 @@ impl Entry {
         }
 
         // Step 3: Handle the case where there's a virtual detail account
-        if let Some(account) = &self.virtual_detail_account {
+        if let Some(account) = &self.virtual_detail {
             return if unbalanced_currencies.len() == 1 {
                 let (cur, sum) = unbalanced_currencies.pop().unwrap();
                 let new_detail = Detail {
                     account: account.clone(),
-                    amount: Amount::new(sum, cur),
+                    amount: sum,
+                    currency: cur,
                 };
 
                 self.details.push(new_detail);
-                self.virtual_detail_account = None;
+                self.virtual_detail = None;
                 self.is_finalized = true;
                 Ok(())
             } else {
@@ -155,5 +167,16 @@ impl Entry {
 pub struct Detail {
     // "Assets:Cash" -> Vec<String> = {"Assets","Cash"}
     pub account: Vec<String>,
-    pub amount: Amount,
+    pub amount: Money,
+    currency: String,
+}
+
+impl Detail {
+    pub fn add_cost_basis(&mut self, amount: String, currency: String) {
+        self.currency = format!("{} @ {} {}", self.currency, amount, currency);
+    }
+
+    pub fn currency(&self) -> String {
+        self.currency.clone()
+    }
 }

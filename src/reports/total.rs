@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use anyhow::{bail, Error};
-use crate::models::entry::Detail;
-use crate::models::money;
-use crate::models::money::Money;
+use anyhow::Error;
+use crate::tabulation::entry::Detail;
+use crate::tabulation::money;
+use crate::tabulation::money::Money;
 
 // Each total represents one account or segment, one position on the hierarchy,
 // that may have a balance. For example, for the ledger
@@ -23,7 +23,7 @@ use crate::models::money::Money;
 #[derive(Default)]
 pub struct Total {
     account: String,
-    amounts: HashMap<String, Money>,
+    amounts: HashMap<String, Money>, // currency -> balance held
     subtotals: HashMap<String, Total>, // account name -> next total
     depth: u32, // top level total has depth 0; Assets/Liabilities depth 1, etc.
 }
@@ -40,8 +40,8 @@ impl Total {
             for segment in &detail.account {
                 // Update each total along the hierarchy
                 *current_total.amounts
-                    .entry(detail.amount.currency())
-                    .or_insert_with(|| money::ZERO) += detail.amount.scalar();
+                    .entry(detail.currency())
+                    .or_insert_with(|| money::ZERO) += detail.amount;
 
                 current_total = current_total.subtotals.entry(segment.clone())
                     .or_insert_with(|| Total {
@@ -54,30 +54,13 @@ impl Total {
 
             // Update the leaf node with the final amount
             *current_total.amounts
-                .entry(detail.amount.currency())
-                .or_insert_with(|| money::ZERO) += detail.amount.scalar();
+                .entry(detail.currency())
+                .or_insert_with(|| money::ZERO) += detail.amount;
         }
     }
 
     pub fn validate(&self) -> Result<(), Error> {
-        for (currency, amount) in &self.amounts {
-            if !self.subtotals.is_empty() {
-                let subtotal_sum: Money = self.subtotals.values()
-                    .filter_map(|subtotal| subtotal.amounts.get(currency))
-                    .map(|&a| a).sum();
-
-                if amount != &subtotal_sum {
-                    // TODO: This rule might be stupid and contradict a lot of common cases.
-                    //  But it makes reports easier, at least in the very short-term.
-                    bail!("account that has its own balance ({}) cannot have subaccounts", self.account);
-                }
-            }
-        }
-
-        for subtotal in self.subtotals.values() {
-            subtotal.validate()?;
-        }
-
+        // TODO: Maybe this is used in the future.
         Ok(())
     }
 
@@ -89,10 +72,13 @@ impl Total {
         let indentation = "\t".repeat(indent);
         if !self.account.is_empty() {
             println!("{}{}", indentation, self.account);
-            if self.subtotals.len() == 0 {
-                for (currency, amount) in &self.amounts {
-                    println!("{}  {:>10} {}", indentation, format!("{:.2}", amount), currency)
-                }
+            for (currency, amount) in &self.amounts {
+                println!(
+                    "{}  {:>10} {}",
+                    indentation,
+                    format!("{:.2}", amount),
+                    currency
+                )
             }
         }
         for (_, subtotal) in &self.subtotals {

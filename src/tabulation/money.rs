@@ -57,6 +57,31 @@ impl Money {
     }
 }
 
+impl fmt::Display for Money {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut amount_str = self.amount.abs().to_string();
+
+        if self.resolution > 0 {
+            // Ensure the string has enough digits for the decimal placement
+            while amount_str.len() <= self.resolution as usize {
+                amount_str.insert(0, '0');
+            }
+            let decimal_index = amount_str.len() - self.resolution as usize;
+            amount_str.insert(decimal_index, '.');
+        }
+
+        if self.amount < 0 {
+            write!(f, "-{}", amount_str)
+        } else {
+            write!(f, "{}", amount_str)
+        }
+    }
+}
+
+// -----------------
+// -- BOILERPLATE --
+// -----------------
+
 impl Add for Money {
     type Output = Self;
 
@@ -127,26 +152,5 @@ impl PartialOrd for Money {
 impl PartialOrd<f64> for Money {
     fn partial_cmp(&self, &other: &f64) -> Option<std::cmp::Ordering> {
         self.to_f64().partial_cmp(&other)
-    }
-}
-
-impl fmt::Display for Money {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut amount_str = self.amount.abs().to_string();
-
-        if self.resolution > 0 {
-            // Ensure the string has enough digits for the decimal placement
-            while amount_str.len() <= self.resolution as usize {
-                amount_str.insert(0, '0');
-            }
-            let decimal_index = amount_str.len() - self.resolution as usize;
-            amount_str.insert(decimal_index, '.');
-        }
-
-        if self.amount < 0 {
-            write!(f, "-{}", amount_str)
-        } else {
-            write!(f, "{}", amount_str)
-        }
     }
 }

@@ -4,7 +4,7 @@ use std::io::BufRead;
 use std::path::Path;
 use anyhow::{bail, Error};
 use chrono::NaiveDate;
-use crate::models::ledger::Ledger;
+use crate::tabulation::ledger::Ledger;
 
 pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
     let path = Path::new(file_path);
@@ -24,7 +24,9 @@ pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
 
         // Handle directive lines starting with a date and '!'
         if let Some((date_str, remainder)) = line.split_once('!') {
-            let date = NaiveDate::parse_from_str(date_str.trim(), "%Y-%m-%d")?;
+            let date = NaiveDate::parse_from_str(
+                date_str.trim(), "%Y-%m-%d",
+            )?;
             let parts: Vec<&str> = remainder.trim().split_whitespace().collect();
 
             if parts.is_empty() {
@@ -43,7 +45,9 @@ pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
 
         // Handle entry declaration lines with a date and description
         if let Some((date_str, desc)) = line.split_once(' ') {
-            if let Ok(date) = NaiveDate::parse_from_str(date_str.trim(), "%Y-%m-%d") {
+            if let Ok(date) = NaiveDate::parse_from_str(
+                date_str.trim(), "%Y-%m-%d",
+            ) {
                 ledger.new_entry(date, desc.trim().to_string())?;
                 continue;
             }
@@ -59,17 +63,13 @@ pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
             // Handle optional cost basis
             let cost_basis = if parts.len() > 3 {
                 let basis_str = parts[3..].join(" ");
-                if let Some((currency, basis_amount_currency)) = basis_str.split_once(' ') {
-                    if currency == "@" {
-                        let basis_parts: Vec<&str> = basis_amount_currency.split_whitespace().collect();
-                        if basis_parts.len() == 2 {
-                            Some((basis_parts[0].to_string(), basis_parts[1].to_string()))
-                        } else {
-                            bail!("Invalid cost basis format: {}", line);
-                        }
-                    } else {
+                if let Some((currency, basis)) = basis_str.split_once(' ') {
+                    let b_parts: Vec<&str> = basis.split_whitespace().collect();
+                    if currency != "@" || b_parts.len() != 2 {
                         bail!("Invalid cost basis format: {}", line);
                     }
+
+                    Some((b_parts[0].to_string(), b_parts[1].to_string()))
                 } else {
                     bail!("Invalid cost basis format: {}", line);
                 }
@@ -91,7 +91,7 @@ pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
         bail!("Invalid line format: {}", line);
     }
 
-    // Make sure to finish the last pending entry if the file ends without an empty line
+    // Make sure to finish the last entry if the file ends without an empty line
     ledger.finish_entry()?;
 
     Ok(())

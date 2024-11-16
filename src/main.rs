@@ -1,9 +1,10 @@
 use anyhow::Error;
-use crate::models::ledger::Ledger;
-use crate::parser::parse_ledger;
+use tabulation::ledger::Ledger;
+use crate::parsing::parser::parse_ledger;
 
-mod models;
-mod parser;
+mod parsing;
+mod tabulation;
+mod reports;
 
 fn main() -> Result<(), Error> {
     let mut ledger = Ledger::new();

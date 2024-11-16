@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use anyhow::{bail, Error};
 use chrono::NaiveDate;
-use crate::models::entry::{Detail, Entry};
-use crate::models::total::Total;
+use crate::reports::total::Total;
+use crate::tabulation::entry::{Detail, Entry};
 
 #[derive(Default)]
 pub struct Ledger {
@@ -23,7 +23,11 @@ impl Ledger {
     // -- INPUT --
     // -----------
 
-    pub fn declare_currency(&mut self, currency: String, date: NaiveDate) -> Result<(), Error> {
+    pub fn declare_currency(
+        &mut self,
+        currency: String,
+        date: NaiveDate,
+    ) -> Result<(), Error> {
         if self.declared_currencies.contains_key(&currency) {
             bail!("currency {} declared twice", currency)
         }
@@ -33,7 +37,11 @@ impl Ledger {
         Ok(())
     }
 
-    pub fn new_entry(&mut self, date: NaiveDate, desc: String) -> Result<(), Error> {
+    pub fn new_entry(
+        &mut self,
+        date: NaiveDate,
+        desc: String,
+    ) -> Result<(), Error> {
         if self.pending_entry.is_some() {
             self.finish_entry()?;
         }
@@ -42,7 +50,13 @@ impl Ledger {
         Ok(())
     }
 
-    pub fn add_detail(&mut self, account: String, amount: String, mut currency: String, cost_basis: Option<(String, String)>) -> Result<(), Error> {
+    pub fn add_detail(
+        &mut self,
+        account: String,
+        amount: String,
+        currency: String,
+        cost_basis: Option<(String, String)>,
+    ) -> Result<(), Error> {
         let declaration_date = match self.declared_currencies.get(&currency) {
             Some(d) => d,
             None => bail!("currency {} used without declaration", currency)
@@ -53,10 +67,15 @@ impl Ledger {
         }
 
         if self.pending_entry.as_ref().unwrap().get_date() < declaration_date {
-            bail!("currency {} used prior to declaration on {}", currency, declaration_date)
+            bail!("currency {} used prior to declaration on {}",
+                currency,
+                declaration_date)
         }
 
-        self.pending_entry.as_mut().unwrap().add_detail(account, amount, currency, cost_basis)
+        self.pending_entry
+            .as_mut()
+            .unwrap()
+            .add_detail(account, amount, currency, cost_basis)
     }
 
     pub fn set_virtual_detail(&mut self, account: String) -> Result<(), Error> {
