@@ -4,6 +4,9 @@ use chrono::NaiveDate;
 use crate::reports::total::Total;
 use crate::tabulation::entry::{Detail, Entry};
 
+pub const VALID_PREFIXES: [&'static str; 5] =
+    ["Assets", "Liabilities", "Equity", "Income", "Expenses"];
+
 #[derive(Default)]
 pub struct Ledger {
     entries: Vec<Entry>,
@@ -12,6 +15,8 @@ pub struct Ledger {
 
     // currency -> the earliest date currency is allowed to appear
     declared_currencies: HashMap<String, NaiveDate>,
+
+    is_finalized: bool,
 }
 
 impl Ledger {
@@ -72,6 +77,17 @@ impl Ledger {
                 declaration_date)
         }
 
+        if account.is_empty() {
+            bail!("invalid account: empty")
+        }
+
+        let has_valid_prefix = VALID_PREFIXES
+            .iter()
+            .any(|&prefix| account.starts_with(prefix));
+        if !has_valid_prefix {
+            bail!("invalid account prefix: {}", account)
+        }
+
         self.pending_entry
             .as_mut()
             .unwrap()
@@ -101,8 +117,42 @@ impl Ledger {
     // -- TABULATING --
     // ----------------
 
+    pub fn finalize(&mut self) -> Result<(), Error> {
+        let mut max_reso_by_currency: HashMap<String, u32> = HashMap::new();
+
+        // Iterate over each detail to determine the highest resolution per currency
+        for detail in self.entries.iter().flat_map(|x| x.details()) {
+            let reso = detail.amount.resolution();
+            let currency = detail.currency();
+
+            // Update max resolution if this detail has higher resolution
+            max_reso_by_currency
+                .entry(currency.clone())
+                .and_modify(|max_reso| {
+                    if reso > *max_reso {
+                        *max_reso = reso;
+                    }
+                })
+                .or_insert(reso);
+        }
+
+        // Standardize all amounts in each currency to the highest precision found
+        for entry in &mut self.entries {
+            for (currency, &reso) in &max_reso_by_currency {
+                entry.set_resolution_for_currency(currency, reso)
+            }
+        }
+
+        self.is_finalized = true;
+        Ok(())
+    }
+
     // Consumes the Ledger, transforming it into a Total.
-    pub fn to_totals(self) -> Total {
+    pub fn to_totals(self) -> Result<Total, Error> {
+        if !self.is_finalized {
+            bail!("ledger not marked as finalized")
+        }
+
         let mut total = Total::new();
 
         let all_details: Vec<Detail> = self.entries
@@ -111,6 +161,6 @@ impl Ledger {
             .collect();
 
         total.ingest_details(&all_details);
-        total
+        Ok(total)
     }
 }

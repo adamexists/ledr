@@ -5,9 +5,8 @@ use crate::tabulation::money;
 use crate::tabulation::money::Money;
 
 // Each total represents one account or segment, one position on the hierarchy,
-// that may have a balance. For example, for the ledger
+// that may have a balance. For example, for the ledger with hierarchy
 //
-// TODO replace with actual report output when it exists
 // Assets
 //      Cash
 //      AR
@@ -22,10 +21,10 @@ use crate::tabulation::money::Money;
 // currency, because double-entry accounting, and account string "".
 #[derive(Default)]
 pub struct Total {
-    account: String,
-    amounts: HashMap<String, Money>, // currency -> balance held
-    subtotals: HashMap<String, Total>, // account name -> next total
-    depth: u32, // top level total has depth 0; Assets/Liabilities depth 1, etc.
+    pub account: String,
+    pub amounts: HashMap<String, Money>, // currency -> balance held
+    pub subtotals: HashMap<String, Total>, // account name -> next total
+    pub depth: u32, // top level total has depth 0; Assets/Liabilities depth 1, etc.
 }
 
 impl Total {

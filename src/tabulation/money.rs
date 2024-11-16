@@ -40,6 +40,28 @@ impl Money {
         })
     }
 
+    pub fn resolution(&self) -> u32 {
+        self.resolution
+    }
+
+    pub fn set_resolution(&mut self, resolution: u32) {
+        if resolution == self.resolution {
+            return;
+        }
+
+        if resolution < self.resolution {
+            // Chop off the tail of the underlying amount, losing precision
+            let factor = 10i64.pow(self.resolution - resolution);
+            self.amount /= factor;
+        } else {
+            // Pad the underlying amount with zeroes
+            let factor = 10i64.pow(resolution - self.resolution);
+            self.amount *= factor;
+        }
+
+        self.resolution = resolution;
+    }
+
     fn align_resolution(&self, other: &Money) -> (i64, i64, u32) {
         let max_resolution = self.resolution.max(other.resolution);
         let factor_self = 10i64.pow(max_resolution - self.resolution);
@@ -55,6 +77,13 @@ impl Money {
     fn to_f64(&self) -> f64 {
         self.amount as f64 / 10f64.powi(self.resolution as i32)
     }
+
+    pub fn abs(&self) -> Self {
+        Self {
+            amount: self.amount.abs(),
+            resolution: self.resolution,
+        }
+    }
 }
 
 impl fmt::Display for Money {
@@ -68,6 +97,22 @@ impl fmt::Display for Money {
             }
             let decimal_index = amount_str.len() - self.resolution as usize;
             amount_str.insert(decimal_index, '.');
+        }
+
+        // Insert commas every three digits on the left of the decimal point
+        if let Some(decimal_index) = amount_str.find('.') {
+            let mut i = decimal_index as isize - 3;
+            while i > 0 {
+                amount_str.insert(i as usize, ',');
+                i -= 3;
+            }
+        } else {
+            // If there's no decimal point, add commas to the entire string
+            let mut i = amount_str.len() as isize - 3;
+            while i > 0 {
+                amount_str.insert(i as usize, ',');
+                i -= 3;
+            }
         }
 
         if self.amount < 0 {
@@ -152,5 +197,12 @@ impl PartialOrd for Money {
 impl PartialOrd<f64> for Money {
     fn partial_cmp(&self, &other: &f64) -> Option<std::cmp::Ordering> {
         self.to_f64().partial_cmp(&other)
+    }
+}
+
+impl Ord for Money {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let (amount_self, amount_other, _) = self.align_resolution(other);
+        amount_self.cmp(&amount_other)
     }
 }

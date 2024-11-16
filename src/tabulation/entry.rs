@@ -79,8 +79,20 @@ impl Entry {
         &self.date
     }
 
+    pub fn details(&self) -> &Vec<Detail> {
+        &self.details
+    }
+
     pub fn take_details(self) -> Vec<Detail> {
         self.details
+    }
+
+    pub fn set_resolution_for_currency(&mut self, currency: &String, resolution: u32) {
+        for detail in &mut self.details {
+            if &detail.currency == currency {
+                detail.amount.set_resolution(resolution)
+            }
+        }
     }
 
     pub fn finalize(&mut self) -> Result<(), Error> {
@@ -88,9 +100,9 @@ impl Entry {
         let mut currency_sums: HashMap<String, Money> = HashMap::new();
 
         for detail in &self.details {
-            let &mut mut entry = currency_sums.entry(detail.currency())
+            let entry = currency_sums.entry(detail.currency())
                 .or_insert(money::ZERO);
-            entry += detail.amount;
+            *entry += detail.amount;
         }
 
         // Step 2: Check if all currencies sum to zero
@@ -145,7 +157,7 @@ impl Entry {
                 let (cur, sum) = unbalanced_currencies.pop().unwrap();
                 let new_detail = Detail {
                     account: account.clone(),
-                    amount: sum,
+                    amount: -sum,
                     currency: cur,
                 };
 
