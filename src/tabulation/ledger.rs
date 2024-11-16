@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use anyhow::{bail, Error};
 use crate::reports::total::Total;
 use crate::tabulation::entry::{Detail, Entry};
+use crate::tabulation::exchange_rate::ExchangeRates;
 use crate::util::date::Date;
 
 pub const VALID_PREFIXES: [&'static str; 5] =
@@ -10,13 +11,14 @@ pub const VALID_PREFIXES: [&'static str; 5] =
 #[derive(Default)]
 pub struct Ledger {
     entries: Vec<Entry>,
+    /// entry currently being assembled, if any
+    pending_entry: Option<Entry>,
+    is_finalized: bool,
 
-    pending_entry: Option<Entry>, // entry currently being assembled, if any
-
-    // currency -> the earliest date currency is allowed to appear
+    /// currency -> the earliest date currency is allowed to appear
     declared_currencies: HashMap<String, Date>,
 
-    is_finalized: bool,
+    pub exchange_rates: ExchangeRates,
 }
 
 impl Ledger {
@@ -106,7 +108,7 @@ impl Ledger {
         match self.pending_entry.take() {
             None => Ok(()),
             Some(mut entry) => {
-                entry.finalize()?;
+                entry.finalize(&mut self.exchange_rates)?;
                 self.entries.push(entry);
                 Ok(())
             }

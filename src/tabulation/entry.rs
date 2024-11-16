@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::string::ToString;
 use anyhow::{bail, Error};
+use crate::tabulation::exchange_rate::ExchangeRates;
 use crate::tabulation::money;
 use crate::tabulation::money::Money;
 use crate::util::date::Date;
@@ -95,7 +96,10 @@ impl Entry {
         }
     }
 
-    pub fn finalize(&mut self) -> Result<(), Error> {
+    /// Completes an entry. We have to pass the exchange rate set in here,
+    /// because this is where exchange rates are inferred in some cases, i.e. if
+    /// exactly two currencies are imbalanced.
+    pub fn finalize(&mut self, rates: &mut ExchangeRates) -> Result<(), Error> {
         // Step 1: Sum amounts for each currency
         let mut currency_sums: HashMap<String, Money> = HashMap::new();
 
@@ -132,7 +136,7 @@ impl Entry {
                     .map(|s| s.to_string())
                     .collect(),
                 amount: amount1,
-                currency: currency1,
+                currency: currency1.clone(),
             };
 
             let virtual_detail2 = Detail {
@@ -141,8 +145,16 @@ impl Entry {
                     .map(|s| s.to_string())
                     .collect(),
                 amount: amount2,
-                currency: currency2,
+                currency: currency2.clone(),
             };
+
+            rates.infer(
+                self.date,
+                currency1,
+                currency2,
+                (amount2.to_f64() / amount1.to_f64()).abs(),
+            )?;
+            println!("{:?}", rates);
 
             self.details.push(virtual_detail1);
             self.details.push(virtual_detail2);

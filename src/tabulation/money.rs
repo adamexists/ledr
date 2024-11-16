@@ -74,7 +74,7 @@ impl Money {
         )
     }
 
-    fn to_f64(&self) -> f64 {
+    pub fn to_f64(&self) -> f64 {
         self.amount as f64 / 10f64.powi(self.resolution as i32)
     }
 

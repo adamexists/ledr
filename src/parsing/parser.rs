@@ -4,29 +4,26 @@ use std::io::BufRead;
 use std::path::Path;
 use anyhow::{bail, Error};
 use crate::tabulation::ledger::Ledger;
+use crate::tabulation::money::Money;
 use crate::util::date::Date;
 
-pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
+// First pass to process only directive lines
+fn first_pass(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
     let path = Path::new(file_path);
     let file = File::open(&path)?;
     let reader = io::BufReader::new(file);
 
-    let mut lines = reader.lines();
+    for line in reader.lines() {
+        let line = line?.trim().to_string();
 
-    while let Some(Ok(line)) = lines.next() {
-        let line = line.trim_end();
-
-        // Skip blank lines or process them as a signal to finish an entry
-        if line.trim().is_empty() {
-            ledger.finish_entry()?;
+        // Skip blank lines and comments
+        if line.is_empty() || line.starts_with("#") {
             continue;
         }
 
         // Handle directive lines starting with a date and '!'
         if let Some((date_str, remainder)) = line.split_once('!') {
-            let date = Date::from_str(
-                date_str.trim(),
-            )?;
+            let date = Date::from_str(date_str.trim())?;
             let parts: Vec<&str> = remainder.trim().split_whitespace().collect();
 
             if parts.is_empty() {
@@ -38,16 +35,52 @@ pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
                     let currency = parts[1].to_string();
                     ledger.declare_currency(currency, date)?;
                 }
+                "rate" if parts.len() == 4 => {
+                    let from = parts[1].to_string();
+                    let to = parts[2].to_string();
+                    let rate = parts[3];
+                    ledger.exchange_rates.declare(
+                        date, from, to, Money::new(rate)?.to_f64(),
+                    )?
+                }
                 _ => bail!("Unknown directive or invalid arguments: {}", line),
             }
+        }
+    }
+
+    Ok(())
+}
+
+// Second pass to process everything else
+fn second_pass(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
+    let path = Path::new(file_path);
+    let file = File::open(&path)?;
+    let reader = io::BufReader::new(file);
+
+    let mut lines = reader.lines();
+
+    while let Some(Ok(line)) = lines.next() {
+        let line = line.trim();
+
+        // ignore comment lines completely
+        if line.starts_with("#") {
+            continue;
+        }
+
+        // Skip blank lines or process them as a signal to finish an entry
+        if line.is_empty() {
+            ledger.finish_entry()?;
+            continue;
+        }
+
+        // Skip directive lines
+        if line.contains('!') {
             continue;
         }
 
         // Handle entry declaration lines with a date and description
         if let Some((date_str, desc)) = line.split_once(' ') {
-            if let Ok(date) = Date::from_str(
-                date_str.trim(),
-            ) {
+            if let Ok(date) = Date::from_str(date_str.trim()) {
                 ledger.new_entry(date, desc.trim().to_string())?;
                 continue;
             }
@@ -94,5 +127,12 @@ pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
     // Make sure to finish the last entry if the file ends without an empty line
     ledger.finish_entry()?;
 
+    Ok(())
+}
+
+// Combined function to run both passes
+pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
+    first_pass(file_path, ledger)?;
+    second_pass(file_path, ledger)?;
     Ok(())
 }
