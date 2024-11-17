@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use crate::reports::total::Total;
 use crate::tabulation::ledger::VALID_PREFIXES;
 use crate::tabulation::money::Money;
@@ -212,7 +211,11 @@ impl OrderedTotal {
         max_depth: Option<usize>,
     ) {
         let indentation = " ".repeat(indent * 2);
-        let can_condense = self.can_condense_with_all_below();
+        let can_condense = if max_depth.is_none() {
+            self.can_condense_with_all_below()
+        } else {
+            false
+        };
 
         // Iterate over amounts and print each one (except top-level)
         if indent != 0 {

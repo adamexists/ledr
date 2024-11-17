@@ -104,30 +104,4 @@ impl Total {
             subtotal.invert();
         }
     }
-
-    // ------------------
-    // -- TESTING ONLY --
-    // ------------------
-
-    pub fn dump_contents(&self) {
-        self.dump_contents_recursive(0);
-    }
-
-    fn dump_contents_recursive(&self, indent: usize) {
-        let indentation = "\t".repeat(indent);
-        if !self.account.is_empty() {
-            println!("{}{}", indentation, self.account);
-            for (currency, amount) in &self.amounts {
-                println!(
-                    "{}  {:>10} {}",
-                    indentation,
-                    amount,
-                    currency
-                )
-            }
-        }
-        for (_, subtotal) in &self.subtotals {
-            subtotal.dump_contents_recursive(indent + 1);
-        }
-    }
 }

@@ -1,4 +1,5 @@
 use anyhow::Error;
+use clap::{CommandFactory, Parser};
 use tabulation::ledger::Ledger;
 use crate::parsing::parser::parse_ledger;
 use crate::reports::ordered_total::OrderedTotal;
@@ -8,24 +9,82 @@ mod tabulation;
 mod reports;
 mod util;
 
-fn main() -> Result<(), Error> {
-    let mut ledger = Ledger::new();
-    parse_ledger("ledger.txt", &mut ledger)?;
+#[derive(Parser)]
+#[command(name = "ledr", version = "1.0", about = "Command line accounting tool")]
+struct Cli {
+    // ----------------
+    // -- POSITIONAL --
+    // ----------------
 
-    ledger.collapse_to("USD".to_string());
+    /// The command to execute
+    directive: String,
+
+    // -----------
+    // -- FLAGS --
+    // -----------
+
+    /// Specifies the input file
+    #[arg(short)]
+    file: String,
+
+    /// Convert all possible currencies in the output to the given currency
+    #[arg(short, long)]
+    collapse: Option<String>,
+
+    /// Hides equity accounts from reports
+    #[arg(short = 'E', long)]
+    ignore_equity: bool,
+
+    /// Condense accounts nested below this depth
+    #[arg(short, long)]
+    depth: Option<usize>,
+
+    /// Negates all currency values
+    #[arg(short, long)]
+    invert: bool,
+}
+
+fn main() -> Result<(), Error> {
+    let args = Cli::parse();
+
+    let mut ledger = Ledger::new();
+    parse_ledger(&*args.file, &mut ledger)?;
+
+    if let Some(collapse) = args.collapse {
+        ledger.collapse_to(collapse);
+    }
     ledger.finalize()?;
 
     let mut totals = ledger.to_totals()?;
 
-    totals.filter_top_level(vec!["Assets", "Liabilities"]);
-    // totals.invert();
+    match args.directive.as_str() {
+        "bs" | "balancesheet" => {
+            let mut top_levels = vec!["Assets", "Liabilities"];
+            if !args.ignore_equity {
+                top_levels.push("Equity");
+            }
+
+            totals.filter_top_level(top_levels);
+        },
+        "is" | "incomestatement" => {
+            totals.filter_top_level(vec!["Income", "Expenses"]);
+        }
+        _ => {
+            let _ = Cli::command().print_help();
+            std::process::exit(2);
+        }
+    }
+
+    if args.invert {
+        totals.invert();
+    }
 
     totals.validate()?;
 
     let mut ordered_totals = OrderedTotal::from_total(totals);
 
     ordered_totals.sort_canonical();
-    ordered_totals.print_ledger_format(None);
+    ordered_totals.print_ledger_format(args.depth);
 
     Ok(())
 }
