@@ -2,8 +2,8 @@ use std::fs::File;
 use std::io;
 use std::io::{BufRead, Seek};
 use std::path::Path;
-use anyhow::{bail, Error};
-use crate::tabulation::ledger::Ledger;
+use anyhow::{anyhow, bail, Error};
+use crate::tabulation::ledger::{CostBasisAmountType, CostBasisInput, Ledger};
 use crate::util::scalar::Scalar;
 use crate::util::date::Date;
 
@@ -108,14 +108,23 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
                         bail!("Invalid cost basis (line {}): {}", i, line);
                     }
 
-
-                    let is_total_cost = match operator {
-                        "@" => false,
-                        "@@" => true,
-                        _ => bail!("Invalid cost basis (line {}): {}", i, line)
+                    let amount_type = match operator {
+                        "@" => CostBasisAmountType::UnitCost,
+                        "@@" => CostBasisAmountType::TotalCost,
+                        _ => bail!("Invalid cost basis (line {}): {}", i, line),
                     };
 
-                    Some((b_parts[0].to_string(), b_parts[1].to_string(), is_total_cost))
+                    let amount = Scalar::from_str(b_parts[0])
+                        .map_err(|_| anyhow!(
+                            "Invalid scalar value (line {}): {}", i, line)
+                        )?;
+                    let currency = b_parts[1].to_string();
+
+                    Some(CostBasisInput {
+                        amount,
+                        amount_type,
+                        currency,
+                    })
                 } else {
                     bail!("Invalid cost basis (line {}): {}", i, line);
                 }

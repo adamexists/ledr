@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::string::ToString;
 use anyhow::{bail, Error};
 use crate::tabulation::exchange_rate::ExchangeRates;
@@ -13,8 +13,11 @@ pub struct Entry {
     date: Date,
     desc: String,
     details: Vec<Detail>,
-    virtual_detail: Option<String>,
     is_finalized: bool,
+
+    virtual_detail: Option<String>,
+    totals: HashMap<String, Scalar>, // Currency -> Amount
+    cost_basis_totals: HashMap<String, Scalar>, // Currency -> Amount
 }
 
 impl Entry {
@@ -25,6 +28,8 @@ impl Entry {
             details: vec![],
             virtual_detail: None,
             is_finalized: false,
+            totals: HashMap::new(),
+            cost_basis_totals: HashMap::new(),
         }
     }
 
@@ -33,7 +38,7 @@ impl Entry {
         account: String,
         amount: Scalar,
         currency: String,
-        cost_basis: Option<(String, String)>,
+        cost_basis: Option<CostBasis>,
     ) -> Result<(), Error> {
         if self.is_finalized {
             bail!("entry already finalized")
@@ -43,18 +48,51 @@ impl Entry {
             bail!("account is blank")
         }
 
-        if amount == 0 {
-            bail!("amount is blank: {:?}", amount)
+        // details with a cost basis cause an imbalance of the cost basis
+        // currency also, because they imply that amount has offset this detail
+        *self.totals.entry(currency.clone()).or_insert(scalar::ZERO) += amount;
+        if let Some(cb) = &cost_basis {
+            *self.cost_basis_totals.entry(
+                cb.currency.clone()
+            ).or_insert(scalar::ZERO) += cb.unit_price * amount;
         }
 
-        let new_detail = Detail {
+        self.details.push(Detail {
             account,
             amount,
             currency,
             cost_basis,
-        };
+        });
 
-        self.details.push(new_detail);
+
+        Ok(())
+    }
+
+    /// Used during finalization to insert details that should not impact the
+    /// imbalance lists. This is because they are being inserted to correct the
+    /// imbalances themselves. TODO Consider a better name for this?
+    fn add_balancing_detail(
+        &mut self,
+        account: String,
+        amount: Scalar,
+        currency: String,
+    ) -> Result<(), Error> {
+        if self.is_finalized {
+            bail!("entry already finalized")
+        }
+
+        if account.len() == 0 {
+            bail!("account is blank")
+        }
+
+        self.details.push(Detail {
+            account,
+            amount,
+            currency,
+            cost_basis: None,
+        });
+
+
         Ok(())
     }
 
@@ -112,85 +150,62 @@ impl Entry {
     ///
     /// TODO: This method is in dire need of cleanup.
     pub fn finalize(&mut self, rates: &mut ExchangeRates) -> Result<(), Error> {
-        self.implicit_conversions_check(rates)?;
+        let cost_basis_imbalances = self.get_cost_basis_imbalances();
 
-        let mut unbalanced_currencies = self.get_unbalanced_currencies();
+        let infer_rates = cost_basis_imbalances.len() == 0;
 
-        // Step 3: Handle the case where there's a virtual detail account
-        if let Some(account) = &self.virtual_detail {
-            if unbalanced_currencies.len() == 1 {
+        // TODO: I think the cloning here is not optimal.
+        if let Some(vd) = &self.virtual_detail.clone() {
+            for (currency, amount) in cost_basis_imbalances {
+                self.add_balancing_detail(vd.clone(), -amount, currency.clone())?;
+                self.add_balancing_detail(VIRTUAL_CONVERSION_ACCOUNT.to_string(), amount, currency)?
+            }
+        }
 
-                // This section TODO needs to be properly manpaged etc.
-                // What we do here is that, if we have a virtual detail and the
-                // only other detail in the entry has a cost basis, then we do
-                // a bit of syntactic sugar and assume the user has exchanged
-                // the cost basis currency and amount.
-                if self.details.len() == 1 && self.details.first().unwrap().cost_basis.is_some() {
-                    let details = self.details.first().unwrap();
+        let mut imbalances = self.get_imbalances();
 
-                    let (cb_amt, cb_cur) = details.cost_basis.as_ref().unwrap();
-
-                    // TODO: I thought about making sure the syntactic sugar
-                    // entry has the resolution of the cost basis currency, as
-                    // displayed, after the multiplication, but it caused some
-                    // precision errors. Gotta reconsider. In general there are
-                    // some clear precision & rounding errors causing weirdness
-                    // on the periphery. Thus this project needs attention.
-                    let mut special_entry = -Scalar::from_str(&*cb_amt.clone())?;
-                    let res = special_entry.resolution();
-                    special_entry *= details.amount;
-                    // special_entry.set_resolution(res);
-
-                    self.details.push(Detail {
-                        account: account.clone(),
-                        amount: special_entry,
-                        currency: cb_cur.clone(),
-                        cost_basis: None,
-                    });
+        match imbalances.len() {
+            0 => return Ok(()),
+            1 => {
+                if infer_rates {
+                    let (currency, amount) = imbalances.pop().unwrap();
+                    if let Some(vd) = &self.virtual_detail {
+                        self.handle_virtual_detail(vd.clone(), currency, amount)
+                    }
                 } else {
-                    let (cur, sum) = unbalanced_currencies.pop().unwrap();
-                    let new_detail = Detail {
-                        account: account.clone(),
-                        amount: -sum,
-                        currency: cur,
-                        cost_basis: None,
-                    };
-
-                    self.details.push(new_detail);
-                };
-
-                self.virtual_detail = None;
-            };
+                    // TODO: Need to net the imbalance specifically in the 
+                    //  conversions account, because shenanigans. By the end of
+                    //  today the logic will be right, but man if this isn't
+                    //  confusing.
+                    let (currency, amount) = imbalances.pop().unwrap();
+                    self.add_balancing_detail(VIRTUAL_CONVERSION_ACCOUNT.to_string(), -amount, currency)?;
+                }
+            }
+            2 => {
+                if infer_rates && self.virtual_detail.is_some() {
+                    bail!("unbalanced entry")
+                }
+                
+                self.implicit_conversions_check(imbalances, rates, infer_rates)?;
+            }
+            _ => bail!("unbalanced entry")
         }
 
-        self.implicit_conversions_check(rates)?;
-        unbalanced_currencies = self.get_unbalanced_currencies();
-        if unbalanced_currencies.is_empty() {
-            self.is_finalized = true;
-            return Ok(());
-        }
-
-        // No virtual detail account and unbalanced, return an error
-        bail!("Unbalanced entry")
+        Ok(())
     }
 
-    fn implicit_conversions_check(&mut self, rates: &mut ExchangeRates) -> Result<(), Error> {
-        let mut unbalanced_currencies = self.get_unbalanced_currencies();
-
-        if unbalanced_currencies.is_empty() {
-            self.is_finalized = true;
-            return Ok(());
-        }
-
+    fn implicit_conversions_check(&mut self, mut imbalances: Vec<(String, Scalar)>, rates: &mut ExchangeRates, infer_rates: bool) -> Result<(), Error> {
         // Assume implicit currency conversion if exactly two currencies are
         // unbalanced and in opposite directions.
-        if unbalanced_currencies.len() == 2 && self.virtual_detail.is_none() {
-            let (currency1, amount1) = unbalanced_currencies.remove(0);
-            let (currency2, amount2) = unbalanced_currencies.remove(0);
+        if imbalances.len() == 2 {
+            let (currency1, amount1) = imbalances.remove(0);
+            let (currency2, amount2) = imbalances.remove(0);
 
-            if (amount1 < 0 && amount2 < 0)
-                || (amount1 > 0 && amount2 > 0) {
-                bail!("Unbalanced entry")
+            if infer_rates {
+                if (amount1 < 0 && amount2 < 0)
+                    || (amount1 > 0 && amount2 > 0) {
+                    bail!("Unbalanced entry")
+                }
             }
 
             let virtual_detail1 = Detail {
@@ -207,49 +222,88 @@ impl Entry {
                 cost_basis: None,
             };
 
-            // a quick hack to keep the scalar division more efficient
-            if amount1 < amount2 {
+            // This implies an exchange rate between the currencies, except in
+            // some cases where we've entered reconciling details manually and
+            // should not make assumptions here
+            if infer_rates {
                 rates.infer(
                     self.date,
                     currency2,
                     currency1,
                     (amount1 / amount2).abs(),
                 )?;
-            } else {
-                rates.infer(
-                    self.date,
-                    currency1,
-                    currency2,
-                    (amount2 / amount1).abs(),
-                )?;
             }
 
             self.details.push(virtual_detail1);
             self.details.push(virtual_detail2);
-
-            self.is_finalized = true;
-            return Ok(());
         }
 
-        self.is_finalized = true;
         Ok(())
     }
 
-    fn get_unbalanced_currencies(&self) -> Vec<(String, Scalar)> {
-        // Step 1: Sum amounts for each currency
-        let mut currency_sums: HashMap<String, Scalar> = HashMap::new();
+    fn handle_virtual_detail(&mut self, account: String, currency: String, amount: Scalar) {
+        // We consume the virtual detail within, in all logical branches.
+        self.virtual_detail = None;
 
-        for detail in &self.details {
-            let entry = currency_sums.entry(detail.currency())
-                .or_insert(scalar::ZERO);
-            *entry += detail.amount;
-        }
+        // This section TODO needs to be properly manpaged etc.
+        // What we do here is that, if we have a virtual detail and the
+        // only other detail in the entry has a cost basis, then we do
+        // a bit of syntactic sugar and assume the user has exchanged
+        // the cost basis currency and amount.
+        // TODO: I have not thought about how this handles the cases I set up
+        //  today.
+        if self.details.len() == 1 && self.details.first().unwrap().cost_basis.is_some() {
+            let details = self.details.first().unwrap();
 
-        // Step 2: Check if all currencies sum to zero
-        currency_sums
-            .into_iter()
-            .filter(|(_, amount)| *amount != 0)
-            .collect()
+            let cb = details.cost_basis.as_ref().unwrap();
+
+            let mut special_entry = -cb.unit_price;
+            special_entry *= details.amount;
+
+            self.details.push(Detail {
+                account: account.clone(),
+                amount: special_entry,
+                currency: cb.currency.clone(),
+                cost_basis: None,
+            });
+
+            // TODO: After this, on this path, the implicit conversions
+            //  correction needs to be run again, because we've just created an
+            //  imbalanced entry on purpose.
+        } else {
+            let new_detail = Detail {
+                account: account.clone(),
+                amount: -amount,
+                currency,
+                cost_basis: None,
+            };
+
+            self.details.push(new_detail);
+        };
+    }
+
+    /// Find all currencies in the entry that do not sum to zero, with amounts
+    fn get_imbalances(&self) -> Vec<(String, Scalar)> {
+        // Collect the retained elements into a Vec
+        self.totals.iter().filter_map(|(k, &v)| {
+            if v != 0 {
+                Some((k.clone(), v))
+            } else {
+                None
+            }
+        }).collect()
+    }
+
+    /// Find all cost bases in the entry that do not sum to zero, with amounts
+    fn get_cost_basis_imbalances(&self) -> Vec<(String, Scalar)> {
+        // Collect the retained elements into a Vec
+        self.cost_basis_totals.iter().filter_map(|(k, &v)| {
+            if v != 0 {
+                Some((k.clone(), v))
+            } else {
+                None
+            }
+        }).collect()
     }
 }
 
@@ -259,7 +313,7 @@ pub struct Detail {
     pub amount: Scalar,
     currency: String,
 
-    cost_basis: Option<(String, String)>,
+    cost_basis: Option<CostBasis>,
 }
 
 impl Detail {
@@ -281,6 +335,12 @@ impl Detail {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct CostBasis {
+    pub unit_price: Scalar,
+    pub currency: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -290,7 +350,7 @@ mod tests {
 
     // Helper function to create a sample Date for testing
     fn sample_date(offset: u8) -> Date {
-        Date::from_ymd(2024, 1, 1+offset)
+        Date::from_ymd(2024, 1, 1 + offset)
     }
 
     // Helper function to set up an Entry with a date and description

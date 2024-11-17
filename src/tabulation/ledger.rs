@@ -2,8 +2,9 @@ use std::cmp::min;
 use std::collections::HashMap;
 use anyhow::{bail, Error};
 use crate::tabulation::total::Total;
-use crate::tabulation::entry::{Detail, Entry};
+use crate::tabulation::entry::{CostBasis, Detail, Entry};
 use crate::tabulation::exchange_rate::ExchangeRates;
+use crate::tabulation::ledger::CostBasisAmountType::TotalCost;
 use crate::tabulation::lot::Lots;
 use crate::util::scalar::Scalar;
 use crate::util::date::Date;
@@ -66,7 +67,7 @@ impl Ledger {
         account: String,
         amount: String,
         currency: String,
-        cost_basis: Option<(String, String, bool)>,
+        cost_basis: Option<CostBasisInput>,
     ) -> Result<(), Error> {
         let declaration_date = match self.declared_currencies.get(&currency) {
             Some(d) => d,
@@ -101,21 +102,18 @@ impl Ledger {
         let money_amt = Scalar::from_str(&*amount)?;
         let mut cost_basis_input = None;
 
-        // TODO: The whole way that cost basis is passed around needs to be
-        //  redone.
-        if let Some((cb_amount, cb_currency, is_total_cost)) = cost_basis.clone() {
-            let mut cb_money_amt = Scalar::from_str(&*cb_amount.clone())?;
-            if is_total_cost {
-                cb_money_amt /= money_amt;
+        // TODO: Could still use another refactor eventually.
+        if let Some(mut cb) = cost_basis {
+            if cb.amount_type == TotalCost {
+                cb.amount /= money_amt;
             }
-            cost_basis_input = Some((cb_money_amt.to_string(), cb_currency.clone()));
             // TODO: Investigate whether this is necessary anymore, now that
             //  finalizing an entry has been refactored.
             self.exchange_rates.infer(
                 self.pending_entry_date(),
                 currency.clone(),
-                cb_currency.clone(),
-                cb_money_amt,
+                cb.currency.clone(),
+                cb.amount,
             )?;
 
             self.lots.add_movement(
@@ -123,10 +121,18 @@ impl Ledger {
                 account.clone(),
                 currency.clone(),
                 money_amt,
-                (cb_amount, cb_currency),
+                CostBasis {
+                    currency: cb.currency.clone(),
+                    unit_price: cb.amount,
+                },
             )?;
+            
+            cost_basis_input = Some(CostBasis {
+                unit_price: cb.amount,
+                currency: cb.currency,
+            });
         }
-
+        
         self.pending_entry
             .as_mut()
             .unwrap()
@@ -243,4 +249,18 @@ impl Ledger {
         total.ingest_details(&all_details);
         Ok(total)
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum CostBasisAmountType {
+    UnitCost,
+    TotalCost,
+}
+
+#[derive(Debug)]
+pub struct CostBasisInput {
+    pub(crate) amount: Scalar,
+    pub(crate) amount_type: CostBasisAmountType,
+    
+    pub(crate) currency: String,
 }

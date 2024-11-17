@@ -12,7 +12,8 @@ mod reports;
 mod util;
 
 // TODO: Do a sweep for the usefulness of errors.
-// TODO: Should be able to move entirely to integer arithmetic for exchange rates.
+// TODO: Should add a .build.yml for tests, too.
+// TODO: Sweep "pub" stuff that can actually be "pub(crate)".
 
 #[derive(Parser)]
 #[command(name = "ledr", version = "1.0", about = "Plain text accounting tool")]
