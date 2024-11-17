@@ -3,6 +3,8 @@ use clap::{Parser, ValueEnum};
 use tabulation::ledger::Ledger;
 use crate::parsing::parser::parse_ledger;
 use crate::reports::ordered_total::OrderedTotal;
+use crate::tabulation::total::Total;
+use crate::util::date::Date;
 
 mod parsing;
 mod tabulation;
@@ -49,6 +51,7 @@ enum Directive {
     BS,
     IS,
     TB,
+    OpenLots, // TODO: Need other lot reports.
 }
 
 fn main() -> Result<(), Error> {
@@ -57,27 +60,55 @@ fn main() -> Result<(), Error> {
     let mut ledger = Ledger::new();
     parse_ledger(&*args.file, &mut ledger)?;
 
-    if let Some(collapse) = args.collapse {
-        ledger.collapse_to(collapse);
-    }
-    ledger.remove_cost_basis();
-    ledger.finalize()?;
-
-    let mut totals = ledger.to_totals()?;
-
     match args.command {
         Directive::BS => {
+            let mut totals = financial_statement(&args, ledger)?;
+
             let mut top_levels = vec!["Assets", "Liabilities"];
             if !args.ignore_equity {
                 top_levels.push("Equity");
             }
             totals.filter_top_level(top_levels);
+            let mut ordered_totals = OrderedTotal::from_total(totals);
+
+            ordered_totals.sort_canonical();
+            ordered_totals.print_ledger_format(args.depth);
         },
         Directive::IS => {
+            let mut totals = financial_statement(&args, ledger)?;
+
             totals.filter_top_level(vec!["Income", "Expenses"]);
+            let mut ordered_totals = OrderedTotal::from_total(totals);
+
+            ordered_totals.sort_canonical();
+            ordered_totals.print_ledger_format(args.depth);
         }
-        Directive::TB => {}
+        Directive::TB => {
+            let totals = financial_statement(&args, ledger)?;
+            let mut ordered_totals = OrderedTotal::from_total(totals);
+
+            ordered_totals.sort_canonical();
+            ordered_totals.print_ledger_format(args.depth);
+        }
+        Directive::OpenLots => {
+            // TODO: Add customization for this directive.
+            // TODO: Need to implement pretty-printing for this. Right now, it's
+            //  at the level of debug output.
+            ledger.lots.tabulate(&Date::today())?
+        }
     }
+
+    Ok(())
+}
+
+fn financial_statement(args: &Cli, mut ledger: Ledger) -> Result<Total, Error> {
+    ledger.remove_cost_basis();
+    if let Some(collapse) = &args.collapse {
+        ledger.collapse_to(collapse.clone());
+    }
+    ledger.finalize()?;
+
+    let mut totals = ledger.to_totals()?;
 
     if args.invert {
         totals.invert();
@@ -85,10 +116,5 @@ fn main() -> Result<(), Error> {
 
     totals.validate()?;
 
-    let mut ordered_totals = OrderedTotal::from_total(totals);
-
-    ordered_totals.sort_canonical();
-    ordered_totals.print_ledger_format(args.depth);
-
-    Ok(())
+    Ok(totals)
 }

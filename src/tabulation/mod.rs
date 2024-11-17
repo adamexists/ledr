@@ -3,4 +3,4 @@ pub mod ledger;
 pub mod money;
 pub mod exchange_rate;
 pub mod total;
-mod commodities;
+mod lot;

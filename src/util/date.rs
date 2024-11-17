@@ -1,8 +1,12 @@
 use std::cmp::Ordering;
 use std::fmt;
+use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{bail, Error};
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+static TODAY: Mutex<Date> = Mutex::new(Date {year: 0, month: 0, day: 0});
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Date {
     year: u32,
     month: u8,
@@ -40,7 +44,7 @@ impl Date {
 
     /// Calculate the duration in calendar years, months, and days, and the
     /// total number of days, between two dates
-    pub fn duration_between(&self, other: &Date) -> Duration {
+    pub fn until(&self, other: &Date) -> Duration {
         let (earlier, later) = if self < other {
             (self, other)
         } else {
@@ -127,6 +131,50 @@ impl Date {
         }
         true
     }
+
+    // TODO: This is inefficient & should be revisited in a timely (ha) manner
+    pub fn today() -> Date {
+        if let d = TODAY.lock().unwrap() {
+            if d.year > 0 {
+                return d.clone();
+            }
+        }
+
+        // Get the current time as seconds since the UNIX epoch
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards");
+        let seconds = now.as_secs();
+
+        // Calculate days since UNIX epoch and convert to a date
+        let days_since_epoch = seconds / 86400; // 86400 seconds in a day
+        let mut year = 1970;
+        let mut month = 1;
+        let mut day = 1;
+
+        let mut days = days_since_epoch as u32;
+        // Calculate the year
+        while days >= if Date::is_leap_year(year) { 366 } else { 365 } {
+            days -= if Date::is_leap_year(year) { 366 } else { 365 };
+            year += 1;
+        }
+
+        // Calculate the month
+        while days >= Date::days_in_month(year, month) as u32 {
+            days -= Date::days_in_month(year, month) as u32;
+            month += 1;
+        }
+
+        // Remaining days are the day of the month
+        day += days as u8;
+
+        let mut d = TODAY.lock().unwrap();
+        d.year = year;
+        d.month = month;
+        d.day = day;
+
+        Date { year, month, day }
+    }
 }
 
 impl PartialOrd for Date {
@@ -156,7 +204,7 @@ mod tests {
     fn test_same_date() {
         let date1 = Date::from_str("2024-11-15").unwrap();
         let date2 = Date::from_str("2024-11-15").unwrap();
-        let result = date1.duration_between(&date2);
+        let result = date1.until(&date2);
         assert_eq!((result.years, result.months, result.days, result.total_days), (0, 0, 0, 0));
     }
 
@@ -164,7 +212,7 @@ mod tests {
     fn test_one_day_difference() {
         let date1 = Date::from_str("2024-11-15").unwrap();
         let date2 = Date::from_str("2024-11-16").unwrap();
-        let result = date1.duration_between(&date2);
+        let result = date1.until(&date2);
         assert_eq!((result.years, result.months, result.days, result.total_days), (0, 0, 1, 1));
     }
 
@@ -172,7 +220,7 @@ mod tests {
     fn test_one_month_difference() {
         let date1 = Date::from_str("2024-11-15").unwrap();
         let date2 = Date::from_str("2024-12-15").unwrap();
-        let result = date1.duration_between(&date2);
+        let result = date1.until(&date2);
         assert_eq!((result.years, result.months, result.days, result.total_days), (0, 1, 0, 30));
     }
 
@@ -180,7 +228,7 @@ mod tests {
     fn test_one_year_difference() {
         let date1 = Date::from_str("2024-11-15").unwrap();
         let date2 = Date::from_str("2025-11-15").unwrap();
-        let result = date1.duration_between(&date2);
+        let result = date1.until(&date2);
         assert_eq!((result.years, result.months, result.days, result.total_days), (1, 0, 0, 365));
     }
 
@@ -188,7 +236,7 @@ mod tests {
     fn test_leap_year() {
         let date1 = Date::from_str("2024-02-28").unwrap();
         let date2 = Date::from_str("2024-03-01").unwrap();
-        let result = date1.duration_between(&date2);
+        let result = date1.until(&date2);
         assert_eq!((result.years, result.months, result.days, result.total_days), (0, 0, 2, 2));
     }
 
@@ -196,7 +244,7 @@ mod tests {
     fn test_crossing_year_boundary() {
         let date1 = Date::from_str("2023-12-30").unwrap();
         let date2 = Date::from_str("2024-01-02").unwrap();
-        let result = date1.duration_between(&date2);
+        let result = date1.until(&date2);
         assert_eq!((result.years, result.months, result.days, result.total_days), (0, 0, 3, 3));
     }
 
@@ -204,7 +252,7 @@ mod tests {
     fn test_large_difference() {
         let date1 = Date::from_str("2000-01-01").unwrap();
         let date2 = Date::from_str("2024-11-15").unwrap();
-        let result = date1.duration_between(&date2);
+        let result = date1.until(&date2);
         assert_eq!((result.years, result.months, result.days, result.total_days), (24, 10, 14, 9085));
     }
 
@@ -212,7 +260,7 @@ mod tests {
     fn test_reverse_order() {
         let date1 = Date::from_str("2025-11-17").unwrap();
         let date2 = Date::from_str("2024-11-15").unwrap();
-        let result = date1.duration_between(&date2);
+        let result = date1.until(&date2);
         assert_eq!((result.years, result.months, result.days, result.total_days), (1, 0, 2, 367));
     }
 
@@ -220,7 +268,7 @@ mod tests {
     fn test_end_of_month() {
         let date1 = Date::from_str("2024-01-31").unwrap();
         let date2 = Date::from_str("2024-02-29").unwrap(); // Leap year
-        let result = date1.duration_between(&date2);
+        let result = date1.until(&date2);
         assert_eq!((result.years, result.months, result.days, result.total_days), (0, 0, 29, 29));
     }
 }

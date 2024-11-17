@@ -3,6 +3,8 @@ use anyhow::{bail, Error};
 use crate::tabulation::total::Total;
 use crate::tabulation::entry::{Detail, Entry};
 use crate::tabulation::exchange_rate::ExchangeRates;
+use crate::tabulation::lot::Lots;
+use crate::tabulation::money::Money;
 use crate::util::date::Date;
 
 pub const VALID_PREFIXES: [&'static str; 5] =
@@ -19,6 +21,7 @@ pub struct Ledger {
     declared_currencies: HashMap<String, Date>,
 
     pub exchange_rates: ExchangeRates,
+    pub lots: Lots,
 }
 
 impl Ledger {
@@ -83,6 +86,10 @@ impl Ledger {
             bail!("invalid account: empty")
         }
 
+        if amount.is_empty() {
+            bail!("invalid amount: empty")
+        }
+
         let has_valid_prefix = VALID_PREFIXES
             .iter()
             .any(|&prefix| account.starts_with(prefix));
@@ -90,10 +97,29 @@ impl Ledger {
             bail!("invalid account prefix: {}", account)
         }
 
+        let money_amt = Money::new(&*amount)?;
+
+        if let Some((cb_amount, cb_currency)) = cost_basis.clone() {
+            self.exchange_rates.infer(
+                self.pending_entry_date(),
+                currency.clone(),
+                cb_currency.clone(),
+                Money::new(&*cb_amount.clone())?.to_f64(),
+            )?;
+
+            self.lots.add_movement(
+                self.pending_entry_date(),
+                account.clone(),
+                currency.clone(),
+                money_amt,
+                (cb_amount, cb_currency),
+            )?;
+        }
+
         self.pending_entry
             .as_mut()
             .unwrap()
-            .add_detail(account, amount, currency, cost_basis)
+            .add_detail(account, money_amt.clone(), currency, cost_basis)
     }
 
     pub fn set_virtual_detail(&mut self, account: String) -> Result<(), Error> {
@@ -112,6 +138,15 @@ impl Ledger {
                 self.entries.push(entry);
                 Ok(())
             }
+        }
+    }
+
+    pub fn pending_entry_date(&self) -> Date {
+        match &self.pending_entry {
+            Some(e) => {
+                e.get_date().clone()
+            }
+            None => panic!("pending_entry_date called without pending entry"),
         }
     }
 

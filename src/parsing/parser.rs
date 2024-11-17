@@ -7,6 +7,8 @@ use crate::tabulation::ledger::Ledger;
 use crate::tabulation::money::Money;
 use crate::util::date::Date;
 
+// TODO: Implement strict account declaration.
+
 // First pass to process only directive lines
 fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
     let reader = io::BufReader::new(file);

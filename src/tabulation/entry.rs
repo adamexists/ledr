@@ -8,6 +8,7 @@ use crate::util::date::Date;
 
 const VIRTUAL_CONVERSION_ACCOUNT: &str = "Equity:Conversions";
 
+#[derive(Debug)]
 pub struct Entry {
     date: Date,
     desc: String,
@@ -28,8 +29,9 @@ impl Entry {
     }
 
     pub fn add_detail(
-        &mut self, account:
-        String, amount: String,
+        &mut self,
+        account: String,
+        amount: Money,
         currency: String,
         cost_basis: Option<(String, String)>,
     ) -> Result<(), Error> {
@@ -41,17 +43,15 @@ impl Entry {
             bail!("account is blank")
         }
 
-        if amount.len() == 0 {
+        if amount == 0f64 {
             bail!("amount is blank")
         }
 
-        let mut new_detail = Detail {
+        let new_detail = Detail {
             account: account.split(':').map(|s| s.to_string()).collect(),
-            amount: Money::new(&*amount)?,
+            amount,
             currency,
-        };
-        if let Some((amt, sym)) = cost_basis {
-            new_detail.add_cost_basis(amt, sym)
+            cost_basis,
         };
 
         self.details.push(new_detail);
@@ -141,6 +141,7 @@ impl Entry {
                     .collect(),
                 amount: -amount1,
                 currency: currency1.clone(),
+                cost_basis: None,
             };
 
             let virtual_detail2 = Detail {
@@ -150,6 +151,7 @@ impl Entry {
                     .collect(),
                 amount: -amount2,
                 currency: currency2.clone(),
+                cost_basis: None,
             };
 
             rates.infer(
@@ -174,6 +176,8 @@ impl Entry {
                     account: account.clone(),
                     amount: -sum,
                     currency: cur,
+                    cost_basis: None, // TODO: This is bad actually because maybe the
+                    // other side of the matter has a cost basis
                 };
 
                 self.details.push(new_detail);
@@ -190,19 +194,17 @@ impl Entry {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Detail {
     // "Assets:Cash" -> Vec<String> = {"Assets","Cash"}
     pub account: Vec<String>,
     pub amount: Money,
     currency: String,
+
+    cost_basis: Option<(String, String)>,
 }
 
 impl Detail {
-    pub fn add_cost_basis(&mut self, amount: String, currency: String) {
-        self.currency = format!("{} @ {} {}", self.currency, amount, currency);
-    }
-
     pub fn currency(&self) -> String {
         self.currency.clone()
     }
@@ -221,8 +223,6 @@ impl Detail {
 
     /// Removes cost basis from the currency string.
     pub fn remove_cost_basis(&mut self) {
-        if let Some(index) = self.currency.find(' ') {
-            self.currency.truncate(index);
-        }
+        self.cost_basis = None
     }
 }

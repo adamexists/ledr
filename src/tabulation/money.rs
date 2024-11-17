@@ -1,9 +1,9 @@
 use std::fmt;
 use std::iter::Sum;
-use std::ops::{Add, AddAssign, Mul, Neg};
+use std::ops::{Add, AddAssign, Mul, Neg, SubAssign};
 use anyhow::{bail, Error};
 
-#[derive(Clone, Copy, Default, Hash)]
+#[derive(Clone, Copy, Debug, Default, Hash)]
 pub struct Money {
     amount: i64,
     resolution: u32,
@@ -155,6 +155,15 @@ impl AddAssign for Money {
         let (amount_self, amount_other, resolution) =
             self.align_resolution(&rhs);
         self.amount = amount_self + amount_other;
+        self.resolution = resolution;
+    }
+}
+
+impl SubAssign for Money {
+    fn sub_assign(&mut self, rhs: Self) {
+        let (amount_self, amount_other, resolution) =
+            self.align_resolution(&rhs);
+        self.amount = amount_self - amount_other;
         self.resolution = resolution;
     }
 }
