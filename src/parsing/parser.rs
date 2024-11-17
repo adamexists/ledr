@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io;
-use std::io::BufRead;
+use std::io::{BufRead, Seek};
 use std::path::Path;
 use anyhow::{bail, Error};
 use crate::tabulation::ledger::Ledger;
@@ -8,9 +8,7 @@ use crate::tabulation::money::Money;
 use crate::util::date::Date;
 
 // First pass to process only directive lines
-fn first_pass(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
-    let path = Path::new(file_path);
-    let file = File::open(&path)?;
+fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
     let reader = io::BufReader::new(file);
 
     for line in reader.lines() {
@@ -24,7 +22,10 @@ fn first_pass(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
         // Handle directive lines starting with a date and '!'
         if let Some((date_str, remainder)) = line.split_once('!') {
             let date = Date::from_str(date_str.trim())?;
-            let parts: Vec<&str> = remainder.trim().split_whitespace().collect();
+            let parts: Vec<&str> = remainder
+                .trim()
+                .split_whitespace()
+                .collect();
 
             if parts.is_empty() {
                 bail!("Invalid directive format: {}", line);
@@ -52,9 +53,7 @@ fn first_pass(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
 }
 
 // Second pass to process everything else
-fn second_pass(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
-    let path = Path::new(file_path);
-    let file = File::open(&path)?;
+fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
     let reader = io::BufReader::new(file);
 
     let mut lines = reader.lines();
@@ -130,9 +129,19 @@ fn second_pass(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
     Ok(())
 }
 
-// Combined function to run both passes
+/// Opens and parses the file at file_path into the passed Ledger. We make two
+/// passes through the file: the first processes directives, and the second
+/// processes everything else. This means we are agnostic to the order of any
+/// contents of the file. The only exception is that when multiple implicit
+/// currency conversions occur in the same day between the same currencies, all
+/// reporting will use the latest one processed in the file. TODO: Manpage this.
 pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
-    first_pass(file_path, ledger)?;
-    second_pass(file_path, ledger)?;
+    let path = Path::new(file_path);
+    let mut file = File::open(&path)?;
+
+    first_pass(&file, ledger)?;
+    file.rewind()?;
+    second_pass(&file, ledger)?;
+
     Ok(())
 }

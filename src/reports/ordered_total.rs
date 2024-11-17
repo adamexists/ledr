@@ -104,16 +104,14 @@ impl OrderedTotal {
             return false;
         }
 
-        // Store the expected currency amounts from the current node
         let expected_amounts = &self.amounts;
 
         for (_, ot) in &self.subtotals {
-            // Check if the path is still linear.
+            // Check if the path is still linear
             if !ot.can_condense_with_all_below() {
                 return false;
             }
 
-            // Validate that the amounts in the current node match the expected amounts
             if !OrderedTotal::amounts_match(expected_amounts, &ot.amounts) {
                 return false;
             }
@@ -122,14 +120,17 @@ impl OrderedTotal {
         true
     }
 
-    fn amounts_match(a: &Vec<(String, Money)>, b: &Vec<(String, Money)>) -> bool {
+    fn amounts_match(
+        a: &Vec<(String, Money)>,
+        b: &Vec<(String, Money)>,
+    ) -> bool {
         if a.len() != b.len() {
             return false;
         }
 
         for (currency, amount) in a {
-            if let Some((_, other_amount)) = b.iter().find(|(c, _)| c == currency) {
-                if amount != other_amount {
+            if let Some((_, other)) = b.iter().find(|(c, _)| c == currency) {
+                if amount != other {
                     return false;
                 }
             } else {
@@ -148,10 +149,9 @@ impl OrderedTotal {
             return self.account.clone();
         }
 
-        // There should be only one subtotal at this point because of the has_single_subtotal_to_leaf check.
         let (_, subtotal) = self.subtotals.iter().next().unwrap();
 
-        // Recursively get the name from the next node and concatenate with a colon.
+        // Recursively get the name from the next node and concatenate
         format!("{}:{}", self.account, subtotal.condensed_name())
     }
 
@@ -162,7 +162,6 @@ impl OrderedTotal {
     pub fn calculate_column_width(&self) -> usize {
         let mut max_width = 0;
 
-        // Helper function to determine the width of a formatted currency-amount pair
         let calculate_width = |currency: &String, amount: &Money| {
             format!("{} {}", currency, amount).len()
         };
@@ -209,7 +208,7 @@ impl OrderedTotal {
     fn ledger_fmt_recursive(
         &self,
         indent: usize,
-        col_width: usize,
+        width: usize,
         max_depth: Option<usize>,
     ) {
         let indentation = " ".repeat(indent * 2);
@@ -229,7 +228,7 @@ impl OrderedTotal {
             let mut has_printed_acct = false;
             while let Some((currency, amount)) = amts.next() {
                 // we avoid repeating the same account name on subsequent lines
-                // when multicurrency balances would otherwise cause that
+                // when multi-currency balances would otherwise cause that
                 let acct = match (has_printed_acct, amts.peek().is_some()) {
                     (true, _) => " ↩",
                     _ => &*format!(" {}", account_name)
@@ -240,7 +239,7 @@ impl OrderedTotal {
                     format!("{} {}", currency, amount),
                     indentation,
                     acct,
-                    width = col_width
+                    width = width
                 );
 
                 has_printed_acct = true;
@@ -256,7 +255,7 @@ impl OrderedTotal {
         if !can_condense {
             // Recursively display each subtotal
             for (_, subtotal) in &self.subtotals {
-                subtotal.ledger_fmt_recursive(indent + 1, col_width, max_depth);
+                subtotal.ledger_fmt_recursive(indent + 1, width, max_depth);
             }
         }
     }

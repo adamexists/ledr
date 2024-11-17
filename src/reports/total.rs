@@ -25,7 +25,7 @@ pub struct Total {
     pub account: String,
     pub amounts: HashMap<String, Money>, // currency -> balance held
     pub subtotals: HashMap<String, Total>, // account name -> next total
-    pub depth: u32, // top level total has depth 0; Assets/Liabilities depth 1, etc.
+    pub depth: u32, // top level total is depth 0; Income/Expenses is 1, etc.
 }
 
 impl Total {
@@ -60,7 +60,7 @@ impl Total {
     }
 
     pub fn validate(&self) -> Result<(), Error> {
-        // TODO: Maybe this is used in the future.
+        // TODO: Maybe this will be used in the future.
         Ok(())
     }
 
@@ -68,7 +68,7 @@ impl Total {
     // -- FILTERS --
     // -------------
 
-    /// Sums all subtotals by currency and updates the top-level totals with them
+    /// Sums all subtotals by currency and updates top-level totals with them
     fn recompute_top_level(&mut self) {
         // Create a HashMap to accumulate totals by currency
         let mut currency_totals: HashMap<String, Money> = HashMap::new();
@@ -121,7 +121,7 @@ impl Total {
                 println!(
                     "{}  {:>10} {}",
                     indentation,
-                    format!("{:.2}", amount),
+                    amount,
                     currency
                 )
             }
