@@ -211,10 +211,10 @@ impl Ledger {
                 .or_insert(reso);
         }
 
-        // Standardize all amounts in each currency to the highest precision found
+        // Standardize all currencies to the highest precision found among them
         for entry in &mut self.entries {
             for (currency, &reso) in &max_reso_by_currency {
-                entry.set_resolution_for_currency(currency, reso)
+                entry.set_resolution_for_currency(currency, reso)?
             }
         }
 

@@ -91,12 +91,19 @@ impl Entry {
         self.details
     }
 
-    pub fn set_resolution_for_currency(&mut self, currency: &String, resolution: u32) {
+    /// Adjusts all Details for a certain currency to a certain resolution. In
+    /// doing so, precision may be lost, but not gained (because the extra
+    /// decimal places will just fill in with zeroes). This is more about the
+    /// clean display of currency amounts for reporting.
+    pub fn set_resolution_for_currency(
+        &mut self, currency: &String, resolution: u32) -> Result<(), Error> {
         for detail in &mut self.details {
             if &detail.currency == currency {
                 detail.amount.set_resolution(resolution)
             }
         }
+
+        Ok(())
     }
 
     /// Completes an entry. We have to pass the exchange rate set in here,
@@ -159,7 +166,7 @@ impl Entry {
         self.implicit_conversions_check(rates)?;
         unbalanced_currencies = self.get_unbalanced_currencies();
         if unbalanced_currencies.is_empty() {
-            return Ok(())
+            return Ok(());
         }
 
         // No virtual detail account and unbalanced, return an error
@@ -266,7 +273,6 @@ impl Detail {
         );
     }
 
-    /// Removes cost basis from the currency string.
     pub fn remove_cost_basis(&mut self) {
         self.cost_basis = None
     }

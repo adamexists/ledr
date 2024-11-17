@@ -17,8 +17,8 @@ impl ExchangeRates {
         if base == quote {
             bail!("cannot exchange a currency for itself")
         }
-        if rate < 0f64 {
-            bail!("exchange rate cannot be negative")
+        if rate <= 0f64 {
+            bail!("exchange rate must be positive")
         }
 
         // to standardize lookups, base should be alphabetically before quote
@@ -51,8 +51,8 @@ impl ExchangeRates {
         if base == quote {
             bail!("cannot exchange a currency for itself")
         }
-        if rate < 0f64 {
-            bail!("exchange rate cannot be negative");
+        if rate <= 0f64 {
+            bail!("exchange rate must be positive");
         }
 
         // to standardize lookups, base should be alphabetically before quote
@@ -69,7 +69,7 @@ impl ExchangeRates {
             // then the declared rate is too far from reality on this date to be
             // accurate, so we should error to stop tabulation here.
             if !within_tolerance_of(0.01, declared, rate) {
-                bail!("inferred exchange rate deviates too far from declared rate")
+                bail!("inferred exchange rate deviates >1% from declared rate")
             }
 
             return Ok(());

@@ -68,25 +68,6 @@ impl Total {
     // -- FILTERS --
     // -------------
 
-    /// Sums all subtotals by currency and updates top-level totals with them
-    fn recompute_top_level(&mut self) {
-        // Create a HashMap to accumulate totals by currency
-        let mut currency_totals: HashMap<String, Money> = HashMap::new();
-
-        // Sum subtotals; doesn't need to be recursive because we only dropped
-        // some top-level branches of the hierarchy; what remains is accurate
-        for (_, subtotal) in &mut self.subtotals {
-            for (currency, amount) in &subtotal.amounts {
-                currency_totals
-                    .entry(currency.clone())
-                    .and_modify(|e| *e += *amount)
-                    .or_insert_with(|| amount.clone());
-            }
-        }
-
-        self.amounts = currency_totals.into_iter().collect();
-    }
-
     /// Drops those subtotals not matching the given strs vec. Designed to be
     /// used for filtering to a subset of the VALID_PREFIXES.
     pub fn filter_top_level(&mut self, strs: Vec<&str>) {
@@ -103,5 +84,23 @@ impl Total {
         for (_, subtotal) in &mut self.subtotals {
             subtotal.invert();
         }
+    }
+
+    /// Sums all subtotals by currency and updates top-level totals with them
+    fn recompute_top_level(&mut self) {
+        let mut currency_totals: HashMap<String, Money> = HashMap::new();
+
+        // Sum subtotals; doesn't need to be recursive because we only dropped
+        // some top-level branches of the hierarchy; what remains is accurate
+        for (_, subtotal) in &mut self.subtotals {
+            for (currency, amount) in &subtotal.amounts {
+                currency_totals
+                    .entry(currency.clone())
+                    .and_modify(|e| *e += *amount)
+                    .or_insert_with(|| amount.clone());
+            }
+        }
+
+        self.amounts = currency_totals.into_iter().collect();
     }
 }
