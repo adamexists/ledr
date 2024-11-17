@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use anyhow::{bail, Error};
-use crate::reports::total::Total;
+use crate::tabulation::total::Total;
 use crate::tabulation::entry::{Detail, Entry};
 use crate::tabulation::exchange_rate::ExchangeRates;
 use crate::util::date::Date;
@@ -134,6 +134,16 @@ impl Ledger {
                 ) {
                     d.convert_to(&currency, rate)
                 }
+            })
+    }
+
+    /// Removes cost basis from currencies. This is done for most reports that
+    /// do not specifically care about it.
+    pub fn remove_cost_basis(&mut self) {
+        self.entries.iter_mut()
+            .flat_map(|e| e.details())
+            .for_each(|d| {
+                d.remove_cost_basis();
             })
     }
 

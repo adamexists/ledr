@@ -1,5 +1,5 @@
 use anyhow::Error;
-use clap::{CommandFactory, Parser, ValueEnum};
+use clap::{Parser, ValueEnum};
 use tabulation::ledger::Ledger;
 use crate::parsing::parser::parse_ledger;
 use crate::reports::ordered_total::OrderedTotal;
@@ -46,8 +46,9 @@ struct Cli {
 
 #[derive(ValueEnum, Clone, Debug)]
 enum Directive {
-    IS,
     BS,
+    IS,
+    TB,
 }
 
 fn main() -> Result<(), Error> {
@@ -59,6 +60,7 @@ fn main() -> Result<(), Error> {
     if let Some(collapse) = args.collapse {
         ledger.collapse_to(collapse);
     }
+    ledger.remove_cost_basis();
     ledger.finalize()?;
 
     let mut totals = ledger.to_totals()?;
@@ -69,12 +71,12 @@ fn main() -> Result<(), Error> {
             if !args.ignore_equity {
                 top_levels.push("Equity");
             }
-
             totals.filter_top_level(top_levels);
         },
         Directive::IS => {
             totals.filter_top_level(vec!["Income", "Expenses"]);
         }
+        Directive::TB => {}
     }
 
     if args.invert {

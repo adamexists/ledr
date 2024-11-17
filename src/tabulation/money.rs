@@ -1,6 +1,6 @@
 use std::fmt;
 use std::iter::Sum;
-use std::ops::{Add, AddAssign, Neg};
+use std::ops::{Add, AddAssign, Mul, Neg};
 use anyhow::{bail, Error};
 
 #[derive(Clone, Copy, Default, Hash)]
@@ -165,6 +165,17 @@ impl Sum for Money {
     }
 }
 
+impl Mul for Money {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self {
+            amount: self.amount * rhs.amount,
+            resolution: self.resolution + rhs.resolution
+        }
+    }
+}
+
 impl Neg for Money {
     type Output = Self;
 
@@ -216,3 +227,98 @@ impl Ord for Money {
         amount_self.cmp(&amount_other)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mul_with_zero() {
+        let money = Money::new("123.45").unwrap();
+        let zero = ZERO;
+        let result = money * zero;
+        assert_eq!(result.amount, 0);
+        assert_eq!(result.resolution, 2);
+    }
+
+    #[test]
+    fn test_mul_same_resolution() {
+        let money1 = Money::new("2.50").unwrap(); // 250, resolution 2
+        let money2 = Money::new("3.00").unwrap(); // 300, resolution 2
+        let result = money1 * money2;
+        assert_eq!(result.amount, 250 * 300); // 75000
+        assert_eq!(result.resolution, 4); // 2 + 2 = 4
+    }
+
+    #[test]
+    fn test_mul_different_resolution() {
+        let money1 = Money::new("1.5").unwrap(); // 15, resolution 1
+        let money2 = Money::new("2.00").unwrap(); // 200, resolution 2
+        let result = money1 * money2;
+        assert_eq!(result.amount, 15 * 200); // 3000
+        assert_eq!(result.resolution, 3); // 1 + 2 = 3
+    }
+
+    #[test]
+    fn test_mul_negative_values() {
+        let money1 = Money::new("-2.50").unwrap(); // -250, resolution 2
+        let money2 = Money::new("4.00").unwrap(); // 400, resolution 2
+        let result = money1 * money2;
+        assert_eq!(result.amount, -250 * 400); // -100000
+        assert_eq!(result.resolution, 4); // 2 + 2 = 4
+    }
+
+    #[test]
+    fn test_mul_both_negative() {
+        let money1 = Money::new("-3.25").unwrap(); // -325, resolution 2
+        let money2 = Money::new("-2.00").unwrap(); // -200, resolution 2
+        let result = money1 * money2;
+        assert_eq!(result.amount, 325 * 200); // Positive 65000
+        assert_eq!(result.resolution, 4); // 2 + 2 = 4
+    }
+
+    #[test]
+    fn test_mul_large_numbers() {
+        let money1 = Money::new("1000.00").unwrap(); // 100000, resolution 2
+        let money2 = Money::new("2000.00").unwrap(); // 200000, resolution 2
+        let result = money1 * money2;
+        assert_eq!(result.amount, 100000 * 200000); // 20,000,000,000
+        assert_eq!(result.resolution, 4); // 2 + 2 = 4
+    }
+
+    #[test]
+    fn test_mul_high_resolution() {
+        let money1 = Money::new("0.1234").unwrap(); // 1234, resolution 4
+        let money2 = Money::new("0.5678").unwrap(); // 5678, resolution 4
+        let result = money1 * money2;
+        assert_eq!(result.amount, 1234 * 5678); // 7006652
+        assert_eq!(result.resolution, 8); // 4 + 4 = 8
+    }
+
+    #[test]
+    fn test_mul_and_to_f64() {
+        let money1 = Money::new("1.25").unwrap(); // 125, resolution 2
+        let money2 = Money::new("2.50").unwrap(); // 250, resolution 2
+        let result = money1 * money2;
+        assert!((result.to_f64() - 3.125).abs() < f64::EPSILON); // Check the float result
+    }
+
+    #[test]
+    fn test_mul_edge_case_high_precision() {
+        let money1 = Money::new("0.0001").unwrap(); // 1, resolution 4
+        let money2 = Money::new("0.0002").unwrap(); // 2, resolution 4
+        let result = money1 * money2;
+        assert_eq!(result.amount, 1 * 2); // 2
+        assert_eq!(result.resolution, 8); // 4 + 4 = 8
+    }
+
+    #[test]
+    fn test_display() {
+        let money = Money::new("12345.6789").unwrap(); // 123456789, resolution 4
+        assert_eq!(money.to_string(), "12,345.6789");
+
+        let negative_money = Money::new("-1000000.50").unwrap(); // -100000050, resolution 2
+        assert_eq!(negative_money.to_string(), "-1,000,000.50");
+    }
+}
+

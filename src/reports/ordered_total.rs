@@ -1,4 +1,4 @@
-use crate::reports::total::Total;
+use crate::tabulation::total::Total;
 use crate::tabulation::ledger::VALID_PREFIXES;
 use crate::tabulation::money::Money;
 

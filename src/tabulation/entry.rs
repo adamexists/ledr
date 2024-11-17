@@ -139,7 +139,7 @@ impl Entry {
                     .split(':')
                     .map(|s| s.to_string())
                     .collect(),
-                amount: amount1,
+                amount: -amount1,
                 currency: currency1.clone(),
             };
 
@@ -148,7 +148,7 @@ impl Entry {
                     .split(':')
                     .map(|s| s.to_string())
                     .collect(),
-                amount: amount2,
+                amount: -amount2,
                 currency: currency2.clone(),
             };
 
@@ -217,5 +217,12 @@ impl Detail {
             rate * self.amount.to_f64(),
             self.amount.resolution(),
         );
+    }
+
+    /// Removes cost basis from the currency string.
+    pub fn remove_cost_basis(&mut self) {
+        if let Some(index) = self.currency.find(' ') {
+            self.currency.truncate(index);
+        }
     }
 }
