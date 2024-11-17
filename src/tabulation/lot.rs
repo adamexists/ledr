@@ -6,7 +6,7 @@ use crate::util::date::{Date, Duration};
 
 // TODO: Reorganize this whole file. It needs to be cleaned up a lot.
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Lots {
     state: HashMap<String, Vec<Lot>>, // currency -> all lots of that currency
     movements: Vec<Movement>, // all movements, unordered
@@ -135,12 +135,11 @@ impl Lots {
             }
         }
 
-        println!("{:?}", self.state);
+        println!("report coming soon!");
         Ok(())
     }
 }
 
-#[derive(Debug)]
 struct Movement {
     action: LotAction,
     date: Date,
@@ -180,7 +179,6 @@ impl PartialOrd for Movement {
     }
 }
 
-#[derive(Debug)]
 pub struct Lot {
     status: LotStatus,
     account: String,
@@ -196,13 +194,13 @@ pub struct Lot {
     sales: Vec<Sale>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 enum LotAction {
     BUY,
     SELL,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub enum LotStatus {
     OPEN,
     CLOSED,
@@ -222,7 +220,6 @@ impl Lot {
     }
 }
 
-#[derive(Debug)]
 struct Sale {
     date: Date,
     quantity: Money,

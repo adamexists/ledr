@@ -99,13 +99,20 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
             // Handle optional cost basis
             let cost_basis = if parts.len() > 3 {
                 let basis_str = parts[3..].join(" ");
-                if let Some((currency, basis)) = basis_str.split_once(' ') {
+                if let Some((operator, basis)) = basis_str.split_once(' ') {
                     let b_parts: Vec<&str> = basis.split_whitespace().collect();
-                    if currency != "@" || b_parts.len() != 2 {
+                    if b_parts.len() != 2 {
                         bail!("Invalid cost basis format (line {}): {}", i, line);
                     }
 
-                    Some((b_parts[0].to_string(), b_parts[1].to_string()))
+
+                    let is_total_cost = match operator {
+                        "@" => false,
+                        "@@" => true,
+                        _ => bail!("Invalid cost basis format (line {}): {}", i, line)
+                    };
+
+                    Some((b_parts[0].to_string(), b_parts[1].to_string(), is_total_cost))
                 } else {
                     bail!("Invalid cost basis format (line {}): {}", i, line);
                 }

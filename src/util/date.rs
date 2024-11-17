@@ -6,7 +6,7 @@ use anyhow::{bail, Error};
 
 static TODAY: Mutex<Date> = Mutex::new(Date {year: 0, month: 0, day: 0});
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub struct Date {
     year: u32,
     month: u8,

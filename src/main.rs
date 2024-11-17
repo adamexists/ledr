@@ -11,6 +11,9 @@ mod tabulation;
 mod reports;
 mod util;
 
+// TODO: Do a sweep for the usefulness of errors.
+// TODO: Should be able to move entirely to integer arithmetic for exchange rates.
+
 #[derive(Parser)]
 #[command(name = "ledr", version = "1.0", about = "Command line accounting tool")]
 struct Cli {
@@ -46,7 +49,7 @@ struct Cli {
     invert: bool,
 }
 
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(ValueEnum, Clone)]
 enum Directive {
     BS,
     IS,
@@ -92,8 +95,8 @@ fn main() -> Result<(), Error> {
         }
         Directive::OpenLots => {
             // TODO: Add customization for this directive.
-            // TODO: Need to implement pretty-printing for this. Right now, it's
-            //  at the level of debug output.
+            // TODO: Need to implement pretty-printing for this. Right now,
+            //  I've tested it but it has no output anymore.
             ledger.lots.tabulate(&Date::today())?
         }
     }

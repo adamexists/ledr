@@ -65,7 +65,7 @@ impl Ledger {
         account: String,
         amount: String,
         currency: String,
-        cost_basis: Option<(String, String)>,
+        cost_basis: Option<(String, String, bool)>,
     ) -> Result<(), Error> {
         let declaration_date = match self.declared_currencies.get(&currency) {
             Some(d) => d,
@@ -98,13 +98,23 @@ impl Ledger {
         }
 
         let money_amt = Money::new(&*amount)?;
+        let mut cost_basis_input = None;
 
-        if let Some((cb_amount, cb_currency)) = cost_basis.clone() {
+        // TODO: The whole way that cost basis is passed around needs to be
+        //  redone.
+        if let Some((cb_amount, cb_currency, is_total_cost)) = cost_basis.clone() {
+            let mut cb_money_amt = Money::new(&*cb_amount.clone())?;
+            if is_total_cost {
+                cb_money_amt /= money_amt;
+            }
+            cost_basis_input = Some((cb_money_amt.to_string(), cb_currency.clone()));
+            // TODO: Investigate whether this is necessary anymore, now that
+            //  finalizing an entry has been refactored.
             self.exchange_rates.infer(
                 self.pending_entry_date(),
                 currency.clone(),
                 cb_currency.clone(),
-                Money::new(&*cb_amount.clone())?.to_f64(),
+                cb_money_amt.to_f64(),
             )?;
 
             self.lots.add_movement(
@@ -119,7 +129,7 @@ impl Ledger {
         self.pending_entry
             .as_mut()
             .unwrap()
-            .add_detail(account, money_amt.clone(), currency, cost_basis)
+            .add_detail(account, money_amt.clone(), currency, cost_basis_input)
     }
 
     pub fn set_virtual_detail(&mut self, account: String) -> Result<(), Error> {

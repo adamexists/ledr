@@ -1,9 +1,9 @@
 use std::fmt;
 use std::iter::Sum;
-use std::ops::{Add, AddAssign, Mul, Neg, SubAssign};
+use std::ops::{Add, AddAssign, DivAssign, Mul, MulAssign, Neg, SubAssign};
 use anyhow::{bail, Error};
 
-#[derive(Clone, Copy, Debug, Default, Hash)]
+#[derive(Clone, Copy, Default, Hash)]
 pub struct Money {
     amount: i64,
     resolution: u32,
@@ -16,8 +16,11 @@ pub const ZERO: Money = Money {
 
 impl Money {
     pub fn new(amount: &str) -> Result<Self, Error> {
-        // Split the input string by the decimal point, if it exists
-        let parts: Vec<&str> = amount.split('.').collect();
+        // Remove all commas from the input string
+        let sanitized_amount: String = amount.chars().filter(|&c| c != ',').collect();
+
+        // Split the sanitized string by the decimal point, if it exists
+        let parts: Vec<&str> = sanitized_amount.split('.').collect();
         let (amt, resolution) = match parts.len() {
             1 => {
                 let amount = parts[0].parse::<i64>()?;
@@ -180,8 +183,29 @@ impl Mul for Money {
     fn mul(self, rhs: Self) -> Self::Output {
         Self {
             amount: self.amount * rhs.amount,
-            resolution: self.resolution + rhs.resolution
+            resolution: self.resolution + rhs.resolution,
         }
+    }
+}
+
+impl MulAssign for Money {
+    fn mul_assign(&mut self, rhs: Self) {
+        self.amount *= rhs.amount;
+        self.resolution = self.resolution + rhs.resolution
+    }
+}
+
+impl DivAssign for Money {
+    fn div_assign(&mut self, rhs: Self) {
+        if rhs.amount == 0 {
+            panic!("Attempt to divide by zero");
+        }
+
+        // TODO: Eliminate f64 math in the future.
+        let a = self.to_f64();
+        let b = rhs.to_f64();
+
+        self.amount = Money::new_from_f64(a / b, self.resolution).amount;
     }
 }
 
