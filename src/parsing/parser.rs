@@ -4,7 +4,7 @@ use std::io::{BufRead, Seek};
 use std::path::Path;
 use anyhow::{bail, Error};
 use crate::tabulation::ledger::Ledger;
-use crate::tabulation::money::Money;
+use crate::util::scalar::Scalar;
 use crate::util::date::Date;
 
 // TODO: Implement strict account declaration.
@@ -43,7 +43,7 @@ fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
                     let to = parts[2].to_string();
                     let rate = parts[3];
                     ledger.exchange_rates.declare(
-                        date, from, to, Money::new(rate)?.to_f64(),
+                        date, from, to, Scalar::new(rate)?.to_f64(),
                     )?
                 }
                 _ => bail!("Invalid directive or arguments (line {}): {}",

@@ -4,7 +4,7 @@ use crate::tabulation::total::Total;
 use crate::tabulation::entry::{Detail, Entry};
 use crate::tabulation::exchange_rate::ExchangeRates;
 use crate::tabulation::lot::Lots;
-use crate::tabulation::money::Money;
+use crate::util::scalar::Scalar;
 use crate::util::date::Date;
 
 pub const VALID_PREFIXES: [&'static str; 5] =
@@ -97,13 +97,13 @@ impl Ledger {
             bail!("invalid account prefix: {}", account)
         }
 
-        let money_amt = Money::new(&*amount)?;
+        let money_amt = Scalar::new(&*amount)?;
         let mut cost_basis_input = None;
 
         // TODO: The whole way that cost basis is passed around needs to be
         //  redone.
         if let Some((cb_amount, cb_currency, is_total_cost)) = cost_basis.clone() {
-            let mut cb_money_amt = Money::new(&*cb_amount.clone())?;
+            let mut cb_money_amt = Scalar::new(&*cb_amount.clone())?;
             if is_total_cost {
                 cb_money_amt /= money_amt;
             }

@@ -3,18 +3,20 @@ use std::iter::Sum;
 use std::ops::{Add, AddAssign, DivAssign, Mul, MulAssign, Neg, SubAssign};
 use anyhow::{bail, Error};
 
-#[derive(Clone, Copy, Default, Hash)]
-pub struct Money {
+/// A general-purpose number, capable of holding an exact decimal value, backed
+/// by integer arithmetic and not float arithmetic.
+#[derive(Clone, Copy, Debug, Default, Hash)]
+pub struct Scalar {
     amount: i64,
     resolution: u32,
 }
 
-pub const ZERO: Money = Money {
+pub const ZERO: Scalar = Scalar {
     amount: 0,
     resolution: 0,
 };
 
-impl Money {
+impl Scalar {
     pub fn new(amount: &str) -> Result<Self, Error> {
         // Remove all commas from the input string
         let sanitized_amount: String = amount.chars().filter(|&c| c != ',').collect();
@@ -71,7 +73,7 @@ impl Money {
         self.resolution = resolution;
     }
 
-    fn align_resolution(&self, other: &Money) -> (i64, i64, u32) {
+    fn align_resolution(&self, other: &Scalar) -> (i64, i64, u32) {
         let max_resolution = self.resolution.max(other.resolution);
         let factor_self = 10i64.pow(max_resolution - self.resolution);
         let factor_other = 10i64.pow(max_resolution - other.resolution);
@@ -99,7 +101,7 @@ impl Money {
     }
 }
 
-impl fmt::Display for Money {
+impl fmt::Display for Scalar {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut amount_str = self.amount.abs().to_string();
 
@@ -140,7 +142,7 @@ impl fmt::Display for Money {
 // -- BOILERPLATE --
 // -----------------
 
-impl Add for Money {
+impl Add for Scalar {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
@@ -153,7 +155,7 @@ impl Add for Money {
     }
 }
 
-impl AddAssign for Money {
+impl AddAssign for Scalar {
     fn add_assign(&mut self, rhs: Self) {
         let (amount_self, amount_other, resolution) =
             self.align_resolution(&rhs);
@@ -162,7 +164,7 @@ impl AddAssign for Money {
     }
 }
 
-impl SubAssign for Money {
+impl SubAssign for Scalar {
     fn sub_assign(&mut self, rhs: Self) {
         let (amount_self, amount_other, resolution) =
             self.align_resolution(&rhs);
@@ -171,13 +173,13 @@ impl SubAssign for Money {
     }
 }
 
-impl Sum for Money {
+impl Sum for Scalar {
     fn sum<I: Iterator<Item=Self>>(iter: I) -> Self {
         iter.fold(Self::default(), |acc, x| acc + x)
     }
 }
 
-impl Mul for Money {
+impl Mul for Scalar {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self::Output {
@@ -188,14 +190,14 @@ impl Mul for Money {
     }
 }
 
-impl MulAssign for Money {
+impl MulAssign for Scalar {
     fn mul_assign(&mut self, rhs: Self) {
         self.amount *= rhs.amount;
         self.resolution = self.resolution + rhs.resolution
     }
 }
 
-impl DivAssign for Money {
+impl DivAssign for Scalar {
     fn div_assign(&mut self, rhs: Self) {
         if rhs.amount == 0 {
             panic!("Attempt to divide by zero");
@@ -205,11 +207,11 @@ impl DivAssign for Money {
         let a = self.to_f64();
         let b = rhs.to_f64();
 
-        self.amount = Money::new_from_f64(a / b, self.resolution).amount;
+        self.amount = Scalar::new_from_f64(a / b, self.resolution).amount;
     }
 }
 
-impl Neg for Money {
+impl Neg for Scalar {
     type Output = Self;
 
     fn neg(self) -> Self::Output {
@@ -220,41 +222,41 @@ impl Neg for Money {
     }
 }
 
-impl PartialEq<Self> for Money {
+impl PartialEq<Self> for Scalar {
     fn eq(&self, other: &Self) -> bool {
         let (amount_self, amount_other, _) = self.align_resolution(other);
         amount_self == amount_other
     }
 }
 
-impl Eq for Money {}
+impl Eq for Scalar {}
 
-impl PartialEq<f64> for Money {
+impl PartialEq<f64> for Scalar {
     fn eq(&self, &other: &f64) -> bool {
         (self.to_f64() - other).abs() < f64::EPSILON
     }
 }
 
-impl PartialEq<f64> for &Money {
+impl PartialEq<f64> for &Scalar {
     fn eq(&self, &other: &f64) -> bool {
         (self.to_f64() - other).abs() < f64::EPSILON
     }
 }
 
-impl PartialOrd for Money {
+impl PartialOrd for Scalar {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         let (amount_self, amount_other, _) = self.align_resolution(other);
         amount_self.partial_cmp(&amount_other)
     }
 }
 
-impl PartialOrd<f64> for Money {
+impl PartialOrd<f64> for Scalar {
     fn partial_cmp(&self, &other: &f64) -> Option<std::cmp::Ordering> {
         self.to_f64().partial_cmp(&other)
     }
 }
 
-impl Ord for Money {
+impl Ord for Scalar {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         let (amount_self, amount_other, _) = self.align_resolution(other);
         amount_self.cmp(&amount_other)
@@ -267,7 +269,7 @@ mod tests {
 
     #[test]
     fn test_mul_with_zero() {
-        let money = Money::new("123.45").unwrap();
+        let money = Scalar::new("123.45").unwrap();
         let zero = ZERO;
         let result = money * zero;
         assert_eq!(result.amount, 0);
@@ -276,8 +278,8 @@ mod tests {
 
     #[test]
     fn test_mul_same_resolution() {
-        let money1 = Money::new("2.50").unwrap(); // 250, resolution 2
-        let money2 = Money::new("3.00").unwrap(); // 300, resolution 2
+        let money1 = Scalar::new("2.50").unwrap(); // 250, resolution 2
+        let money2 = Scalar::new("3.00").unwrap(); // 300, resolution 2
         let result = money1 * money2;
         assert_eq!(result.amount, 250 * 300); // 75000
         assert_eq!(result.resolution, 4); // 2 + 2 = 4
@@ -285,8 +287,8 @@ mod tests {
 
     #[test]
     fn test_mul_different_resolution() {
-        let money1 = Money::new("1.5").unwrap(); // 15, resolution 1
-        let money2 = Money::new("2.00").unwrap(); // 200, resolution 2
+        let money1 = Scalar::new("1.5").unwrap(); // 15, resolution 1
+        let money2 = Scalar::new("2.00").unwrap(); // 200, resolution 2
         let result = money1 * money2;
         assert_eq!(result.amount, 15 * 200); // 3000
         assert_eq!(result.resolution, 3); // 1 + 2 = 3
@@ -294,8 +296,8 @@ mod tests {
 
     #[test]
     fn test_mul_negative_values() {
-        let money1 = Money::new("-2.50").unwrap(); // -250, resolution 2
-        let money2 = Money::new("4.00").unwrap(); // 400, resolution 2
+        let money1 = Scalar::new("-2.50").unwrap(); // -250, resolution 2
+        let money2 = Scalar::new("4.00").unwrap(); // 400, resolution 2
         let result = money1 * money2;
         assert_eq!(result.amount, -250 * 400); // -100000
         assert_eq!(result.resolution, 4); // 2 + 2 = 4
@@ -303,8 +305,8 @@ mod tests {
 
     #[test]
     fn test_mul_both_negative() {
-        let money1 = Money::new("-3.25").unwrap(); // -325, resolution 2
-        let money2 = Money::new("-2.00").unwrap(); // -200, resolution 2
+        let money1 = Scalar::new("-3.25").unwrap(); // -325, resolution 2
+        let money2 = Scalar::new("-2.00").unwrap(); // -200, resolution 2
         let result = money1 * money2;
         assert_eq!(result.amount, 325 * 200); // Positive 65000
         assert_eq!(result.resolution, 4); // 2 + 2 = 4
@@ -312,8 +314,8 @@ mod tests {
 
     #[test]
     fn test_mul_large_numbers() {
-        let money1 = Money::new("1000.00").unwrap(); // 100000, resolution 2
-        let money2 = Money::new("2000.00").unwrap(); // 200000, resolution 2
+        let money1 = Scalar::new("1000.00").unwrap(); // 100000, resolution 2
+        let money2 = Scalar::new("2000.00").unwrap(); // 200000, resolution 2
         let result = money1 * money2;
         assert_eq!(result.amount, 100000 * 200000); // 20,000,000,000
         assert_eq!(result.resolution, 4); // 2 + 2 = 4
@@ -321,8 +323,8 @@ mod tests {
 
     #[test]
     fn test_mul_high_resolution() {
-        let money1 = Money::new("0.1234").unwrap(); // 1234, resolution 4
-        let money2 = Money::new("0.5678").unwrap(); // 5678, resolution 4
+        let money1 = Scalar::new("0.1234").unwrap(); // 1234, resolution 4
+        let money2 = Scalar::new("0.5678").unwrap(); // 5678, resolution 4
         let result = money1 * money2;
         assert_eq!(result.amount, 1234 * 5678); // 7006652
         assert_eq!(result.resolution, 8); // 4 + 4 = 8
@@ -330,16 +332,16 @@ mod tests {
 
     #[test]
     fn test_mul_and_to_f64() {
-        let money1 = Money::new("1.25").unwrap(); // 125, resolution 2
-        let money2 = Money::new("2.50").unwrap(); // 250, resolution 2
+        let money1 = Scalar::new("1.25").unwrap(); // 125, resolution 2
+        let money2 = Scalar::new("2.50").unwrap(); // 250, resolution 2
         let result = money1 * money2;
         assert!((result.to_f64() - 3.125).abs() < f64::EPSILON); // Check the float result
     }
 
     #[test]
     fn test_mul_edge_case_high_precision() {
-        let money1 = Money::new("0.0001").unwrap(); // 1, resolution 4
-        let money2 = Money::new("0.0002").unwrap(); // 2, resolution 4
+        let money1 = Scalar::new("0.0001").unwrap(); // 1, resolution 4
+        let money2 = Scalar::new("0.0002").unwrap(); // 2, resolution 4
         let result = money1 * money2;
         assert_eq!(result.amount, 1 * 2); // 2
         assert_eq!(result.resolution, 8); // 4 + 4 = 8
@@ -347,10 +349,10 @@ mod tests {
 
     #[test]
     fn test_display() {
-        let money = Money::new("12345.6789").unwrap(); // 123456789, resolution 4
+        let money = Scalar::new("12345.6789").unwrap(); // 123456789, resolution 4
         assert_eq!(money.to_string(), "12,345.6789");
 
-        let negative_money = Money::new("-1000000.50").unwrap(); // -100000050, resolution 2
+        let negative_money = Scalar::new("-1000000.50").unwrap(); // -100000050, resolution 2
         assert_eq!(negative_money.to_string(), "-1,000,000.50");
     }
 }

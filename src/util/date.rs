@@ -6,7 +6,7 @@ use anyhow::{bail, Error};
 
 static TODAY: Mutex<Date> = Mutex::new(Date {year: 0, month: 0, day: 0});
 
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Date {
     year: u32,
     month: u8,
@@ -40,6 +40,14 @@ impl Date {
         }
 
         Ok(Date { year, month, day })
+    }
+    
+    pub fn from_ymd(y: u32, m: u8, d: u8) -> Date {
+        Date {
+            year: y,
+            month: m,
+            day: d,
+        }
     }
 
     /// Calculate the duration in calendar years, months, and days, and the
@@ -134,10 +142,9 @@ impl Date {
 
     // TODO: This is inefficient & should be revisited in a timely (ha) manner
     pub fn today() -> Date {
-        if let d = TODAY.lock().unwrap() {
-            if d.year > 0 {
-                return d.clone();
-            }
+        let d = TODAY.lock().unwrap();
+        if d.year > 0 {
+            return d.clone();
         }
 
         // Get the current time as seconds since the UNIX epoch

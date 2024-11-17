@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use anyhow::Error;
 use crate::tabulation::entry::Detail;
-use crate::tabulation::money;
-use crate::tabulation::money::Money;
+use crate::util::scalar;
+use crate::util::scalar::Scalar;
 
 /// Each total represents one account or segment, one position on the hierarchy,
 /// that may have a balance. For example, for the ledger with hierarchy
@@ -23,7 +23,7 @@ use crate::tabulation::money::Money;
 #[derive(Default)]
 pub struct Total {
     pub account: String,
-    pub amounts: HashMap<String, Money>, // currency -> balance held
+    pub amounts: HashMap<String, Scalar>, // currency -> balance held
     pub subtotals: HashMap<String, Total>, // account name -> next total
     pub depth: u32, // top level total is depth 0; Income/Expenses is 1, etc.
 }
@@ -35,27 +35,27 @@ impl Total {
 
     pub fn ingest_details(&mut self, details: &Vec<Detail>) {
         for detail in details {
-            let mut current_total = &mut *self;
+            let mut current = &mut *self;
 
-            for segment in &detail.account {
+            for segment in &detail.account.split(":").collect::<Vec<&str>>() {
                 // Update each total along the hierarchy
-                *current_total.amounts
+                *current.amounts
                     .entry(detail.currency())
-                    .or_insert_with(|| money::ZERO) += detail.amount;
+                    .or_insert_with(|| scalar::ZERO) += detail.amount;
 
-                current_total = current_total.subtotals.entry(segment.clone())
+                current = current.subtotals.entry(segment.to_string())
                     .or_insert_with(|| Total {
-                        account: segment.clone(),
+                        account: segment.to_string(),
                         amounts: HashMap::new(),
                         subtotals: HashMap::new(),
-                        depth: current_total.depth + 1,
+                        depth: current.depth + 1,
                     });
             }
 
             // Update the leaf node with the final amount
-            *current_total.amounts
+            *current.amounts
                 .entry(detail.currency())
-                .or_insert_with(|| money::ZERO) += detail.amount;
+                .or_insert_with(|| scalar::ZERO) += detail.amount;
         }
     }
 
@@ -88,7 +88,7 @@ impl Total {
 
     /// Sums all subtotals by currency and updates top-level totals with them
     fn recompute_top_level(&mut self) {
-        let mut currency_totals: HashMap<String, Money> = HashMap::new();
+        let mut currency_totals: HashMap<String, Scalar> = HashMap::new();
 
         // Sum subtotals; doesn't need to be recursive because we only dropped
         // some top-level branches of the hierarchy; what remains is accurate

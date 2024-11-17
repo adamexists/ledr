@@ -2,17 +2,18 @@ use std::collections::HashMap;
 use std::string::ToString;
 use anyhow::{bail, Error};
 use crate::tabulation::exchange_rate::ExchangeRates;
-use crate::tabulation::money;
-use crate::tabulation::money::Money;
+use crate::util::scalar;
+use crate::util::scalar::Scalar;
 use crate::util::date::Date;
 
 const VIRTUAL_CONVERSION_ACCOUNT: &str = "Equity:Conversions";
 
+#[derive(Debug)]
 pub struct Entry {
     date: Date,
     desc: String,
     details: Vec<Detail>,
-    virtual_detail: Option<Vec<String>>,
+    virtual_detail: Option<String>,
     is_finalized: bool,
 }
 
@@ -30,7 +31,7 @@ impl Entry {
     pub fn add_detail(
         &mut self,
         account: String,
-        amount: Money,
+        amount: Scalar,
         currency: String,
         cost_basis: Option<(String, String)>,
     ) -> Result<(), Error> {
@@ -43,11 +44,11 @@ impl Entry {
         }
 
         if amount == 0f64 {
-            bail!("amount is blank")
+            bail!("amount is blank: {:?}", amount)
         }
 
         let new_detail = Detail {
-            account: account.split(':').map(|s| s.to_string()).collect(),
+            account,
             amount,
             currency,
             cost_basis,
@@ -136,7 +137,7 @@ impl Entry {
                     // precision errors. Gotta reconsider. In general there are
                     // some clear precision & rounding errors causing weirdness
                     // on the periphery. Thus this project needs attention.
-                    let mut special_entry = -Money::new(&*cb_amt.clone())?;
+                    let mut special_entry = -Scalar::new(&*cb_amt.clone())?;
                     let res = special_entry.resolution();
                     special_entry *= details.amount;
                     // special_entry.set_resolution(res);
@@ -166,6 +167,7 @@ impl Entry {
         self.implicit_conversions_check(rates)?;
         unbalanced_currencies = self.get_unbalanced_currencies();
         if unbalanced_currencies.is_empty() {
+            self.is_finalized = true;
             return Ok(());
         }
 
@@ -177,6 +179,7 @@ impl Entry {
         let mut unbalanced_currencies = self.get_unbalanced_currencies();
 
         if unbalanced_currencies.is_empty() {
+            self.is_finalized = true;
             return Ok(());
         }
 
@@ -192,20 +195,14 @@ impl Entry {
             }
 
             let virtual_detail1 = Detail {
-                account: VIRTUAL_CONVERSION_ACCOUNT
-                    .split(':')
-                    .map(|s| s.to_string())
-                    .collect(),
+                account: VIRTUAL_CONVERSION_ACCOUNT.to_string(),
                 amount: -amount1,
                 currency: currency1.clone(),
                 cost_basis: None,
             };
 
             let virtual_detail2 = Detail {
-                account: VIRTUAL_CONVERSION_ACCOUNT
-                    .split(':')
-                    .map(|s| s.to_string())
-                    .collect(),
+                account: VIRTUAL_CONVERSION_ACCOUNT.to_string(),
                 amount: -amount2,
                 currency: currency2.clone(),
                 cost_basis: None,
@@ -225,16 +222,17 @@ impl Entry {
             return Ok(());
         }
 
+        self.is_finalized = true;
         Ok(())
     }
 
-    fn get_unbalanced_currencies(&self) -> Vec<(String, Money)> {
+    fn get_unbalanced_currencies(&self) -> Vec<(String, Scalar)> {
         // Step 1: Sum amounts for each currency
-        let mut currency_sums: HashMap<String, Money> = HashMap::new();
+        let mut currency_sums: HashMap<String, Scalar> = HashMap::new();
 
         for detail in &self.details {
             let entry = currency_sums.entry(detail.currency())
-                .or_insert(money::ZERO);
+                .or_insert(scalar::ZERO);
             *entry += detail.amount;
         }
 
@@ -246,11 +244,10 @@ impl Entry {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Detail {
-    // "Assets:Cash" -> Vec<String> = {"Assets","Cash"}
-    pub account: Vec<String>,
-    pub amount: Money,
+    pub account: String,
+    pub amount: Scalar,
     currency: String,
 
     cost_basis: Option<(String, String)>,
@@ -267,7 +264,7 @@ impl Detail {
         }
 
         self.currency = currency.clone();
-        self.amount = Money::new_from_f64(
+        self.amount = Scalar::new_from_f64(
             rate * self.amount.to_f64(),
             self.amount.resolution(),
         );
@@ -275,5 +272,161 @@ impl Detail {
 
     pub fn remove_cost_basis(&mut self) {
         self.cost_basis = None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::util::scalar::Scalar;
+    use crate::tabulation::exchange_rate::ExchangeRates;
+    use crate::util::date::Date;
+
+    // Helper function to create a sample Date for testing
+    fn sample_date(offset: u8) -> Date {
+        Date::from_ymd(2024, 1, 1+offset)
+    }
+
+    // Helper function to create sample Money
+    fn sample_money(amount: f64, resolution: u32) -> Scalar {
+        Scalar::new_from_f64(amount, resolution)
+    }
+
+    // Helper function to set up an Entry with a date and description
+    fn create_entry(offset: u8) -> Entry {
+        Entry::new(sample_date(offset), "Sample Entry".to_string())
+    }
+
+    // Helper function to set up sample Details
+    fn create_detail(account: &str, amount: f64, resolution: u32, currency: &str) -> Detail {
+        Detail {
+            account: account.to_string(),
+            amount: sample_money(amount, resolution),
+            currency: currency.to_string(),
+            cost_basis: None,
+        }
+    }
+    
+    fn create_detail_with_cost_basis(account: &str, amount: f64, resolution: u32, currency: &str) -> Detail {
+        // TODO: implement when cost basis refactor is done
+        create_detail(account, amount, resolution, currency)
+    }
+
+    #[test]
+    fn test_entry_creation() {
+        let entry = create_entry(0);
+        assert_eq!(entry.get_date(), &sample_date(0));
+        assert!(entry.get_details().is_empty());
+        assert!(!entry.is_finalized);
+    }
+
+    #[test]
+    fn test_add_detail() {
+        let mut entry = create_entry(0);
+        let result = entry.add_detail(
+            "Assets:Cash".to_string(),
+            sample_money(100.0, 1),
+            "USD".to_string(),
+            None,
+        );
+
+        assert!(result.is_ok());
+        assert_eq!(entry.get_details().len(), 1);
+
+        let detail = &entry.get_details()[0];
+        assert_eq!(detail.account, "Assets:Cash");
+        assert_eq!(detail.amount, sample_money(100.0, 1));
+        assert_eq!(detail.currency, "USD");
+    }
+
+    #[test]
+    fn test_finalize_unbalanced_entry() {
+        let mut entry = create_entry(0);
+        entry
+            .add_detail(
+                "Assets:Cash".to_string(),
+                sample_money(100.0, 1),
+                "USD".to_string(),
+                None,
+            )
+            .unwrap();
+        entry
+            .add_detail(
+                "Expenses:Food".to_string(),
+                sample_money(-50.0, 1),
+                "USD".to_string(),
+                None,
+            )
+            .unwrap();
+
+        let mut rates = ExchangeRates::new(); // Assuming ExchangeRates has a new method
+        let result = entry.finalize(&mut rates);
+
+        // Expect an error since the entry is unbalanced
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_finalize_balanced_entry() {
+        let mut entry = create_entry(0);
+        entry
+            .add_detail(
+                "Assets:Cash".to_string(),
+                sample_money(100.0, 1),
+                "USD".to_string(),
+                None,
+            )
+            .unwrap();
+        entry
+            .add_detail(
+                "Expenses:Food".to_string(),
+                sample_money(-100.0, 1),
+                "USD".to_string(),
+                None,
+            )
+            .unwrap();
+
+        let mut rates = ExchangeRates::new();
+        let result = entry.finalize(&mut rates);
+
+        // Expect success since the entry is balanced
+        assert!(result.is_ok());
+        assert!(entry.is_finalized);
+    }
+
+    // Additional helper function to set up ExchangeRates if needed
+    fn setup_exchange_rates() -> ExchangeRates {
+        ExchangeRates::new() // Assuming an appropriate constructor
+    }
+
+    // Test for setting virtual detail
+    #[test]
+    fn test_set_virtual_detail() {
+        let mut entry = create_entry(0);
+        let result = entry.set_virtual_detail("Assets:Virtual".to_string());
+
+        assert!(result.is_ok());
+        assert!(entry.virtual_detail.is_some());
+        assert_eq!(entry.virtual_detail.unwrap(), "Assets")
+    }
+
+    // Placeholder for future tests, e.g., testing resolution adjustments
+    #[test]
+    fn test_set_resolution_for_currency() {
+        let mut entry = create_entry(0);
+        entry
+            .add_detail(
+                "Assets:Cash".to_string(),
+                sample_money(123.4567, 4),
+                "USD".to_string(),
+                None,
+            )
+            .unwrap();
+
+        let result = entry.set_resolution_for_currency(&"USD".to_string(), 2);
+        assert!(result.is_ok());
+
+        let detail = &entry.get_details()[0];
+        assert_eq!(detail.amount.to_f64(), 123.45); // Check for truncation
     }
 }

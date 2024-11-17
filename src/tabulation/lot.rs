@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use anyhow::{bail, Error};
-use crate::tabulation::money::Money;
+use crate::util::scalar::Scalar;
 use crate::util::date::{Date, Duration};
 
 // TODO: Reorganize this whole file. It needs to be cleaned up a lot.
@@ -18,10 +18,10 @@ impl Lots {
         date: Date,
         account: String,
         commodity: String,
-        quantity: Money,
+        quantity: Scalar,
         cost_basis: (String, String),
     ) -> Result<(), Error> {
-        let amt = Money::new(&*cost_basis.0)?;
+        let amt = Scalar::new(&*cost_basis.0)?;
 
         let movement = Movement {
             action: if quantity > 0f64 { LotAction::BUY } else { LotAction::SELL },
@@ -146,8 +146,8 @@ struct Movement {
 
     account: String,
     commodity: String,
-    quantity: Money,
-    unit_price: Money, // amount exchanged per unit of this lot
+    quantity: Scalar,
+    unit_price: Scalar, // amount exchanged per unit of this lot
     currency: String, // currency in which cost is denominated
 }
 
@@ -184,10 +184,10 @@ pub struct Lot {
     account: String,
 
     commodity: String,
-    quantity: Money, // always in positive terms, even for sales
+    quantity: Scalar, // always in positive terms, even for sales
 
     acquisition_date: Date,
-    acquisition_unit_cost: Money,
+    acquisition_unit_cost: Scalar,
     acquisition_currency: String,
 
     closed_date: Option<Date>,
@@ -207,7 +207,7 @@ pub enum LotStatus {
 }
 
 impl Lot {
-    pub fn cost_basis(&self) -> Money {
+    pub fn cost_basis(&self) -> Scalar {
         self.acquisition_unit_cost * self.quantity
     }
 
@@ -222,6 +222,6 @@ impl Lot {
 
 struct Sale {
     date: Date,
-    quantity: Money,
-    unit_price: Money,
+    quantity: Scalar,
+    unit_price: Scalar,
 }

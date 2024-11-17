@@ -1,12 +1,12 @@
 use crate::tabulation::total::Total;
 use crate::tabulation::ledger::VALID_PREFIXES;
-use crate::tabulation::money::Money;
+use crate::util::scalar::Scalar;
 
 /// When using this to display something, you should instantiate it, then sort
 /// it, then display it. Filters should be handled in the Total struct.
 pub struct OrderedTotal {
     account: String,
-    amounts: Vec<(String, Money)>, // currency -> balance held
+    amounts: Vec<(String, Scalar)>, // currency -> balance held
     subtotals: Vec<(String, OrderedTotal)>, // account name -> next total
 }
 
@@ -57,16 +57,16 @@ impl OrderedTotal {
 
         // Sort subtotals by the absolute value of the sum of their Money components
         self.subtotals.sort_by(|(_, a), (_, b)| {
-            let sum_a: Money = a
+            let sum_a: Scalar = a
                 .amounts
                 .iter()
                 .map(|(_, money)| *money)
-                .sum::<Money>().abs();
-            let sum_b: Money = b
+                .sum::<Scalar>().abs();
+            let sum_b: Scalar = b
                 .amounts
                 .iter()
                 .map(|(_, money)| *money)
-                .sum::<Money>().abs();
+                .sum::<Scalar>().abs();
             sum_b.partial_cmp(&sum_a).unwrap_or(std::cmp::Ordering::Equal)
         });
 
@@ -120,8 +120,8 @@ impl OrderedTotal {
     }
 
     fn amounts_match(
-        a: &Vec<(String, Money)>,
-        b: &Vec<(String, Money)>,
+        a: &Vec<(String, Scalar)>,
+        b: &Vec<(String, Scalar)>,
     ) -> bool {
         if a.len() != b.len() {
             return false;
@@ -161,7 +161,7 @@ impl OrderedTotal {
     pub fn calculate_column_width(&self) -> usize {
         let mut max_width = 0;
 
-        let calculate_width = |currency: &String, amount: &Money| {
+        let calculate_width = |currency: &String, amount: &Scalar| {
             format!("{} {}", currency, amount).len()
         };
 
