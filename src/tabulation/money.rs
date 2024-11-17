@@ -40,6 +40,12 @@ impl Money {
         })
     }
 
+    pub fn new_from_f64(f: f64, resolution: u32) -> Self {
+        let factor = 10f64.powi(resolution as i32);
+        let amount = (f * factor).round() as i64;
+        Self { amount, resolution }
+    }
+
     pub fn resolution(&self) -> u32 {
         self.resolution
     }

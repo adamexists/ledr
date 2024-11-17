@@ -77,6 +77,85 @@ impl OrderedTotal {
     }
 
     // ------------
+    // -- CHECKS --
+    // ------------
+
+    /// Returns true iff this OrderedTotal has the same balance as all subtotals
+    /// below it, and there is only one subtotal on each level of depth. In
+    /// other words, if true, then it should be intuitive to represent this
+    /// balance on a single line, with the account name segments below it all
+    /// condensed into one line.
+    ///
+    /// e.g. Instead of
+    ///     USD -3,000.00    Liabilities
+    ///       USD -900.00      CreditCards
+    ///       USD -900.00        Card
+    ///       USD -400.00          Nested
+    ///       USD -400.00            SuperFar
+    ///       USD -400.00              Down
+    ///
+    /// We would get
+    ///     USD -3,000.00    Liabilities
+    ///       USD -900.00      CreditCards
+    ///       USD -900.00        Card
+    ///       USD -400.00          Nested:SuperFar:Down
+    fn can_condense_with_all_below(&self) -> bool {
+        if self.subtotals.len() > 1 {
+            return false;
+        }
+
+        // Store the expected currency amounts from the current node
+        let expected_amounts = &self.amounts;
+
+        for (_, ot) in &self.subtotals {
+            // Check if the path is still linear.
+            if !ot.can_condense_with_all_below() {
+                return false;
+            }
+
+            // Validate that the amounts in the current node match the expected amounts
+            if !OrderedTotal::amounts_match(expected_amounts, &ot.amounts) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn amounts_match(a: &Vec<(String, Money)>, b: &Vec<(String, Money)>) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
+
+        for (currency, amount) in a {
+            if let Some((_, other_amount)) = b.iter().find(|(c, _)| c == currency) {
+                if amount != other_amount {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Performs the condensation of name discussed and shown above, on the
+    /// comment for OrderedTotal::can_condense_with_all_below().
+    fn condensed_name(&self) -> String {
+        // Check if there are no subtotals; return the current node's name.
+        if self.subtotals.is_empty() {
+            return self.account.clone();
+        }
+
+        // There should be only one subtotal at this point because of the has_single_subtotal_to_leaf check.
+        let (_, subtotal) = self.subtotals.iter().next().unwrap();
+
+        // Recursively get the name from the next node and concatenate with a colon.
+        format!("{}:{}", self.account, subtotal.condensed_name())
+    }
+
+    // ------------
     // -- PRINTS --
     // ------------
 
@@ -134,27 +213,26 @@ impl OrderedTotal {
         max_depth: Option<usize>,
     ) {
         let indentation = " ".repeat(indent * 2);
+        let can_condense = self.can_condense_with_all_below();
 
         // Iterate over amounts and print each one (except top-level)
         if indent != 0 {
             let amts = &mut self.amounts.iter().peekable();
 
+
+            let account_name = if can_condense {
+                &self.condensed_name()
+            } else {
+                &self.account
+            };
+
             let mut has_printed_acct = false;
             while let Some((currency, amount)) = amts.next() {
-                // how to print the account name differs massively
+                // we avoid repeating the same account name on subsequent lines
+                // when multicurrency balances would otherwise cause that
                 let acct = match (has_printed_acct, amts.peek().is_some()) {
-                    (false, false) => &*{
-                        format!(" {}", &self.account)
-                    },
-                    (false, true) => &*{
-                        format!(" {}", &self.account)
-                    },
-                    (true, true) => {
-                        " ↩"
-                    }
-                    (true, false) => {
-                        " ↩"
-                    }
+                    (true, _) => " ↩",
+                    _ => &*format!(" {}", account_name)
                 };
 
                 println!(
@@ -175,9 +253,11 @@ impl OrderedTotal {
             }
         }
 
-        // Recursively display each subtotal
-        for (_, subtotal) in &self.subtotals {
-            subtotal.ledger_fmt_recursive(indent + 1, col_width, max_depth);
+        if !can_condense {
+            // Recursively display each subtotal
+            for (_, subtotal) in &self.subtotals {
+                subtotal.ledger_fmt_recursive(indent + 1, col_width, max_depth);
+            }
         }
     }
 }

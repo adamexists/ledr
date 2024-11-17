@@ -2,13 +2,11 @@ use std::cmp::PartialEq;
 use std::collections::HashMap;
 use anyhow::{bail, Error};
 use crate::tabulation::exchange_rate::RateType::{DECLARED, INFERRED};
-use crate::tabulation::money;
-use crate::tabulation::money::Money;
 use crate::util::date::Date;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct ExchangeRates {
-    // Use a HashMap to store rates with a tuple of (base, quote) as the key
+    /// Store rates with a tuple of (base, quote) as the key
     rates: HashMap<(String, String), Vec<ExchangeRate>>,
 }
 
@@ -154,7 +152,7 @@ impl ExchangeRates {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 enum RateType {
     /// the user said this is true
     DECLARED,
@@ -162,7 +160,7 @@ enum RateType {
     INFERRED,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct ExchangeRate {
     date: Date,
     rate_type: RateType,

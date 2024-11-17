@@ -80,7 +80,11 @@ impl Entry {
         &self.date
     }
 
-    pub fn details(&self) -> &Vec<Detail> {
+    pub fn details(&mut self) -> &mut Vec<Detail> {
+        &mut self.details
+    }
+
+    pub fn get_details(&self) -> &Vec<Detail> {
         &self.details
     }
 
@@ -154,7 +158,6 @@ impl Entry {
                 currency2,
                 (amount2.to_f64() / amount1.to_f64()).abs(),
             )?;
-            println!("{:?}", rates);
 
             self.details.push(virtual_detail1);
             self.details.push(virtual_detail2);
@@ -202,5 +205,17 @@ impl Detail {
 
     pub fn currency(&self) -> String {
         self.currency.clone()
+    }
+
+    pub fn convert_to(&mut self, currency: &String, rate: f64) {
+        if &self.currency == currency {
+            return;
+        }
+
+        self.currency = currency.clone();
+        self.amount = Money::new_from_f64(
+            rate * self.amount.to_f64(),
+            self.amount.resolution(),
+        );
     }
 }

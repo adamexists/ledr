@@ -119,11 +119,29 @@ impl Ledger {
     // -- TABULATING --
     // ----------------
 
+    /// Converts all possible balances to the currency provided, if exchange
+    /// rates are available. If a rate is not available for the given pair, then
+    /// we skip. There is no graph traversal: a direct rate must have been
+    /// observed.
+    ///
+    /// TODO: Graph traversal is feasible in the future.
+    pub fn collapse_to(&mut self, currency: String) {
+        self.entries.iter_mut()
+            .flat_map(|e| e.details())
+            .for_each(|d| {
+                if let Some(rate) = self.exchange_rates.get_latest_rate(
+                    d.currency(), currency.clone(),
+                ) {
+                    d.convert_to(&currency, rate)
+                }
+            })
+    }
+
     pub fn finalize(&mut self) -> Result<(), Error> {
         let mut max_reso_by_currency: HashMap<String, u32> = HashMap::new();
 
         // Iterate over each detail to determine the highest resolution per currency
-        for detail in self.entries.iter().flat_map(|x| x.details()) {
+        for detail in self.entries.iter().flat_map(|x| x.get_details()) {
             let reso = detail.amount.resolution();
             let currency = detail.currency();
 

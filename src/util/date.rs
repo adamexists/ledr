@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use anyhow::{bail, Error};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Date {
     year: u32,
     month: u8,

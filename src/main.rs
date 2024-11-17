@@ -11,12 +11,14 @@ mod util;
 fn main() -> Result<(), Error> {
     let mut ledger = Ledger::new();
     parse_ledger("ledger.txt", &mut ledger)?;
+
+    ledger.collapse_to("USD".to_string());
     ledger.finalize()?;
 
     let mut totals = ledger.to_totals()?;
 
-    totals.filter_top_level(vec!["Income", "Expenses"]);
-    totals.invert();
+    totals.filter_top_level(vec!["Assets", "Liabilities"]);
+    // totals.invert();
 
     totals.validate()?;
 
