@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use anyhow::{bail, Error};
 use crate::tabulation::exchange_rate::RateType::{DECLARED, INFERRED};
 use crate::util::date::Date;
+use crate::util::scalar::Scalar;
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct ExchangeRates {
     /// Store rates with a tuple of (base, quote) as the key
     rates: HashMap<(String, String), Vec<ExchangeRate>>,
@@ -17,11 +18,11 @@ impl ExchangeRates {
     
     /// Add a new exchange rate declared via directive. Might fail if there is
     /// an existing declared rate on the same date.
-    pub fn declare(&mut self, date: Date, base: String, quote: String, mut rate: f64) -> Result<(), Error> {
+    pub fn declare(&mut self, date: Date, base: String, quote: String, mut rate: Scalar) -> Result<(), Error> {
         if base == quote {
             bail!("cannot exchange a currency for itself")
         }
-        if rate <= 0f64 {
+        if rate <= 0 {
             bail!("exchange rate must be positive")
         }
 
@@ -29,7 +30,7 @@ impl ExchangeRates {
         let key = if base < quote {
             (base, quote)
         } else {
-            rate = 1.0 / rate;
+            rate = 1 / rate;
             (quote, base)
         };
 
@@ -51,11 +52,11 @@ impl ExchangeRates {
     /// an existing declared rate that is outside tolerance from this new rate.
     /// If there is an existing declared rate at all, this one will definitely
     /// be ignored.
-    pub fn infer(&mut self, date: Date, base: String, quote: String, mut rate: f64) -> Result<(), Error> {
+    pub fn infer(&mut self, date: Date, base: String, quote: String, mut rate: Scalar) -> Result<(), Error> {
         if base == quote {
             bail!("cannot exchange a currency for itself")
         }
-        if rate <= 0f64 {
+        if rate <= 0 {
             bail!("exchange rate must be positive");
         }
 
@@ -63,7 +64,7 @@ impl ExchangeRates {
         let key = if base < quote {
             (base, quote)
         } else {
-            rate = 1.0 / rate;
+            rate = 1 / rate;
             (quote, base)
         };
 
@@ -72,7 +73,7 @@ impl ExchangeRates {
             // it is, ignore this inferred rate and use the declared; if not,
             // then the declared rate is too far from reality on this date to be
             // accurate, so we should error to stop tabulation here.
-            if !within_tolerance_of(0.01, declared, rate) {
+            if !within_tolerance_of(Scalar::new(1, 2), declared, rate) {
                 bail!("inferred exchange rate deviates >1% from declared rate")
             }
 
@@ -92,7 +93,7 @@ impl ExchangeRates {
         date: Date,
         base: String,
         quote: String,
-    ) -> Option<f64> {
+    ) -> Option<Scalar> {
         let mut invert_rate = false;
         let key = if base < quote {
             (base, quote)
@@ -108,7 +109,7 @@ impl ExchangeRates {
             .and_then(|r| Some(r.rate))
             .and_then(|found| {
                 if invert_rate {
-                    Some(1.0 / found)
+                    Some(1 / found)
                 } else {
                     Some(found)
                 }
@@ -120,7 +121,7 @@ impl ExchangeRates {
         &self,
         base: String,
         quote: String,
-    ) -> Option<f64> {
+    ) -> Option<Scalar> {
         let mut invert_rate = false;
         let key = if base < quote {
             (base, quote)
@@ -134,7 +135,7 @@ impl ExchangeRates {
             .and_then(|r| Some(r.rate))
             .and_then(|found| {
                 if invert_rate {
-                    Some(1.0 / found)
+                    Some(1 / found)
                 } else {
                     Some(found)
                 }
@@ -142,7 +143,7 @@ impl ExchangeRates {
     }
 
     /// Returns a rate that already exists for the *exact* passed date, if any.
-    fn get_exact_rate(&self, key: &(String, String), date: Date, rate_type: RateType) -> Option<f64> {
+    fn get_exact_rate(&self, key: &(String, String), date: Date, rate_type: RateType) -> Option<Scalar> {
         self.rates.get(key)
             .and_then(|rates| {
                 rates.iter()
@@ -152,7 +153,7 @@ impl ExchangeRates {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum RateType {
     /// the user said this is true
     DECLARED,
@@ -160,17 +161,16 @@ enum RateType {
     INFERRED,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct ExchangeRate {
     date: Date,
     rate_type: RateType,
 
-    /// the only appearance of f64 math in this project is currency conversion
-    rate: f64,
+    rate: Scalar,
 }
 
 impl ExchangeRate {
-    fn new(date: Date, rate_type: RateType, rate: f64) -> Self {
+    fn new(date: Date, rate_type: RateType, rate: Scalar) -> Self {
         Self {
             date,
             rate_type,
@@ -181,6 +181,6 @@ impl ExchangeRate {
 
 /// returns true iff a and b are within percent of each other.
 /// Percent should be presented as a decimal form, e.g. 0.01 == 1%.
-fn within_tolerance_of(percent: f64, a: f64, b: f64) -> bool {
+fn within_tolerance_of(percent: Scalar, a: Scalar, b: Scalar) -> bool {
     (a - b).abs() <= percent * a.abs().max(b.abs())
 }

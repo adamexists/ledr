@@ -6,7 +6,7 @@ use crate::util::date::{Date, Duration};
 
 // TODO: Reorganize this whole file. It needs to be cleaned up a lot.
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Lots {
     state: HashMap<String, Vec<Lot>>, // currency -> all lots of that currency
     movements: Vec<Movement>, // all movements, unordered
@@ -21,14 +21,14 @@ impl Lots {
         quantity: Scalar,
         cost_basis: (String, String),
     ) -> Result<(), Error> {
-        let amt = Scalar::new(&*cost_basis.0)?;
+        let amt = Scalar::from_str(&*cost_basis.0)?;
 
         let movement = Movement {
-            action: if quantity > 0f64 { LotAction::BUY } else { LotAction::SELL },
+            action: if quantity > 0 { LotAction::BUY } else { LotAction::SELL },
             date,
             account,
             commodity,
-            quantity: if quantity > 0f64 { quantity } else { -quantity },
+            quantity: if quantity > 0 { quantity } else { -quantity },
             unit_price: amt,
             currency: cost_basis.1,
         };
@@ -105,19 +105,19 @@ impl Lots {
                             });
 
                             // If the lot is fully sold, mark it as closed
-                            if lot.quantity == 0f64 {
+                            if lot.quantity == 0 {
                                 lot.status = LotStatus::CLOSED;
                                 lot.closed_date = Some(movement.date);
                             }
 
                             // Break if we've sold everything needed
-                            if remaining_quantity == 0f64 {
+                            if remaining_quantity == 0 {
                                 break;
                             }
                         }
 
                         // Handle any remaining quantity that couldn't be matched
-                        if remaining_quantity > 0f64 {
+                        if remaining_quantity > 0 {
                             bail!(
                                 "not enough lots to sell remaining {} of {} on {}",
                                 remaining_quantity, movement.commodity,
@@ -140,6 +140,7 @@ impl Lots {
     }
 }
 
+#[derive(Debug)]
 struct Movement {
     action: LotAction,
     date: Date,
@@ -179,6 +180,7 @@ impl PartialOrd for Movement {
     }
 }
 
+#[derive(Debug)]
 pub struct Lot {
     status: LotStatus,
     account: String,
@@ -194,13 +196,13 @@ pub struct Lot {
     sales: Vec<Sale>,
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 enum LotAction {
     BUY,
     SELL,
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum LotStatus {
     OPEN,
     CLOSED,
@@ -220,6 +222,7 @@ impl Lot {
     }
 }
 
+#[derive(Debug)]
 struct Sale {
     date: Date,
     quantity: Scalar,

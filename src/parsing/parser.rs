@@ -43,7 +43,7 @@ fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
                     let to = parts[2].to_string();
                     let rate = parts[3];
                     ledger.exchange_rates.declare(
-                        date, from, to, Scalar::new(rate)?.to_f64(),
+                        date, from, to, Scalar::from_str(rate)?,
                     )?
                 }
                 _ => bail!("Invalid directive or arguments (line {}): {}",

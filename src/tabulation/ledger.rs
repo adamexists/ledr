@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::collections::HashMap;
 use anyhow::{bail, Error};
 use crate::tabulation::total::Total;
@@ -10,7 +11,7 @@ use crate::util::date::Date;
 pub const VALID_PREFIXES: [&'static str; 5] =
     ["Assets", "Liabilities", "Equity", "Income", "Expenses"];
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Ledger {
     entries: Vec<Entry>,
     /// entry currently being assembled, if any
@@ -97,13 +98,13 @@ impl Ledger {
             bail!("invalid account prefix: {}", account)
         }
 
-        let money_amt = Scalar::new(&*amount)?;
+        let money_amt = Scalar::from_str(&*amount)?;
         let mut cost_basis_input = None;
 
         // TODO: The whole way that cost basis is passed around needs to be
         //  redone.
         if let Some((cb_amount, cb_currency, is_total_cost)) = cost_basis.clone() {
-            let mut cb_money_amt = Scalar::new(&*cb_amount.clone())?;
+            let mut cb_money_amt = Scalar::from_str(&*cb_amount.clone())?;
             if is_total_cost {
                 cb_money_amt /= money_amt;
             }
@@ -114,7 +115,7 @@ impl Ledger {
                 self.pending_entry_date(),
                 currency.clone(),
                 cb_currency.clone(),
-                cb_money_amt.to_f64(),
+                cb_money_amt,
             )?;
 
             self.lots.add_movement(
@@ -192,12 +193,16 @@ impl Ledger {
             })
     }
 
-    pub fn finalize(&mut self) -> Result<(), Error> {
+    pub fn finalize(&mut self, overall_max_reso: Option<u32>) -> Result<(), Error> {
         let mut max_reso_by_currency: HashMap<String, u32> = HashMap::new();
+        let mut overall_max = 6;
+        if let Some(requested_max) = overall_max_reso {
+            overall_max = requested_max;
+        }
 
         // Iterate over each detail to determine the highest resolution per currency
         for detail in self.entries.iter().flat_map(|x| x.get_details()) {
-            let reso = detail.amount.resolution();
+            let reso = min(detail.amount.resolution(), overall_max);
             let currency = detail.currency();
 
             // Update max resolution if this detail has higher resolution

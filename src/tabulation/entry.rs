@@ -43,7 +43,7 @@ impl Entry {
             bail!("account is blank")
         }
 
-        if amount == 0f64 {
+        if amount == 0 {
             bail!("amount is blank: {:?}", amount)
         }
 
@@ -71,8 +71,7 @@ impl Entry {
             bail!("account is blank")
         }
 
-        self.virtual_detail =
-            Some(account.split(':').map(|s| s.to_string()).collect());
+        self.virtual_detail = Some(account);
         Ok(())
     }
 
@@ -137,7 +136,7 @@ impl Entry {
                     // precision errors. Gotta reconsider. In general there are
                     // some clear precision & rounding errors causing weirdness
                     // on the periphery. Thus this project needs attention.
-                    let mut special_entry = -Scalar::new(&*cb_amt.clone())?;
+                    let mut special_entry = -Scalar::from_str(&*cb_amt.clone())?;
                     let res = special_entry.resolution();
                     special_entry *= details.amount;
                     // special_entry.set_resolution(res);
@@ -189,8 +188,8 @@ impl Entry {
             let (currency1, amount1) = unbalanced_currencies.remove(0);
             let (currency2, amount2) = unbalanced_currencies.remove(0);
 
-            if (amount1 < 0f64 && amount2 < 0f64)
-                || (amount1 > 0f64 && amount2 > 0f64) {
+            if (amount1 < 0 && amount2 < 0)
+                || (amount1 > 0 && amount2 > 0) {
                 bail!("Unbalanced entry")
             }
 
@@ -208,12 +207,22 @@ impl Entry {
                 cost_basis: None,
             };
 
-            rates.infer(
-                self.date,
-                currency1,
-                currency2,
-                (amount2.to_f64() / amount1.to_f64()).abs(),
-            )?;
+            // a quick hack to keep the scalar division more efficient
+            if amount1 < amount2 {
+                rates.infer(
+                    self.date,
+                    currency2,
+                    currency1,
+                    (amount1 / amount2).abs(),
+                )?;
+            } else {
+                rates.infer(
+                    self.date,
+                    currency1,
+                    currency2,
+                    (amount2 / amount1).abs(),
+                )?;
+            }
 
             self.details.push(virtual_detail1);
             self.details.push(virtual_detail2);
@@ -239,7 +248,7 @@ impl Entry {
         // Step 2: Check if all currencies sum to zero
         currency_sums
             .into_iter()
-            .filter(|(_, amount)| amount != 0f64)
+            .filter(|(_, amount)| *amount != 0)
             .collect()
     }
 }
@@ -258,16 +267,13 @@ impl Detail {
         self.currency.clone()
     }
 
-    pub fn convert_to(&mut self, currency: &String, rate: f64) {
+    pub fn convert_to(&mut self, currency: &String, rate: Scalar) {
         if &self.currency == currency {
             return;
         }
 
         self.currency = currency.clone();
-        self.amount = Scalar::new_from_f64(
-            rate * self.amount.to_f64(),
-            self.amount.resolution(),
-        );
+        self.amount = rate;
     }
 
     pub fn remove_cost_basis(&mut self) {
@@ -287,29 +293,9 @@ mod tests {
         Date::from_ymd(2024, 1, 1+offset)
     }
 
-    // Helper function to create sample Money
-    fn sample_money(amount: f64, resolution: u32) -> Scalar {
-        Scalar::new_from_f64(amount, resolution)
-    }
-
     // Helper function to set up an Entry with a date and description
     fn create_entry(offset: u8) -> Entry {
         Entry::new(sample_date(offset), "Sample Entry".to_string())
-    }
-
-    // Helper function to set up sample Details
-    fn create_detail(account: &str, amount: f64, resolution: u32, currency: &str) -> Detail {
-        Detail {
-            account: account.to_string(),
-            amount: sample_money(amount, resolution),
-            currency: currency.to_string(),
-            cost_basis: None,
-        }
-    }
-    
-    fn create_detail_with_cost_basis(account: &str, amount: f64, resolution: u32, currency: &str) -> Detail {
-        // TODO: implement when cost basis refactor is done
-        create_detail(account, amount, resolution, currency)
     }
 
     #[test]
@@ -325,7 +311,7 @@ mod tests {
         let mut entry = create_entry(0);
         let result = entry.add_detail(
             "Assets:Cash".to_string(),
-            sample_money(100.0, 1),
+            Scalar::new(1000, 1),
             "USD".to_string(),
             None,
         );
@@ -335,7 +321,7 @@ mod tests {
 
         let detail = &entry.get_details()[0];
         assert_eq!(detail.account, "Assets:Cash");
-        assert_eq!(detail.amount, sample_money(100.0, 1));
+        assert_eq!(detail.amount, Scalar::new(1000, 1));
         assert_eq!(detail.currency, "USD");
     }
 
@@ -345,7 +331,7 @@ mod tests {
         entry
             .add_detail(
                 "Assets:Cash".to_string(),
-                sample_money(100.0, 1),
+                Scalar::new(1000, 1),
                 "USD".to_string(),
                 None,
             )
@@ -353,7 +339,7 @@ mod tests {
         entry
             .add_detail(
                 "Expenses:Food".to_string(),
-                sample_money(-50.0, 1),
+                Scalar::new(-500, 1),
                 "USD".to_string(),
                 None,
             )
@@ -372,7 +358,7 @@ mod tests {
         entry
             .add_detail(
                 "Assets:Cash".to_string(),
-                sample_money(100.0, 1),
+                Scalar::new(1000, 1),
                 "USD".to_string(),
                 None,
             )
@@ -380,7 +366,7 @@ mod tests {
         entry
             .add_detail(
                 "Expenses:Food".to_string(),
-                sample_money(-100.0, 1),
+                Scalar::new(-1000, 1),
                 "USD".to_string(),
                 None,
             )
@@ -417,7 +403,7 @@ mod tests {
         entry
             .add_detail(
                 "Assets:Cash".to_string(),
-                sample_money(123.4567, 4),
+                Scalar::new(1234567, 4),
                 "USD".to_string(),
                 None,
             )
@@ -427,6 +413,7 @@ mod tests {
         assert!(result.is_ok());
 
         let detail = &entry.get_details()[0];
-        assert_eq!(detail.amount.to_f64(), 123.45); // Check for truncation
+        assert_eq!(detail.amount.amount(), 12345); // Check for truncation
+        assert_eq!(detail.amount.resolution(), 2);
     }
 }

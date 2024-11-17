@@ -47,6 +47,10 @@ struct Cli {
     /// Negates all currency values
     #[arg(short, long)]
     invert: bool,
+
+    /// Maximum amount of decimal places to show for any amounts
+    #[arg(short, long)]
+    precision: Option<u32>,
 }
 
 #[derive(ValueEnum, Clone)]
@@ -109,7 +113,7 @@ fn financial_statement(args: &Cli, mut ledger: Ledger) -> Result<Total, Error> {
     if let Some(collapse) = &args.collapse {
         ledger.collapse_to(collapse.clone());
     }
-    ledger.finalize()?;
+    ledger.finalize(args.precision)?;
 
     let mut totals = ledger.to_totals()?;
 
