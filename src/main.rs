@@ -15,7 +15,7 @@ mod util;
 // TODO: Should be able to move entirely to integer arithmetic for exchange rates.
 
 #[derive(Parser)]
-#[command(name = "ledr", version = "1.0", about = "Command line accounting tool")]
+#[command(name = "ledr", version = "1.0", about = "Plain text accounting tool")]
 struct Cli {
     // ----------------
     // -- POSITIONAL --
