@@ -1,5 +1,5 @@
 use anyhow::Error;
-use clap::{CommandFactory, Parser};
+use clap::{CommandFactory, Parser, ValueEnum};
 use tabulation::ledger::Ledger;
 use crate::parsing::parser::parse_ledger;
 use crate::reports::ordered_total::OrderedTotal;
@@ -17,7 +17,7 @@ struct Cli {
     // ----------------
 
     /// The command to execute
-    directive: String,
+    command: Directive,
 
     // -----------
     // -- FLAGS --
@@ -44,6 +44,12 @@ struct Cli {
     invert: bool,
 }
 
+#[derive(ValueEnum, Clone, Debug)]
+enum Directive {
+    IS,
+    BS,
+}
+
 fn main() -> Result<(), Error> {
     let args = Cli::parse();
 
@@ -57,8 +63,8 @@ fn main() -> Result<(), Error> {
 
     let mut totals = ledger.to_totals()?;
 
-    match args.directive.as_str() {
-        "bs" | "balancesheet" => {
+    match args.command {
+        Directive::BS => {
             let mut top_levels = vec!["Assets", "Liabilities"];
             if !args.ignore_equity {
                 top_levels.push("Equity");
@@ -66,12 +72,8 @@ fn main() -> Result<(), Error> {
 
             totals.filter_top_level(top_levels);
         },
-        "is" | "incomestatement" => {
+        Directive::IS => {
             totals.filter_top_level(vec!["Income", "Expenses"]);
-        }
-        _ => {
-            let _ = Cli::command().print_help();
-            std::process::exit(2);
         }
     }
 

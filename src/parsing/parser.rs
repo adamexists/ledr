@@ -11,7 +11,7 @@ use crate::util::date::Date;
 fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
     let reader = io::BufReader::new(file);
 
-    for line in reader.lines() {
+    for (i, line) in reader.lines().enumerate() {
         let line = line?.trim().to_string();
 
         // Skip blank lines and comments
@@ -28,7 +28,7 @@ fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
                 .collect();
 
             if parts.is_empty() {
-                bail!("Invalid directive format: {}", line);
+                bail!("Invalid directive format (line {}): {}", i+1, line);
             }
 
             match parts[0] {
@@ -44,7 +44,7 @@ fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
                         date, from, to, Money::new(rate)?.to_f64(),
                     )?
                 }
-                _ => bail!("Unknown directive or invalid arguments: {}", line),
+                _ => bail!("Unknown directive or invalid arguments (line {}): {}", i+1, line),
             }
         }
     }
@@ -57,8 +57,10 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
     let reader = io::BufReader::new(file);
 
     let mut lines = reader.lines();
+    let mut i = 0;
 
     while let Some(Ok(line)) = lines.next() {
+        i += 1;
         let line = line.trim();
 
         // ignore comment lines completely
@@ -98,12 +100,12 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
                 if let Some((currency, basis)) = basis_str.split_once(' ') {
                     let b_parts: Vec<&str> = basis.split_whitespace().collect();
                     if currency != "@" || b_parts.len() != 2 {
-                        bail!("Invalid cost basis format: {}", line);
+                        bail!("Invalid cost basis format (line {}): {}", i, line);
                     }
 
                     Some((b_parts[0].to_string(), b_parts[1].to_string()))
                 } else {
-                    bail!("Invalid cost basis format: {}", line);
+                    bail!("Invalid cost basis format (line {}): {}", i, line);
                 }
             } else {
                 None
@@ -120,7 +122,7 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
             continue;
         }
 
-        bail!("Invalid line format: {}", line);
+        bail!("Invalid line format (line {}): {}", i, line);
     }
 
     // Make sure to finish the last entry if the file ends without an empty line
