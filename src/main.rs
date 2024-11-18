@@ -28,7 +28,6 @@ mod tabulation;
 mod util;
 
 // TODO: Do a sweep for the usefulness of errors.
-// TODO: Should add a .build.yml for tests, too.
 // TODO: Sweep "pub" stuff that can actually be "pub(crate)".
 
 #[derive(Parser)]

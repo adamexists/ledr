@@ -154,7 +154,9 @@ impl Date {
         true
     }
 
-    // TODO: This is inefficient & should be revisited in a timely (ha) manner
+    /// Today gets the current date, which I insisted upon doing this way just
+    /// to avoid importing another dependency! In my defense, it only executes
+    /// once per run of the program, and only for specific reports.
     pub fn today() -> Date {
         let d = TODAY.lock().unwrap();
         if d.year > 0 {
