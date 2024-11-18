@@ -1,13 +1,29 @@
-use std::cmp::min;
-use std::collections::HashMap;
-use anyhow::{bail, Error};
-use crate::tabulation::total::Total;
+/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 use crate::tabulation::entry::{CostBasis, Detail, Entry};
 use crate::tabulation::exchange_rate::ExchangeRates;
 use crate::tabulation::ledger::CostBasisAmountType::TotalCost;
 use crate::tabulation::lot::Lots;
-use crate::util::scalar::Scalar;
+use crate::tabulation::total::Total;
 use crate::util::date::Date;
+use crate::util::scalar::Scalar;
+use anyhow::{bail, Error};
+use std::cmp::min;
+use std::collections::HashMap;
 
 /// The only valid top-level account names. This is an accounting system, after
 /// all! Society has rules! Granted, there is no functional reason to have this
@@ -16,8 +32,7 @@ use crate::util::date::Date;
 /// If you are reading this and want a variant of this for a language other than
 /// English, email me with the right terms to use for each category, and I will
 /// implement a parallel one for your language.
-pub const VALID_PREFIXES: [&str; 5] =
-    ["Assets", "Liabilities", "Equity", "Income", "Expenses"];
+pub const VALID_PREFIXES: [&str; 5] = ["Assets", "Liabilities", "Equity", "Income", "Expenses"];
 
 #[derive(Debug, Default)]
 pub struct Ledger {
@@ -43,11 +58,7 @@ impl Ledger {
     // -- INPUT --
     // -----------
 
-    pub fn declare_currency(
-        &mut self,
-        currency: String,
-        date: Date,
-    ) -> Result<(), Error> {
+    pub fn declare_currency(&mut self, currency: String, date: Date) -> Result<(), Error> {
         if self.declared_currencies.contains_key(&currency) {
             bail!("currency {} declared twice", currency)
         }
@@ -57,11 +68,7 @@ impl Ledger {
         Ok(())
     }
 
-    pub fn new_entry(
-        &mut self,
-        date: Date,
-        desc: String,
-    ) -> Result<(), Error> {
+    pub fn new_entry(&mut self, date: Date, desc: String) -> Result<(), Error> {
         if self.pending_entry.is_some() {
             self.finish_entry()?;
         }
@@ -131,10 +138,12 @@ impl Ledger {
             });
         }
 
-        self.pending_entry
-            .as_mut()
-            .unwrap()
-            .add_detail(account, money_amt, currency, cost_basis_input)
+        self.pending_entry.as_mut().unwrap().add_detail(
+            account,
+            money_amt,
+            currency,
+            cost_basis_input,
+        )
     }
 
     pub fn set_virtual_detail(&mut self, account: String) -> Result<(), Error> {
@@ -142,7 +151,10 @@ impl Ledger {
             bail!("orphaned entry detail")
         }
 
-        self.pending_entry.as_mut().unwrap().set_virtual_detail(account)
+        self.pending_entry
+            .as_mut()
+            .unwrap()
+            .set_virtual_detail(account)
     }
 
     pub fn finish_entry(&mut self) -> Result<(), Error> {
@@ -158,9 +170,7 @@ impl Ledger {
 
     pub fn pending_entry_date(&self) -> Date {
         match &self.pending_entry {
-            Some(e) => {
-                *e.get_date()
-            }
+            Some(e) => *e.get_date(),
             None => panic!("pending_entry_date called without pending entry"),
         }
     }
@@ -171,13 +181,15 @@ impl Ledger {
     fn check_currency(&self, currency: &String) -> Result<(), Error> {
         let declaration_date = match self.declared_currencies.get(currency) {
             Some(d) => d,
-            None => bail!("currency {} used without declaration", currency)
+            None => bail!("currency {} used without declaration", currency),
         };
 
         if self.pending_entry.as_ref().unwrap().get_date() < declaration_date {
-            bail!("currency {} used prior to declaration on {}",
+            bail!(
+                "currency {} used prior to declaration on {}",
                 currency,
-                declaration_date)
+                declaration_date
+            )
         }
 
         Ok(())
@@ -192,12 +204,14 @@ impl Ledger {
     /// we skip. There is no graph traversal: a direct rate must have been
     /// observed.
     pub fn collapse_to(&mut self, currency: String) {
-        self.entries.iter_mut()
+        self.entries
+            .iter_mut()
             .flat_map(|e| e.details())
             .for_each(|d| {
-                if let Some(rate) = self.exchange_rates.get_latest_rate(
-                    d.currency(), currency.clone(),
-                ) {
+                if let Some(rate) = self
+                    .exchange_rates
+                    .get_latest_rate(d.currency(), currency.clone())
+                {
                     d.convert_to(&currency, rate)
                 }
             })
@@ -206,7 +220,8 @@ impl Ledger {
     /// Removes cost basis from currencies. This is done for most reports that
     /// do not specifically care about it.
     pub fn remove_cost_basis(&mut self) {
-        self.entries.iter_mut()
+        self.entries
+            .iter_mut()
             .flat_map(|e| e.details())
             .for_each(|d| {
                 d.remove_cost_basis();
@@ -218,9 +233,7 @@ impl Ledger {
     /// from it.
     ///
     /// Consumes the ledger.
-    pub fn finalize(
-        mut self, overall_max_reso: Option<u32>,
-    ) -> Result<Total, Error> {
+    pub fn finalize(mut self, overall_max_reso: Option<u32>) -> Result<Total, Error> {
         let mut max_reso_by_currency: HashMap<String, u32> = HashMap::new();
         let mut overall_max = 6;
         if let Some(requested_max) = overall_max_reso {
@@ -253,7 +266,8 @@ impl Ledger {
         // Transform this into a Total, and return that
         let mut total = Total::new();
 
-        let all_details: Vec<Detail> = self.entries
+        let all_details: Vec<Detail> = self
+            .entries
             .into_iter()
             .flat_map(|e| e.take_details())
             .collect();

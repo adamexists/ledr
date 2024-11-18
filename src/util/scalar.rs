@@ -1,7 +1,23 @@
+/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+use anyhow::{bail, Error};
 use std::fmt;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use anyhow::{bail, Error};
 
 const MAX_RESOLUTION: u32 = 32; // TODO: Document.
 
@@ -20,10 +36,7 @@ pub const ZERO: Scalar = Scalar {
 
 impl Scalar {
     pub fn new(amount: i128, resolution: u32) -> Self {
-        Self {
-            amount,
-            resolution,
-        }
+        Self { amount, resolution }
     }
 
     pub fn from_i128(amount: i128) -> Self {
@@ -32,10 +45,7 @@ impl Scalar {
 
     pub fn from_str(amount: &str) -> Result<Self, Error> {
         // Remove all commas from the input string
-        let sanitized_amount: String = amount
-            .chars()
-            .filter(|&c| c != ',')
-            .collect();
+        let sanitized_amount: String = amount.chars().filter(|&c| c != ',').collect();
 
         // Split the sanitized string by the decimal point, if it exists
         let parts: Vec<&str> = sanitized_amount.split('.').collect();
@@ -162,8 +172,7 @@ impl Add for Scalar {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        let (amount_self, amount_other, resolution) =
-            self.align_resolution(&rhs);
+        let (amount_self, amount_other, resolution) = self.align_resolution(&rhs);
         Self {
             amount: amount_self + amount_other,
             resolution,
@@ -173,8 +182,7 @@ impl Add for Scalar {
 
 impl AddAssign for Scalar {
     fn add_assign(&mut self, rhs: Self) {
-        let (amount_self, amount_other, resolution) =
-            self.align_resolution(&rhs);
+        let (amount_self, amount_other, resolution) = self.align_resolution(&rhs);
         self.amount = amount_self + amount_other;
         self.resolution = resolution;
     }
@@ -184,8 +192,7 @@ impl Sub for Scalar {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        let (amount_self, amount_other, resolution) =
-            self.align_resolution(&rhs);
+        let (amount_self, amount_other, resolution) = self.align_resolution(&rhs);
         Self {
             amount: amount_self - amount_other,
             resolution,
@@ -195,15 +202,14 @@ impl Sub for Scalar {
 
 impl SubAssign for Scalar {
     fn sub_assign(&mut self, rhs: Self) {
-        let (amount_self, amount_other, resolution) =
-            self.align_resolution(&rhs);
+        let (amount_self, amount_other, resolution) = self.align_resolution(&rhs);
         self.amount = amount_self - amount_other;
         self.resolution = resolution;
     }
 }
 
 impl Sum for Scalar {
-    fn sum<I: Iterator<Item=Self>>(iter: I) -> Self {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Self::default(), |acc, x| acc + x)
     }
 }
@@ -746,7 +752,10 @@ mod tests {
 
     #[test]
     fn test_reduce_no_trailing_zeros() {
-        let mut scalar = Scalar { amount: 123, resolution: 2 };
+        let mut scalar = Scalar {
+            amount: 123,
+            resolution: 2,
+        };
         scalar.reduce(1);
         assert_eq!(scalar.amount, 123);
         assert_eq!(scalar.resolution, 2);
@@ -754,7 +763,10 @@ mod tests {
 
     #[test]
     fn test_reduce_with_trailing_zeros() {
-        let mut scalar = Scalar { amount: 1200, resolution: 3 };
+        let mut scalar = Scalar {
+            amount: 1200,
+            resolution: 3,
+        };
         scalar.reduce(1);
         assert_eq!(scalar.amount, 12);
         assert_eq!(scalar.resolution, 1);
@@ -762,7 +774,10 @@ mod tests {
 
     #[test]
     fn test_reduce_with_min_resolution_limit() {
-        let mut scalar = Scalar { amount: 1000, resolution: 4 };
+        let mut scalar = Scalar {
+            amount: 1000,
+            resolution: 4,
+        };
         scalar.reduce(2);
         assert_eq!(scalar.amount, 10); // Reduced from 1000 to 10
         assert_eq!(scalar.resolution, 2); // Stopped at min_resolution
@@ -770,7 +785,10 @@ mod tests {
 
     #[test]
     fn test_reduce_when_min_resolution_equals_current() {
-        let mut scalar = Scalar { amount: 100, resolution: 2 };
+        let mut scalar = Scalar {
+            amount: 100,
+            resolution: 2,
+        };
         scalar.reduce(2);
         assert_eq!(scalar.amount, 100); // Should not change
         assert_eq!(scalar.resolution, 2); // Should not change
@@ -778,7 +796,10 @@ mod tests {
 
     #[test]
     fn test_reduce_minimal_case() {
-        let mut scalar = Scalar { amount: 0, resolution: 0 };
+        let mut scalar = Scalar {
+            amount: 0,
+            resolution: 0,
+        };
         scalar.reduce(0);
         assert_eq!(scalar.amount, 0); // No change for amount of 0
         assert_eq!(scalar.resolution, 0); // No change for resolution of 0
@@ -796,4 +817,3 @@ mod tests {
         assert_eq!(zero_money.to_string(), "0.00")
     }
 }
-

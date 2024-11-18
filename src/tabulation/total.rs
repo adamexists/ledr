@@ -1,8 +1,23 @@
-use std::collections::HashMap;
-use anyhow::Error;
+/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 use crate::tabulation::entry::Detail;
 use crate::util::scalar;
 use crate::util::scalar::Scalar;
+use std::collections::HashMap;
 
 /// Each total represents one account or segment, one position on the hierarchy,
 /// that may have a balance. For example, for the ledger with hierarchy:
@@ -25,7 +40,7 @@ pub struct Total {
     pub account: String,
     pub amounts: HashMap<String, Scalar>, // currency -> balance held
     pub subtotals: HashMap<String, Total>, // account name -> next total
-    pub depth: u32, // top level total is depth 0; Income/Expenses is 1, etc.
+    pub depth: u32,                       // top level total is depth 0; Income/Expenses is 1, etc.
 }
 
 impl Total {
@@ -39,11 +54,14 @@ impl Total {
 
             for segment in &detail.account.split(":").collect::<Vec<&str>>() {
                 // Update each total along the hierarchy
-                *current.amounts
+                *current
+                    .amounts
                     .entry(detail.currency())
                     .or_insert_with(|| scalar::ZERO) += detail.amount;
 
-                current = current.subtotals.entry(segment.to_string())
+                current = current
+                    .subtotals
+                    .entry(segment.to_string())
                     .or_insert_with(|| Total {
                         account: segment.to_string(),
                         amounts: HashMap::new(),
@@ -53,7 +71,8 @@ impl Total {
             }
 
             // Update the leaf node with the final amount
-            *current.amounts
+            *current
+                .amounts
                 .entry(detail.currency())
                 .or_insert_with(|| scalar::ZERO) += detail.amount;
         }
@@ -67,7 +86,8 @@ impl Total {
     /// subtotals by currency and updates top-level totals with them.
     /// Designed for filtering to a subset of the VALID_PREFIXES.
     pub fn filter_top_level(&mut self, strs: Vec<&str>) {
-        self.subtotals.retain(|name, _| strs.contains(&name.as_str()));
+        self.subtotals
+            .retain(|name, _| strs.contains(&name.as_str()));
 
         let mut currency_totals: HashMap<String, Scalar> = HashMap::new();
 

@@ -1,15 +1,31 @@
+/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+use crate::util::date::{Date, Duration};
+use crate::util::scalar::Scalar;
+use anyhow::{bail, Error};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use anyhow::{bail, Error};
-use crate::util::scalar::Scalar;
-use crate::util::date::{Date, Duration};
 
 // TODO: Reorganize this whole file. It needs to be cleaned up a lot.
 
 #[derive(Debug, Default)]
 pub struct Lots {
     state: HashMap<String, Vec<Lot>>, // currency -> all lots of that currency
-    movements: Vec<Movement>, // all movements, unordered
+    movements: Vec<Movement>,         // all movements, unordered
 }
 
 impl Lots {
@@ -22,9 +38,12 @@ impl Lots {
         cost_basis_unit_price: Scalar,
         cost_basis_currency: String,
     ) -> Result<(), Error> {
-
         let movement = Movement {
-            action: if quantity > 0 { LotAction::Buy } else { LotAction::Sell },
+            action: if quantity > 0 {
+                LotAction::Buy
+            } else {
+                LotAction::Sell
+            },
             date,
             account,
             commodity,
@@ -38,9 +57,8 @@ impl Lots {
     }
 
     pub fn tabulate(&mut self, as_of: &Date) -> Result<(), Error> {
-        self.movements.sort_by(
-            |a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal)
-        );
+        self.movements
+            .sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
         self.movements.retain(|m| &m.date <= as_of);
 
         for movement in &self.movements {
@@ -120,16 +138,14 @@ impl Lots {
                         if remaining_quantity > 0 {
                             bail!(
                                 "not enough lots to sell remaining {} of {} on {}",
-                                remaining_quantity, movement.commodity,
+                                remaining_quantity,
+                                movement.commodity,
                                 movement.date,
                             );
                         }
                     } else {
                         // No lots available to sell
-                        bail!(
-                            "no lots found for commodity {} to sell",
-                            movement.commodity
-                        );
+                        bail!("no lots found for commodity {} to sell", movement.commodity);
                     }
                 }
             }
@@ -149,14 +165,12 @@ struct Movement {
     commodity: String,
     quantity: Scalar,
     unit_price: Scalar, // amount exchanged per unit of this lot
-    currency: String, // currency in which cost is denominated
+    currency: String,   // currency in which cost is denominated
 }
 
 impl PartialEq for Movement {
     fn eq(&self, other: &Self) -> bool {
-        self.date == other.date &&
-            self.action == other.action &&
-            self.commodity == other.commodity
+        self.date == other.date && self.action == other.action && self.commodity == other.commodity
     }
 }
 
@@ -215,8 +229,14 @@ impl Lot {
 
     pub fn time_held(&self, as_of: &Date) -> Duration {
         let end = match self.closed_date {
-            Some(date) => if as_of < &date { as_of } else { &date.clone() },
-            None => as_of
+            Some(date) => {
+                if as_of < &date {
+                    as_of
+                } else {
+                    &date.clone()
+                }
+            }
+            None => as_of,
         };
         self.acquisition_date.until(end)
     }

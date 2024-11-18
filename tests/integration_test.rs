@@ -1,8 +1,21 @@
-use std::process::Command;
-use std::fs;
+/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
 
-// TODO: When writing .build.yml, be sure to not parallelize the tests:
-//  i.e. cargo test -- --test-threads=1
+use std::fs;
+use std::process::Command;
 
 #[test]
 fn test_integration_no_arguments() {
@@ -34,53 +47,36 @@ fn test_integration_collapse_currency() {
     execute("collapse", test_cases, "tb", vec!["-c", "USD"])
 }
 
-fn execute(
-    subfolder: &str, test_cases: Vec<(&str, &str)>, cmd: &str, args: Vec<&str>,
-) {
+fn execute(subfolder: &str, test_cases: Vec<(&str, &str)>, cmd: &str, args: Vec<&str>) {
     for (input_file, expected_output_file) in test_cases {
         println!("running for {}...", input_file);
 
-        let loc = format!(
-            "{}/{}/{}",
-            "tests/test_data",
-            subfolder,
-            input_file
-        );
+        let loc = format!("{}/{}/{}", "tests/test_data", subfolder, input_file);
 
-        let all_args = [
-            vec![
-                "run",
-                "--",
-                "-f",
-                loc.as_str(),
-                cmd,
-            ],
-            args.clone(),
-        ].concat();
+        let all_args = [vec!["run", "--", "-f", loc.as_str(), cmd], args.clone()].concat();
 
         let output = Command::new("cargo")
-            .args(all_args).output()
+            .args(all_args)
+            .output()
             .expect("Failed to execute process");
 
         assert!(output.status.success(), "{} failed processing!", input_file);
 
         let stdout = String::from_utf8_lossy(&output.stdout);
 
-        let expected_output = fs::read_to_string(
-            format!(
-                "{}/{}/{}",
-                "tests/test_data",
-                subfolder,
-                expected_output_file
-            ),
-        ).expect("Failed to read expected output file");
+        let expected_output = fs::read_to_string(format!(
+            "{}/{}/{}",
+            "tests/test_data", subfolder, expected_output_file
+        ))
+        .expect("Failed to read expected output file");
 
-        assert_eq!(stdout.trim(),
-                   expected_output.trim(),
-                   "Output did not match for {}; expected:\n{}\ngot:\n{}",
-                   input_file,
-                   expected_output,
-                   stdout
+        assert_eq!(
+            stdout.trim(),
+            expected_output.trim(),
+            "Output did not match for {}; expected:\n{}\ngot:\n{}",
+            input_file,
+            expected_output,
+            stdout
         );
     }
 }

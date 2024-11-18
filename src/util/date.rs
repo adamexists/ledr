@@ -1,10 +1,30 @@
+/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+use anyhow::{bail, Error};
 use std::cmp::Ordering;
 use std::fmt;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
-use anyhow::{bail, Error};
 
-static TODAY: Mutex<Date> = Mutex::new(Date { year: 0, month: 0, day: 0 });
+static TODAY: Mutex<Date> = Mutex::new(Date {
+    year: 0,
+    month: 0,
+    day: 0,
+});
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Date {
@@ -65,9 +85,7 @@ impl Date {
 
         if day_diff < 0 {
             month_diff -= 1;
-            let days_in_prev_month = Date::days_in_month(
-                earlier.year, earlier.month,
-            );
+            let days_in_prev_month = Date::days_in_month(earlier.year, earlier.month);
             day_diff += days_in_prev_month as i32;
         }
 
@@ -88,12 +106,8 @@ impl Date {
 
     /// Calculate the total number of days between two dates
     fn days_between(start: &Date, end: &Date) -> u32 {
-        let days_in_start_year = Date::days_since_year_start(
-            start.year, start.month, start.day,
-        );
-        let days_in_end_year = Date::days_since_year_start(
-            end.year, end.month, end.day,
-        );
+        let days_in_start_year = Date::days_since_year_start(start.year, start.month, start.day);
+        let days_in_end_year = Date::days_since_year_start(end.year, end.month, end.day);
 
         let days_in_full_years = (start.year..end.year)
             .map(|year| if Date::is_leap_year(year) { 366 } else { 365 })
@@ -192,8 +206,7 @@ impl PartialOrd for Date {
 
 impl Ord for Date {
     fn cmp(&self, other: &Self) -> Ordering {
-        (self.year, self.month, self.day)
-            .cmp(&(other.year, other.month, other.day))
+        (self.year, self.month, self.day).cmp(&(other.year, other.month, other.day))
     }
 }
 

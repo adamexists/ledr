@@ -1,0 +1,18 @@
+image: alpine/edge
+packages:
+  - rust
+sources:
+  - https://git.sr.ht/~house/ledr
+tasks:
+  - format: |
+      cd ledr
+      cargo fmt --check
+  - lint: |
+      cd ledr
+      cargo clippy
+  - build: |
+      cd ledr
+      cargo build
+  - test: |
+      cd ledr
+      cargo test -- --test-threads=1

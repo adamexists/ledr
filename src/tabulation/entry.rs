@@ -1,10 +1,26 @@
-use std::collections::HashMap;
-use std::string::ToString;
-use anyhow::{bail, Error};
+/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 use crate::tabulation::exchange_rate::ExchangeRates;
+use crate::util::date::Date;
 use crate::util::scalar;
 use crate::util::scalar::Scalar;
-use crate::util::date::Date;
+use anyhow::{bail, Error};
+use std::collections::HashMap;
+use std::string::ToString;
 
 const VIRTUAL_CONVERSION_ACCOUNT: &str = "Equity:Conversions";
 
@@ -54,7 +70,6 @@ impl Entry {
             cost_basis,
         });
 
-
         Ok(())
     }
 
@@ -96,7 +111,10 @@ impl Entry {
     /// decimal places will just fill in with zeroes). This is more about the
     /// clean display of currency amounts for reporting.
     pub fn set_resolution_for_currency(
-        &mut self, currency: &String, resolution: u32) -> Result<(), Error> {
+        &mut self,
+        currency: &String,
+        resolution: u32,
+    ) -> Result<(), Error> {
         for detail in &mut self.details {
             if &detail.currency == currency {
                 detail.amount.set_resolution(resolution)
@@ -154,9 +172,7 @@ impl Entry {
         // Special case if exactly two currencies are unbalanced with no virtual
         // account, in which case we net them against each other.
         if imbalances.len() == 2 && self.virtual_detail.is_none() {
-            self.multiline_implicit_currency_conversion(
-                &mut imbalances, rates, infer_rates,
-            )?;
+            self.multiline_implicit_currency_conversion(&mut imbalances, rates, infer_rates)?;
             self.is_finalized = true;
             return Ok(());
         }
@@ -192,8 +208,7 @@ impl Entry {
         let (currency1, amount1) = imbalances.remove(0);
         let (currency2, amount2) = imbalances.remove(0);
 
-        if (amount1 < 0 && amount2 < 0)
-            || (amount1 > 0 && amount2 > 0) {
+        if (amount1 < 0 && amount2 < 0) || (amount1 > 0 && amount2 > 0) {
             bail!("Unbalanced entry")
         }
 
@@ -214,23 +229,13 @@ impl Entry {
         // This implies an exchange rate between the currencies, except in
         // some cases related to cost basis processing where we've entered
         // reconciling details manually and should not make assumptions here.
-        // 
+        //
         // We use a quick hack to make the underlying integer division nicer.
         if can_infer_rates {
             if amount1.abs() > amount2.abs() {
-                rates.infer(
-                    self.date,
-                    currency2,
-                    currency1,
-                    (amount1 / amount2).abs(),
-                )?;
+                rates.infer(self.date, currency2, currency1, (amount1 / amount2).abs())?;
             } else {
-                rates.infer(
-                    self.date,
-                    currency1,
-                    currency2,
-                    (amount2 / amount1).abs(),
-                )?;
+                rates.infer(self.date, currency1, currency2, (amount2 / amount1).abs())?;
             }
         }
 
@@ -243,25 +248,25 @@ impl Entry {
     /// Find all currencies in the entry that do not sum to zero, with amounts
     fn get_imbalances(&self) -> Vec<(String, Scalar)> {
         // Collect the retained elements into a Vec
-        self.totals.iter().filter_map(|(k, &v)| {
-            if v != 0 {
-                Some((k.clone(), v))
-            } else {
-                None
-            }
-        }).collect()
+        self.totals
+            .iter()
+            .filter_map(|(k, &v)| if v != 0 { Some((k.clone(), v)) } else { None })
+            .collect()
     }
 
     /// Find all Details with cost bases in the entry.
     fn get_cost_basis_details(&self) -> Vec<Detail> {
         // Collect the retained elements into a Vec
-        self.details.iter().filter_map(|d| {
-            if d.cost_basis.is_some() {
-                Some(d.clone())
-            } else {
-                None
-            }
-        }).collect()
+        self.details
+            .iter()
+            .filter_map(|d| {
+                if d.cost_basis.is_some() {
+                    Some(d.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 
@@ -304,9 +309,9 @@ pub struct CostBasis {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::scalar::Scalar;
     use crate::tabulation::exchange_rate::ExchangeRates;
     use crate::util::date::Date;
+    use crate::util::scalar::Scalar;
 
     // Helper function to create a sample Date for testing
     fn sample_date(offset: u8) -> Date {

@@ -1,12 +1,28 @@
-use crate::tabulation::total::Total;
+/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 use crate::tabulation::ledger::VALID_PREFIXES;
+use crate::tabulation::total::Total;
 use crate::util::scalar::Scalar;
 
 /// When using this to display something, you should instantiate it, then sort
 /// it, then display it. Filters should be handled in the Total struct.
 pub struct OrderedTotal {
     account: String,
-    amounts: Vec<(String, Scalar)>, // currency -> balance held
+    amounts: Vec<(String, Scalar)>,         // currency -> balance held
     subtotals: Vec<(String, OrderedTotal)>, // account name -> next total
 }
 
@@ -15,7 +31,8 @@ impl OrderedTotal {
         Self {
             account: t.account,
             amounts: t.amounts.into_iter().collect(),
-            subtotals: t.subtotals
+            subtotals: t
+                .subtotals
                 .into_iter()
                 .map(|(k, v)| (k, OrderedTotal::from_total(v)))
                 .collect(),
@@ -59,29 +76,20 @@ impl OrderedTotal {
         // components,then by sign (positive first), and finally alphabetically
         // by account name
         self.subtotals.sort_by(|(name_a, a), (name_b, b)| {
-            let sum_a: Scalar = a
-                .amounts
-                .iter()
-                .map(|(_, money)| *money)
-                .sum::<Scalar>();
-            let sum_b: Scalar = b
-                .amounts
-                .iter()
-                .map(|(_, money)| *money)
-                .sum::<Scalar>();
+            let sum_a: Scalar = a.amounts.iter().map(|(_, money)| *money).sum::<Scalar>();
+            let sum_b: Scalar = b.amounts.iter().map(|(_, money)| *money).sum::<Scalar>();
 
             let abs_sum_a = sum_a.abs();
             let abs_sum_b = sum_b.abs();
 
-            match abs_sum_b.partial_cmp(&abs_sum_a).unwrap_or(
-                std::cmp::Ordering::Equal,
-            ) {
-                std::cmp::Ordering::Equal => {
-                    match (sum_b > 0).cmp(&(sum_a > 0)) {
-                        std::cmp::Ordering::Equal => name_a.cmp(name_b),
-                        other => other,
-                    }
-                }
+            match abs_sum_b
+                .partial_cmp(&abs_sum_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
+            {
+                std::cmp::Ordering::Equal => match (sum_b > 0).cmp(&(sum_a > 0)) {
+                    std::cmp::Ordering::Equal => name_a.cmp(name_b),
+                    other => other,
+                },
                 other => other,
             }
         });
@@ -137,10 +145,7 @@ impl OrderedTotal {
 
     /// Compares two sets of accounts & amounts, and reports true iff they are
     /// all entirely identical.
-    fn amounts_match(
-        a: &[(String, Scalar)],
-        b: &[(String, Scalar)],
-    ) -> bool {
+    fn amounts_match(a: &[(String, Scalar)], b: &[(String, Scalar)]) -> bool {
         if a.len() != b.len() {
             return false;
         }
@@ -179,9 +184,8 @@ impl OrderedTotal {
     pub fn calculate_column_width(&self) -> usize {
         let mut max_width = 0;
 
-        let calculate_width = |currency: &String, amount: &Scalar| {
-            format!("{} {}", currency, amount).len()
-        };
+        let calculate_width =
+            |currency: &String, amount: &Scalar| format!("{} {}", currency, amount).len();
 
         // Check the width of all amounts in this OrderedTotal
         for (currency, amount) in &self.amounts {
@@ -222,12 +226,7 @@ impl OrderedTotal {
         }
     }
 
-    fn ledger_fmt_recursive(
-        &self,
-        indent: usize,
-        width: usize,
-        max_depth: Option<usize>,
-    ) {
+    fn ledger_fmt_recursive(&self, indent: usize, width: usize, max_depth: Option<usize>) {
         let indentation = " ".repeat(indent * 2);
         let can_condense = if max_depth.is_none() {
             self.can_condense_with_all_below()
@@ -238,7 +237,6 @@ impl OrderedTotal {
         // Iterate over amounts and print each one (except top-level)
         if indent != 0 {
             let amts = &mut self.amounts.iter().peekable();
-
 
             let account_name = if can_condense {
                 &self.condensed_name()
@@ -252,7 +250,7 @@ impl OrderedTotal {
                 // when multi-currency balances would otherwise cause that
                 let acct = match (has_printed_acct, amts.peek().is_some()) {
                     (true, _) => " ↩",
-                    _ => &*format!(" {}", account_name)
+                    _ => &*format!(" {}", account_name),
                 };
 
                 println!(

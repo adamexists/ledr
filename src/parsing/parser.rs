@@ -1,11 +1,27 @@
+/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+use crate::tabulation::ledger::{CostBasisAmountType, CostBasisInput, Ledger};
+use crate::util::date::Date;
+use crate::util::scalar::Scalar;
+use anyhow::{anyhow, bail, Error};
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, Seek};
 use std::path::Path;
-use anyhow::{anyhow, bail, Error};
-use crate::tabulation::ledger::{CostBasisAmountType, CostBasisInput, Ledger};
-use crate::util::scalar::Scalar;
-use crate::util::date::Date;
 
 // TODO: Implement strict account declaration.
 
@@ -24,12 +40,10 @@ fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
         // Handle directive lines starting with a date and '!'
         if let Some((date_str, remainder)) = line.split_once('!') {
             let date = Date::from_str(date_str.trim())?;
-            let parts: Vec<&str> = remainder
-                .split_whitespace()
-                .collect();
+            let parts: Vec<&str> = remainder.split_whitespace().collect();
 
             if parts.is_empty() {
-                bail!("Invalid directive format (line {}): {}", i+1, line);
+                bail!("Invalid directive format (line {}): {}", i + 1, line);
             }
 
             match parts[0] {
@@ -41,14 +55,11 @@ fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
                     let from = parts[1].to_string();
                     let to = parts[2].to_string();
                     let rate = parts[3];
-                    ledger.exchange_rates.declare(
-                        date, from, to, Scalar::from_str(rate)?,
-                    )?
+                    ledger
+                        .exchange_rates
+                        .declare(date, from, to, Scalar::from_str(rate)?)?
                 }
-                _ => bail!("Invalid directive or arguments (line {}): {}",
-                    i+1,
-                    line,
-                ),
+                _ => bail!("Invalid directive or arguments (line {}): {}", i + 1, line,),
             }
         }
     }
@@ -114,9 +125,7 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
                     };
 
                     let amount = Scalar::from_str(b_parts[0])
-                        .map_err(|_| anyhow!(
-                            "Invalid scalar value (line {}): {}", i, line)
-                        )?;
+                        .map_err(|_| anyhow!("Invalid scalar value (line {}): {}", i, line))?;
                     let currency = b_parts[1].to_string();
 
                     Some(CostBasisInput {

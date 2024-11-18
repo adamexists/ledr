@@ -1,9 +1,25 @@
-use std::cmp::PartialEq;
-use std::collections::HashMap;
-use anyhow::{bail, Error};
+/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 use crate::tabulation::exchange_rate::RateType::{Declared, Inferred};
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
+use anyhow::{bail, Error};
+use std::cmp::PartialEq;
+use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct ExchangeRates {
@@ -45,8 +61,9 @@ impl ExchangeRates {
         // directives are calculated first, so one cannot exist.
 
         self.rates.entry(key.clone()).or_default().push(new_rate);
-        self.rates.entry(key).
-            and_modify(|e| e.sort_by(|a, b| b.date.cmp(&a.date)));
+        self.rates
+            .entry(key)
+            .and_modify(|e| e.sort_by(|a, b| b.date.cmp(&a.date)));
         Ok(())
     }
 
@@ -92,18 +109,14 @@ impl ExchangeRates {
 
         let new_rate = ExchangeRate::new(date, Inferred, rate);
         self.rates.entry(key.clone()).or_default().push(new_rate);
-        self.rates.entry(key).
-            and_modify(|e| e.sort_by(|a, b| b.date.cmp(&a.date)));
+        self.rates
+            .entry(key)
+            .and_modify(|e| e.sort_by(|a, b| b.date.cmp(&a.date)));
         Ok(())
     }
 
     /// Retrieve the most recent rate before a given date, if any
-    pub fn get_effective_rate_on(
-        &self,
-        date: Date,
-        base: String,
-        quote: String,
-    ) -> Option<Scalar> {
+    pub fn get_effective_rate_on(&self, date: Date, base: String, quote: String) -> Option<Scalar> {
         let mut invert_rate = false;
         let key = if base < quote {
             (base, quote)
@@ -112,26 +125,15 @@ impl ExchangeRates {
             (quote, base)
         };
 
-        self.rates.get(&key)
-            .and_then(|rates| {
-                rates.iter().find(|rate| rate.date <= date)
-            })
+        self.rates
+            .get(&key)
+            .and_then(|rates| rates.iter().find(|rate| rate.date <= date))
             .map(|r| r.rate)
-            .map(|found| {
-                if invert_rate {
-                    1 / found
-                } else {
-                    found
-                }
-            })
+            .map(|found| if invert_rate { 1 / found } else { found })
     }
 
     /// Retrieve the most recent rate available, if any
-    pub fn get_latest_rate(
-        &self,
-        base: String,
-        quote: String,
-    ) -> Option<Scalar> {
+    pub fn get_latest_rate(&self, base: String, quote: String) -> Option<Scalar> {
         let mut invert_rate = false;
         let key = if base < quote {
             (base, quote)
@@ -140,25 +142,28 @@ impl ExchangeRates {
             (quote, base)
         };
 
-        self.rates.get(&key)
+        self.rates
+            .get(&key)
             .and_then(|rates| rates.first())
             .map(|r| r.rate)
-            .map(|found| {
-                if invert_rate {
-                    1 / found
-                } else {
-                    found
-                }
-            })
+            .map(|found| if invert_rate { 1 / found } else { found })
     }
 
     /// Returns a rate that already exists for the *exact* passed date, if any.
-    fn get_exact_rate(&self, key: &(String, String), date: Date, rate_type: RateType) -> Option<Scalar> {
-        self.rates.get(key)
+    fn get_exact_rate(
+        &self,
+        key: &(String, String),
+        date: Date,
+        rate_type: RateType,
+    ) -> Option<Scalar> {
+        self.rates
+            .get(key)
             .and_then(|rates| {
-                rates.iter()
+                rates
+                    .iter()
                     .find(|rate| rate.date == date && rate.rate_type == rate_type)
-            }).map(|r| r.rate)
+            })
+            .map(|r| r.rate)
     }
 }
 
