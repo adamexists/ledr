@@ -12,13 +12,15 @@ pub struct ExchangeRates {
 }
 
 impl ExchangeRates {
-    pub fn new() -> Self {
-        Default::default()
-    }
-
     /// Add a new exchange rate declared via directive. Might fail if there is
     /// an existing declared rate on the same date.
-    pub fn declare(&mut self, date: Date, base: String, quote: String, mut rate: Scalar) -> Result<(), Error> {
+    pub fn declare(
+        &mut self,
+        date: Date,
+        base: String,
+        quote: String,
+        mut rate: Scalar,
+    ) -> Result<(), Error> {
         if base == quote {
             bail!("cannot exchange a currency for itself")
         }
@@ -52,7 +54,13 @@ impl ExchangeRates {
     /// an existing declared rate that is outside tolerance from this new rate.
     /// If there is an existing declared rate at all, this one will definitely
     /// be ignored.
-    pub fn infer(&mut self, date: Date, base: String, quote: String, mut rate: Scalar) -> Result<(), Error> {
+    pub fn infer(
+        &mut self,
+        date: Date,
+        base: String,
+        quote: String,
+        mut rate: Scalar,
+    ) -> Result<(), Error> {
         if base == quote {
             bail!("cannot exchange a currency for itself")
         }
@@ -68,6 +76,8 @@ impl ExchangeRates {
             (quote, base)
         };
 
+        // TODO: Add a test case for an inferred rate very close to a declared
+        //  rate, to confirm processing is allowed to continue.
         if let Some(declared) = self.get_exact_rate(&key, date, Declared) {
             // Check if the inferred rate is within 1% of the declared rate. If
             // it is, ignore this inferred rate and use the declared; if not,
@@ -85,7 +95,6 @@ impl ExchangeRates {
         self.rates.entry(key).
             and_modify(|e| e.sort_by(|a, b| b.date.cmp(&a.date)));
         Ok(())
-        
     }
 
     /// Retrieve the most recent rate before a given date, if any
@@ -179,8 +188,7 @@ impl ExchangeRate {
     }
 }
 
-/// returns true iff a and b are within percent of each other.
-/// Percent should be presented as a decimal form, e.g. 0.01 == 1%.
-fn within_tolerance_of(percent: Scalar, a: Scalar, b: Scalar) -> bool {
-    (a - b).abs() <= percent * a.abs().max(b.abs())
+/// returns true iff a and b are within the given tolerance of each other.
+fn within_tolerance_of(tolerance: Scalar, a: Scalar, b: Scalar) -> bool {
+    (a - b).abs() <= tolerance * a.abs().max(b.abs())
 }

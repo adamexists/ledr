@@ -32,7 +32,7 @@ impl OrderedTotal {
     /// Each ordered_total's amounts are first sorted by currency. Each
     /// ordered_total's subtotals beyond the first, which is the special case,
     /// are then sorted in descending order by the absolute value of the sum of
-    /// its amounts' Money components.
+    /// its amounts' Scalar components.
     pub fn sort_canonical(&mut self) {
         // Sort amounts by currency
         self.amounts.sort_by(|(a, _), (b, _)| a.cmp(b));
@@ -55,9 +55,9 @@ impl OrderedTotal {
         // Sort amounts by currency
         self.amounts.sort_by(|(a, _), (b, _)| a.cmp(b));
 
-        // Sort subtotals by the absolute value of the sum of their Money components
-        // Sort subtotals by the absolute value of the sum of their Money components,
-        // then by sign (positive first), and finally alphabetically by account name
+        // Sort subtotals by the absolute value of the sum of their Scalar
+        // components,then by sign (positive first), and finally alphabetically
+        // by account name
         self.subtotals.sort_by(|(name_a, a), (name_b, b)| {
             let sum_a: Scalar = a
                 .amounts
@@ -73,12 +73,12 @@ impl OrderedTotal {
             let abs_sum_a = sum_a.abs();
             let abs_sum_b = sum_b.abs();
 
-            // Compare by absolute value first
-            match abs_sum_b.partial_cmp(&abs_sum_a).unwrap_or(std::cmp::Ordering::Equal) {
+            match abs_sum_b.partial_cmp(&abs_sum_a).unwrap_or(
+                std::cmp::Ordering::Equal,
+            ) {
                 std::cmp::Ordering::Equal => {
-                    // If absolute values are equal, prioritize positive values
                     match (sum_b > 0).cmp(&(sum_a > 0)) {
-                        std::cmp::Ordering::Equal => name_a.cmp(name_b), // Fallback to account name
+                        std::cmp::Ordering::Equal => name_a.cmp(name_b),
                         other => other,
                     }
                 }
@@ -135,6 +135,8 @@ impl OrderedTotal {
         true
     }
 
+    /// Compares two sets of accounts & amounts, and reports true iff they are
+    /// all entirely identical.
     fn amounts_match(
         a: &[(String, Scalar)],
         b: &[(String, Scalar)],
@@ -202,6 +204,7 @@ impl OrderedTotal {
 
     /// Prints the contents of the ordered_totals like the classic Ledger does.
     /// We only expand the subtotals up to the max_depth, if present.
+    /// TODO: Add a test or two specific to the max_depth functionality.
     pub fn print_ledger_format(&self, max_depth: Option<usize>) {
         let column_width = self.calculate_column_width();
 
@@ -270,6 +273,7 @@ impl OrderedTotal {
             }
         }
 
+        // TODO: Add a test or two specific to the condensing functionality.
         if !can_condense {
             // Recursively display each subtotal
             for (_, subtotal) in &self.subtotals {

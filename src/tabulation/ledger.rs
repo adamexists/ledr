@@ -9,6 +9,13 @@ use crate::tabulation::lot::Lots;
 use crate::util::scalar::Scalar;
 use crate::util::date::Date;
 
+/// The only valid top-level account names. This is an accounting system, after
+/// all! Society has rules! Granted, there is no functional reason to have this
+/// requirement other than sorting guarantees when presenting reports.
+///
+/// If you are reading this and want a variant of this for a language other than
+/// English, email me with the right terms to use for each category, and I will
+/// implement a parallel one for your language.
 pub const VALID_PREFIXES: [&str; 5] =
     ["Assets", "Liabilities", "Equity", "Income", "Expenses"];
 
@@ -22,6 +29,7 @@ pub struct Ledger {
     /// currency -> the earliest date currency is allowed to appear
     declared_currencies: HashMap<String, Date>,
 
+    // other modules the ledger must populate or access
     pub exchange_rates: ExchangeRates,
     pub lots: Lots,
 }
@@ -96,13 +104,10 @@ impl Ledger {
         let money_amt = Scalar::from_str(&amount)?;
         let mut cost_basis_input = None;
 
-        // TODO: Could still use another refactor eventually.
         if let Some(mut cb) = cost_basis {
             if cb.amount_type == TotalCost {
                 cb.amount /= money_amt;
             }
-            // TODO: Investigate whether this is necessary anymore, now that
-            //  finalizing an entry has been refactored.
             self.exchange_rates.infer(
                 self.pending_entry_date(),
                 currency.clone(),
@@ -115,19 +120,14 @@ impl Ledger {
                 account.clone(),
                 currency.clone(),
                 money_amt,
-                CostBasis {
-                    currency: cb.currency.clone(),
-                    unit_price: cb.amount,
-                    associated_amount: money_amt, // TODO: Silly this is here
-                    associated_currency: currency.clone(), // TODO: Silly this is here
-                },
+                cb.amount,
+                cb.currency.clone(),
             )?;
 
             cost_basis_input = Some(CostBasis {
                 unit_price: cb.amount,
                 currency: cb.currency,
                 associated_amount: money_amt,
-                associated_currency: currency.clone(),
             });
         }
 
@@ -165,6 +165,9 @@ impl Ledger {
         }
     }
 
+    /// Checks whether a currency has been declared for use, and checks the
+    /// pending entry ot make sure the declaration date is not ahead of the
+    /// pending entry where the currency appears.
     fn check_currency(&self, currency: &String) -> Result<(), Error> {
         let declaration_date = match self.declared_currencies.get(currency) {
             Some(d) => d,
@@ -188,8 +191,6 @@ impl Ledger {
     /// rates are available. If a rate is not available for the given pair, then
     /// we skip. There is no graph traversal: a direct rate must have been
     /// observed.
-    ///
-    /// TODO: Graph traversal is feasible in the future.
     pub fn collapse_to(&mut self, currency: String) {
         self.entries.iter_mut()
             .flat_map(|e| e.details())
@@ -212,7 +213,14 @@ impl Ledger {
             })
     }
 
-    pub fn finalize(&mut self, overall_max_reso: Option<u32>) -> Result<(), Error> {
+    /// Finalizes the entire ledger by standardizing the visible precision of
+    /// each currency, marking the ledger as finalized, and reporting totals
+    /// from it.
+    ///
+    /// Consumes the ledger.
+    pub fn finalize(
+        mut self, overall_max_reso: Option<u32>,
+    ) -> Result<Total, Error> {
         let mut max_reso_by_currency: HashMap<String, u32> = HashMap::new();
         let mut overall_max = 6;
         if let Some(requested_max) = overall_max_reso {
@@ -242,16 +250,7 @@ impl Ledger {
             }
         }
 
-        self.is_finalized = true;
-        Ok(())
-    }
-
-    /// Consumes the Ledger, transforming it into a Total.
-    pub fn totals(self) -> Result<Total, Error> {
-        if !self.is_finalized {
-            bail!("ledger not marked as finalized")
-        }
-
+        // Transform this into a Total, and return that
         let mut total = Total::new();
 
         let all_details: Vec<Detail> = self.entries

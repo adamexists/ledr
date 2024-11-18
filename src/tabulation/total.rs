@@ -5,7 +5,7 @@ use crate::util::scalar;
 use crate::util::scalar::Scalar;
 
 /// Each total represents one account or segment, one position on the hierarchy,
-/// that may have a balance. For example, for the ledger with hierarchy
+/// that may have a balance. For example, for the ledger with hierarchy:
 ///
 /// Assets
 ///      Cash
@@ -59,35 +59,16 @@ impl Total {
         }
     }
 
-    pub fn validate(&self) -> Result<(), Error> {
-        // TODO: Maybe this will be used in the future.
-        Ok(())
-    }
-
     // -------------
     // -- FILTERS --
     // -------------
 
-    /// Drops those subtotals not matching the given strs vec. Designed to be
-    /// used for filtering to a subset of the VALID_PREFIXES.
+    /// Drops those subtotals not matching the given strs vec, then sums all
+    /// subtotals by currency and updates top-level totals with them.
+    /// Designed for filtering to a subset of the VALID_PREFIXES.
     pub fn filter_top_level(&mut self, strs: Vec<&str>) {
         self.subtotals.retain(|name, _| strs.contains(&name.as_str()));
-        self.recompute_top_level();
-    }
 
-    /// Invert the signs of every Money in the hierarchy
-    pub fn invert(&mut self) {
-        for money in self.amounts.values_mut() {
-            money.negate();
-        }
-
-        for subtotal in self.subtotals.values_mut() {
-            subtotal.invert();
-        }
-    }
-
-    /// Sums all subtotals by currency and updates top-level totals with them
-    fn recompute_top_level(&mut self) {
         let mut currency_totals: HashMap<String, Scalar> = HashMap::new();
 
         // Sum subtotals; doesn't need to be recursive because we only dropped
@@ -102,5 +83,16 @@ impl Total {
         }
 
         self.amounts = currency_totals.into_iter().collect();
+    }
+
+    /// Invert the signs of every Scalar in the hierarchy
+    pub fn invert(&mut self) {
+        for scalar in self.amounts.values_mut() {
+            scalar.negate();
+        }
+
+        for subtotal in self.subtotals.values_mut() {
+            subtotal.invert();
+        }
     }
 }

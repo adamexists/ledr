@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use anyhow::{bail, Error};
-use crate::tabulation::entry::CostBasis;
 use crate::util::scalar::Scalar;
 use crate::util::date::{Date, Duration};
 
@@ -20,7 +19,8 @@ impl Lots {
         account: String,
         commodity: String,
         quantity: Scalar,
-        cost_basis: CostBasis,
+        cost_basis_unit_price: Scalar,
+        cost_basis_currency: String,
     ) -> Result<(), Error> {
 
         let movement = Movement {
@@ -29,8 +29,8 @@ impl Lots {
             account,
             commodity,
             quantity: if quantity > 0 { quantity } else { -quantity },
-            unit_price: cost_basis.unit_price,
-            currency: cost_basis.currency,
+            unit_price: cost_basis_unit_price,
+            currency: cost_basis_currency,
         };
 
         self.movements.push(movement);

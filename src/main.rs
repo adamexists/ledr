@@ -114,15 +114,11 @@ fn financial_statement(args: &Cli, mut ledger: Ledger) -> Result<Total, Error> {
     if let Some(collapse) = &args.collapse {
         ledger.collapse_to(collapse.clone());
     }
-    ledger.finalize(args.precision)?;
-
-    let mut totals = ledger.totals()?;
+    let mut totals = ledger.finalize(args.precision)?;
 
     if args.invert {
         totals.invert();
     }
-
-    totals.validate()?;
 
     Ok(totals)
 }

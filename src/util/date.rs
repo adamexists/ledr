@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{bail, Error};
 
-static TODAY: Mutex<Date> = Mutex::new(Date {year: 0, month: 0, day: 0});
+static TODAY: Mutex<Date> = Mutex::new(Date { year: 0, month: 0, day: 0 });
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Date {
@@ -212,7 +212,10 @@ mod tests {
         let date1 = Date::from_str("2024-11-15").unwrap();
         let date2 = Date::from_str("2024-11-15").unwrap();
         let result = date1.until(&date2);
-        assert_eq!((result.years, result.months, result.days, result.total_days), (0, 0, 0, 0));
+        assert_eq!(
+            (result.years, result.months, result.days, result.total_days),
+            (0, 0, 0, 0)
+        );
     }
 
     #[test]
@@ -220,7 +223,10 @@ mod tests {
         let date1 = Date::from_str("2024-11-15").unwrap();
         let date2 = Date::from_str("2024-11-16").unwrap();
         let result = date1.until(&date2);
-        assert_eq!((result.years, result.months, result.days, result.total_days), (0, 0, 1, 1));
+        assert_eq!(
+            (result.years, result.months, result.days, result.total_days),
+            (0, 0, 1, 1)
+        );
     }
 
     #[test]
@@ -228,7 +234,10 @@ mod tests {
         let date1 = Date::from_str("2024-11-15").unwrap();
         let date2 = Date::from_str("2024-12-15").unwrap();
         let result = date1.until(&date2);
-        assert_eq!((result.years, result.months, result.days, result.total_days), (0, 1, 0, 30));
+        assert_eq!(
+            (result.years, result.months, result.days, result.total_days),
+            (0, 1, 0, 30)
+        );
     }
 
     #[test]
@@ -236,7 +245,10 @@ mod tests {
         let date1 = Date::from_str("2024-11-15").unwrap();
         let date2 = Date::from_str("2025-11-15").unwrap();
         let result = date1.until(&date2);
-        assert_eq!((result.years, result.months, result.days, result.total_days), (1, 0, 0, 365));
+        assert_eq!(
+            (result.years, result.months, result.days, result.total_days),
+            (1, 0, 0, 365)
+        );
     }
 
     #[test]
@@ -244,7 +256,10 @@ mod tests {
         let date1 = Date::from_str("2024-02-28").unwrap();
         let date2 = Date::from_str("2024-03-01").unwrap();
         let result = date1.until(&date2);
-        assert_eq!((result.years, result.months, result.days, result.total_days), (0, 0, 2, 2));
+        assert_eq!(
+            (result.years, result.months, result.days, result.total_days),
+            (0, 0, 2, 2)
+        );
     }
 
     #[test]
@@ -252,7 +267,10 @@ mod tests {
         let date1 = Date::from_str("2023-12-30").unwrap();
         let date2 = Date::from_str("2024-01-02").unwrap();
         let result = date1.until(&date2);
-        assert_eq!((result.years, result.months, result.days, result.total_days), (0, 0, 3, 3));
+        assert_eq!(
+            (result.years, result.months, result.days, result.total_days),
+            (0, 0, 3, 3)
+        );
     }
 
     #[test]
@@ -260,7 +278,10 @@ mod tests {
         let date1 = Date::from_str("2000-01-01").unwrap();
         let date2 = Date::from_str("2024-11-15").unwrap();
         let result = date1.until(&date2);
-        assert_eq!((result.years, result.months, result.days, result.total_days), (24, 10, 14, 9085));
+        assert_eq!(
+            (result.years, result.months, result.days, result.total_days),
+            (24, 10, 14, 9085)
+        );
     }
 
     #[test]
@@ -268,7 +289,10 @@ mod tests {
         let date1 = Date::from_str("2025-11-17").unwrap();
         let date2 = Date::from_str("2024-11-15").unwrap();
         let result = date1.until(&date2);
-        assert_eq!((result.years, result.months, result.days, result.total_days), (1, 0, 2, 367));
+        assert_eq!(
+            (result.years, result.months, result.days, result.total_days),
+            (1, 0, 2, 367)
+        );
     }
 
     #[test]
@@ -276,6 +300,9 @@ mod tests {
         let date1 = Date::from_str("2024-01-31").unwrap();
         let date2 = Date::from_str("2024-02-29").unwrap(); // Leap year
         let result = date1.until(&date2);
-        assert_eq!((result.years, result.months, result.days, result.total_days), (0, 0, 29, 29));
+        assert_eq!(
+            (result.years, result.months, result.days, result.total_days),
+            (0, 0, 29, 29)
+        );
     }
 }

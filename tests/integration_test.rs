@@ -1,6 +1,9 @@
 use std::process::Command;
 use std::fs;
 
+// TODO: When writing .build.yml, be sure to not parallelize the tests:
+//  i.e. cargo test -- --test-threads=1
+
 #[test]
 fn test_integration_no_arguments() {
     let test_cases = vec![
@@ -25,17 +28,25 @@ fn test_integration_collapse_currency() {
         ("2_in.txt", "2_out.txt"),
         ("3_in.txt", "3_out.txt"),
         ("4_in.txt", "4_out.txt"),
+        ("5_in.txt", "5_out.txt"),
     ];
 
     execute("collapse", test_cases, "tb", vec!["-c", "USD"])
 }
 
-fn execute(subfolder: &str, test_cases: Vec<(&str, &str)>, cmd: &str, args: Vec<&str>) {
+fn execute(
+    subfolder: &str, test_cases: Vec<(&str, &str)>, cmd: &str, args: Vec<&str>,
+) {
     for (input_file, expected_output_file) in test_cases {
         println!("running for {}...", input_file);
 
-        let loc = format!("{}/{}/{}", "tests/test_data", subfolder, input_file);
-        
+        let loc = format!(
+            "{}/{}/{}",
+            "tests/test_data",
+            subfolder,
+            input_file
+        );
+
         let all_args = [
             vec![
                 "run",
@@ -56,7 +67,12 @@ fn execute(subfolder: &str, test_cases: Vec<(&str, &str)>, cmd: &str, args: Vec<
         let stdout = String::from_utf8_lossy(&output.stdout);
 
         let expected_output = fs::read_to_string(
-            format!("{}/{}/{}", "tests/test_data", subfolder, expected_output_file),
+            format!(
+                "{}/{}/{}",
+                "tests/test_data",
+                subfolder,
+                expected_output_file
+            ),
         ).expect("Failed to read expected output file");
 
         assert_eq!(stdout.trim(),
