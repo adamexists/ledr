@@ -37,7 +37,8 @@ fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 
         // Handle directive lines starting with a date and '!'
         if let Some((date_str, remainder)) = line.split_once('!') {
-            let date = Date::from_str(date_str.trim())?;
+            let date =
+                Date::from_str(date_str.trim()).map_err(|e| anyhow!("{} (line {})", e, i))?;
             let parts: Vec<&str> = remainder.split_whitespace().collect();
 
             if parts.is_empty() {
@@ -47,11 +48,15 @@ fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
             match parts[0] {
                 "account" if parts.len() == 2 => {
                     let account = parts[1].to_string();
-                    ledger.declare_account(account, date)?;
+                    ledger
+                        .declare_account(account, date)
+                        .map_err(|e| anyhow!("{} (line {})", e, i))?;
                 }
                 "currency" if parts.len() == 2 => {
                     let currency = parts[1].to_string();
-                    ledger.declare_currency(currency, date)?;
+                    ledger
+                        .declare_currency(currency, date)
+                        .map_err(|e| anyhow!("{} (line {})", e, i))?;
                 }
                 "rate" if parts.len() == 4 => {
                     let from = parts[1].to_string();
@@ -59,7 +64,13 @@ fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
                     let rate = parts[3];
                     ledger
                         .exchange_rates
-                        .declare(date, from, to, Scalar::from_str(rate)?)?
+                        .declare(
+                            date,
+                            from,
+                            to,
+                            Scalar::from_str(rate).map_err(|e| anyhow!("{} (line {})", e, i))?,
+                        )
+                        .map_err(|e| anyhow!("{} (line {})", e, i))?;
                 }
                 _ => bail!("Invalid directive or arguments (line {}): {}", i + 1, line,),
             }
@@ -87,7 +98,9 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 
         // Skip blank lines or process them as a signal to finish an entry
         if line.is_empty() {
-            ledger.finish_entry()?;
+            ledger
+                .finish_entry()
+                .map_err(|e| anyhow!("{} (line {})", e, i))?;
             continue;
         }
 
@@ -99,7 +112,9 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
         // Handle entry declaration lines with a date and description
         if let Some((date_str, desc)) = line.split_once(' ') {
             if let Ok(date) = Date::from_str(date_str.trim()) {
-                ledger.new_entry(date, desc.trim().to_string())?;
+                ledger
+                    .new_entry(date, desc.trim().to_string())
+                    .map_err(|e| anyhow!("{} (line {})", e, i))?;
                 continue;
             }
         }
@@ -142,14 +157,18 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
                 None
             };
 
-            ledger.add_detail(account, amount, currency, cost_basis)?;
+            ledger
+                .add_detail(account, amount, currency, cost_basis)
+                .map_err(|e| anyhow!("{} (line {})", e, i))?;
             continue;
         }
 
         // Handle virtual entry detail lines (only account)
         if parts.len() == 1 {
             let account = parts[0].to_string();
-            ledger.set_virtual_detail(account)?;
+            ledger
+                .set_virtual_detail(account)
+                .map_err(|e| anyhow!("{} (line {})", e, i))?;
             continue;
         }
 
@@ -157,7 +176,9 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
     }
 
     // Make sure to finish the last entry if the file ends without an empty line
-    ledger.finish_entry()?;
+    ledger
+        .finish_entry()
+        .map_err(|e| anyhow!("{} (line eof)", e))?;
 
     Ok(())
 }

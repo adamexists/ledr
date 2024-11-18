@@ -28,7 +28,6 @@ mod tabulation;
 mod util;
 
 // TODO: scdoc and man page!
-// TODO: Do a sweep for the usefulness of errors.
 
 #[derive(Parser)]
 #[command(name = "ledr", version = "1.0", about = "Plain text accounting tool")]

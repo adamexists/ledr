@@ -137,7 +137,7 @@ impl Lots {
                         // Handle any remaining quantity that couldn't be matched
                         if remaining_quantity > 0 {
                             bail!(
-                                "not enough lots to sell remaining {} of {} on {}",
+                                "Not enough lots to sell remaining {} of {} on {}",
                                 remaining_quantity,
                                 movement.commodity,
                                 movement.date,
@@ -145,13 +145,13 @@ impl Lots {
                         }
                     } else {
                         // No lots available to sell
-                        bail!("no lots found for commodity {} to sell", movement.commodity);
+                        bail!("No lots found for commodity {} to sell", movement.commodity);
                     }
                 }
             }
         }
 
-        println!("report coming soon!");
+        println!("Report coming soon!");
         Ok(())
     }
 }

@@ -53,7 +53,7 @@ impl Entry {
         cost_basis: Option<CostBasis>,
     ) -> Result<(), Error> {
         if account.is_empty() {
-            bail!("account is blank")
+            bail!("Account is empty")
         }
 
         *self.totals.entry(currency.clone()).or_insert(scalar::ZERO) += amount;
@@ -69,11 +69,11 @@ impl Entry {
 
     pub fn set_virtual_detail(&mut self, account: String) -> Result<(), Error> {
         if self.virtual_detail.is_some() {
-            bail!("only one line per entry may omit amount and currency")
+            bail!("Only one line per entry may omit amount and currency")
         }
 
         if account.is_empty() {
-            bail!("account is blank")
+            bail!("Account is empty")
         }
 
         self.virtual_detail = Some(account);
@@ -177,7 +177,7 @@ impl Entry {
 
                 self.details.push(new_detail);
             } else {
-                bail!("unbalanced entry")
+                bail!("Unbalanced entry")
             }
         }
 

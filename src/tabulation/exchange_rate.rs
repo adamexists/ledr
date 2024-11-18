@@ -38,10 +38,10 @@ impl ExchangeRates {
         mut rate: Scalar,
     ) -> Result<(), Error> {
         if base == quote {
-            bail!("cannot exchange a currency for itself")
+            bail!("Cannot exchange a currency for itself")
         }
         if rate <= 0 {
-            bail!("exchange rate must be positive")
+            bail!("Exchange rate must be positive")
         }
 
         // to standardize lookups, base should be alphabetically before quote
@@ -53,7 +53,7 @@ impl ExchangeRates {
         };
 
         if self.get_exact_rate(&key, date, Declared).is_some() {
-            bail!("cannot declare multiple exchange rates on same date")
+            bail!("Cannot declare multiple exchange rates on same date")
         }
         let new_rate = ExchangeRate::new(date, Declared, rate);
 
@@ -79,10 +79,10 @@ impl ExchangeRates {
         mut rate: Scalar,
     ) -> Result<(), Error> {
         if base == quote {
-            bail!("cannot exchange a currency for itself")
+            bail!("Cannot exchange a currency for itself")
         }
         if rate <= 0 {
-            bail!("exchange rate must be positive");
+            bail!("Exchange rate must be positive");
         }
 
         // to standardize lookups, base should be alphabetically before quote
@@ -93,15 +93,13 @@ impl ExchangeRates {
             (quote, base)
         };
 
-        // TODO: Add a test case for an inferred rate very close to a declared
-        //  rate, to confirm processing is allowed to continue.
         if let Some(declared) = self.get_exact_rate(&key, date, Declared) {
             // Check if the inferred rate is within 1% of the declared rate. If
             // it is, ignore this inferred rate and use the declared; if not,
             // then the declared rate is too far from reality on this date to be
             // accurate, so we should error to stop tabulation here.
             if !within_tolerance_of(Scalar::new(1, 2), declared, rate) {
-                bail!("inferred exchange rate deviates >1% from declared rate")
+                bail!("Inferred exchange rate deviates >1% from declared rate")
             }
 
             return Ok(());

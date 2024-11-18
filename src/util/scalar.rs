@@ -62,7 +62,7 @@ impl Scalar {
                 let amount = amount_str.parse::<i128>()?;
                 (amount, resolution)
             }
-            _ => bail!("could not parse amount"),
+            _ => bail!("Cannot parse amount"),
         };
 
         Ok(Self {

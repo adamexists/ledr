@@ -29,6 +29,7 @@ fn test_integration_no_arguments() {
         ("7_in.txt", "7_out.txt"),
         ("8_in.txt", "8_out.txt"),
         ("9_in.txt", "9_out.txt"),
+        ("10_in.txt", "10_out.txt"),
     ];
 
     execute("standard", test_cases, "tb", vec![])
@@ -45,6 +46,13 @@ fn test_integration_collapse_currency() {
     ];
 
     execute("collapse", test_cases, "tb", vec!["-c", "USD"])
+}
+
+#[test]
+fn test_integration_max_depth() {
+    let test_cases = vec![("1_in.txt", "1_out.txt"), ("2_in.txt", "2_out.txt")];
+
+    execute("maxdepth", test_cases, "bs", vec!["-d", "2"])
 }
 
 fn execute(subfolder: &str, test_cases: Vec<(&str, &str)>, cmd: &str, args: Vec<&str>) {

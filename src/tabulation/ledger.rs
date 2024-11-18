@@ -76,7 +76,7 @@ impl Ledger {
         }
 
         if self.declared_currencies.contains_key(&currency) {
-            bail!("currency {} declared twice", currency)
+            bail!("Currency {} declared twice", currency)
         }
 
         self.declared_currencies.insert(currency.clone(), date);
@@ -90,7 +90,7 @@ impl Ledger {
         }
 
         if self.declared_accounts.contains_key(&account) {
-            bail!("account {} declared twice", account)
+            bail!("Account {} declared twice", account)
         }
 
         self.declared_accounts.insert(account.clone(), date);
@@ -122,22 +122,22 @@ impl Ledger {
         }
 
         if self.pending_entry.is_none() {
-            bail!("orphaned entry detail")
+            bail!("Orphaned entry detail")
         }
 
         if account.is_empty() {
-            bail!("invalid account: empty")
+            bail!("Account is empty")
         }
 
         if amount.is_empty() {
-            bail!("invalid amount: empty")
+            bail!("Amount is empty")
         }
 
         let has_valid_prefix = VALID_PREFIXES
             .iter()
             .any(|&prefix| account.starts_with(prefix));
         if !has_valid_prefix {
-            bail!("invalid account prefix: {}", account)
+            bail!("Invalid account prefix: {}", account)
         }
 
         let money_amt = Scalar::from_str(&amount)?;
@@ -187,7 +187,7 @@ impl Ledger {
         self.check_account(&account)?;
 
         if self.pending_entry.is_none() {
-            bail!("orphaned entry detail")
+            bail!("Orphaned entry detail")
         }
 
         self.pending_entry
@@ -220,12 +220,12 @@ impl Ledger {
     fn check_currency(&self, currency: &String) -> Result<(), Error> {
         let declaration_date = match self.declared_currencies.get(currency) {
             Some(d) => d,
-            None => bail!("currency {} used without declaration", currency),
+            None => bail!("Currency {} used without declaration", currency),
         };
 
         if self.pending_entry.as_ref().unwrap().get_date() < declaration_date {
             bail!(
-                "currency {} used prior to declaration on {}",
+                "Currency {} used prior to declaration on {}",
                 currency,
                 declaration_date
             )
@@ -240,12 +240,12 @@ impl Ledger {
     fn check_account(&self, account: &String) -> Result<(), Error> {
         let declaration_date = match self.declared_accounts.get(account) {
             Some(d) => d,
-            None => bail!("account {} used without declaration", account),
+            None => bail!("Account {} used without declaration", account),
         };
 
         if self.pending_entry.as_ref().unwrap().get_date() < declaration_date {
             bail!(
-                "account {} used prior to declaration on {}",
+                "Account {} used prior to declaration on {}",
                 account,
                 declaration_date
             )

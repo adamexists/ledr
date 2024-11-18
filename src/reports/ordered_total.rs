@@ -208,7 +208,6 @@ impl OrderedTotal {
 
     /// Prints the contents of the ordered_totals like the classic Ledger does.
     /// We only expand the subtotals up to the max_depth, if present.
-    /// TODO: Add a test or two specific to the max_depth functionality.
     pub fn print_ledger_format(&self, max_depth: Option<usize>) {
         let column_width = self.calculate_column_width();
 
@@ -228,11 +227,7 @@ impl OrderedTotal {
 
     fn ledger_fmt_recursive(&self, indent: usize, width: usize, max_depth: Option<usize>) {
         let indentation = " ".repeat(indent * 2);
-        let can_condense = if max_depth.is_none() {
-            self.can_condense_with_all_below()
-        } else {
-            false
-        };
+        let can_condense = self.can_condense_with_all_below();
 
         // Iterate over amounts and print each one (except top-level)
         if indent != 0 {
@@ -271,7 +266,6 @@ impl OrderedTotal {
             }
         }
 
-        // TODO: Add a test or two specific to the condensing functionality.
         if !can_condense {
             // Recursively display each subtotal
             for (_, subtotal) in &self.subtotals {
