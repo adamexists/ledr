@@ -32,320 +32,354 @@ use std::collections::HashMap;
 /// If you are reading this and want a variant of this for a language other than
 /// English, email me with the right terms to use for each category, and I will
 /// implement a parallel one for your language.
-pub const VALID_PREFIXES: [&str; 5] = ["Assets", "Liabilities", "Equity", "Income", "Expenses"];
+pub const VALID_PREFIXES: [&str; 5] =
+	["Assets", "Liabilities", "Equity", "Income", "Expenses"];
 
 #[derive(Debug)]
 pub struct Ledger {
-    entries: Vec<Entry>,
-    /// entry currently being assembled, if any
-    pending_entry: Option<Entry>,
+	entries: Vec<Entry>,
+	/// entry currently being assembled, if any
+	pending_entry: Option<Entry>,
 
-    /// Ignore currency and account directives
-    lenient_mode: bool,
+	/// Ignore currency and account directives
+	lenient_mode: bool,
 
-    /// currency -> the earliest date currency is allowed to appear
-    declared_currencies: HashMap<String, Date>,
-    /// account -> the earliest date account is allowed to appear
-    declared_accounts: HashMap<String, Date>,
+	/// currency -> the earliest date currency is allowed to appear
+	declared_currencies: HashMap<String, Date>,
+	/// account -> the earliest date account is allowed to appear
+	declared_accounts: HashMap<String, Date>,
 
-    // other modules the ledger must populate or access
-    pub exchange_rates: ExchangeRates,
-    pub lots: Lots,
+	// other modules the ledger must populate or access
+	pub exchange_rates: ExchangeRates,
+	pub lots: Lots,
 }
 
 impl Ledger {
-    pub fn new(lenient: bool) -> Self {
-        Self {
-            entries: vec![],
-            pending_entry: None,
-            lenient_mode: lenient,
-            declared_currencies: Default::default(),
-            declared_accounts: Default::default(),
-            exchange_rates: Default::default(),
-            lots: Default::default(),
-        }
-    }
+	pub fn new(lenient: bool) -> Self {
+		Self {
+			entries: vec![],
+			pending_entry: None,
+			lenient_mode: lenient,
+			declared_currencies: Default::default(),
+			declared_accounts: Default::default(),
+			exchange_rates: Default::default(),
+			lots: Default::default(),
+		}
+	}
 
-    // -----------
-    // -- INPUT --
-    // -----------
+	// -----------
+	// -- INPUT --
+	// -----------
 
-    pub fn declare_currency(&mut self, currency: String, date: Date) -> Result<(), Error> {
-        if self.lenient_mode {
-            return Ok(());
-        }
+	pub fn declare_currency(
+		&mut self,
+		currency: String,
+		date: Date,
+	) -> Result<(), Error> {
+		if self.lenient_mode {
+			return Ok(());
+		}
 
-        if self.declared_currencies.contains_key(&currency) {
-            bail!("Currency {} declared twice", currency)
-        }
+		if self.declared_currencies.contains_key(&currency) {
+			bail!("Currency {} declared twice", currency)
+		}
 
-        self.declared_currencies.insert(currency.clone(), date);
+		self.declared_currencies.insert(currency.clone(), date);
 
-        Ok(())
-    }
+		Ok(())
+	}
 
-    pub fn declare_account(&mut self, account: String, date: Date) -> Result<(), Error> {
-        if self.lenient_mode {
-            return Ok(());
-        }
+	pub fn declare_account(
+		&mut self,
+		account: String,
+		date: Date,
+	) -> Result<(), Error> {
+		if self.lenient_mode {
+			return Ok(());
+		}
 
-        if self.declared_accounts.contains_key(&account) {
-            bail!("Account {} declared twice", account)
-        }
+		if self.declared_accounts.contains_key(&account) {
+			bail!("Account {} declared twice", account)
+		}
 
-        self.declared_accounts.insert(account.clone(), date);
+		self.declared_accounts.insert(account.clone(), date);
 
-        Ok(())
-    }
+		Ok(())
+	}
 
-    pub fn new_entry(&mut self, date: Date, desc: String) -> Result<(), Error> {
-        if self.pending_entry.is_some() {
-            self.finish_entry()?;
-        }
+	pub fn new_entry(
+		&mut self,
+		date: Date,
+		desc: String,
+	) -> Result<(), Error> {
+		if self.pending_entry.is_some() {
+			self.finish_entry()?;
+		}
 
-        self.pending_entry = Some(Entry::new(date, desc));
-        Ok(())
-    }
+		self.pending_entry = Some(Entry::new(date, desc));
+		Ok(())
+	}
 
-    pub fn add_detail(
-        &mut self,
-        account: String,
-        amount: String,
-        currency: String,
-        cost_basis: Option<CostBasisInput>,
-    ) -> Result<(), Error> {
-        self.check_account(&account)?;
-        self.check_currency(&currency)?;
+	pub fn add_detail(
+		&mut self,
+		account: String,
+		amount: String,
+		currency: String,
+		cost_basis: Option<CostBasisInput>,
+	) -> Result<(), Error> {
+		self.check_account(&account)?;
+		self.check_currency(&currency)?;
 
-        if let Some(cost_basis_currency) = &cost_basis {
-            self.check_currency(&cost_basis_currency.currency)?;
-        }
+		if let Some(cost_basis_currency) = &cost_basis {
+			self.check_currency(&cost_basis_currency.currency)?;
+		}
 
-        if self.pending_entry.is_none() {
-            bail!("Orphaned entry detail")
-        }
+		if self.pending_entry.is_none() {
+			bail!("Orphaned entry detail")
+		}
 
-        if account.is_empty() {
-            bail!("Account is empty")
-        }
+		if account.is_empty() {
+			bail!("Account is empty")
+		}
 
-        if amount.is_empty() {
-            bail!("Amount is empty")
-        }
+		if amount.is_empty() {
+			bail!("Amount is empty")
+		}
 
-        let has_valid_prefix = VALID_PREFIXES
-            .iter()
-            .any(|&prefix| account.starts_with(prefix));
-        if !has_valid_prefix {
-            bail!("Invalid account prefix: {}", account)
-        }
+		let has_valid_prefix = VALID_PREFIXES
+			.iter()
+			.any(|&prefix| account.starts_with(prefix));
+		if !has_valid_prefix {
+			bail!("Invalid account prefix: {}", account)
+		}
 
-        let money_amt = Scalar::from_str(&amount)?;
-        let mut cost_basis_input = None;
+		let money_amt = Scalar::from_str(&amount)?;
+		let mut cost_basis_input = None;
 
-        if let Some(mut cb) = cost_basis {
-            if cb.amount_type == TotalCost {
-                cb.amount /= money_amt;
-            }
+		if let Some(mut cb) = cost_basis {
+			if cb.amount_type == TotalCost {
+				cb.amount /= money_amt;
+			}
 
-            // A cost basis has the authority of a declaration in many ways,
-            // but in case there are multiple intraday transactions that differ
-            // from each other (as day traders etc. experience all the time),
-            // we must treat them as inferred rates here.
-            self.exchange_rates.infer(
-                self.pending_entry_date(),
-                currency.clone(),
-                cb.currency.clone(),
-                cb.amount,
-            )?;
+			// A cost basis has the authority of a declaration in many ways,
+			// but in case there are multiple intraday transactions that differ
+			// from each other (as day traders etc. experience all the time),
+			// we must treat them as inferred rates here.
+			self.exchange_rates.infer(
+				self.pending_entry_date(),
+				currency.clone(),
+				cb.currency.clone(),
+				cb.amount,
+			)?;
 
-            self.lots.add_movement(
-                self.pending_entry_date(),
-                account.clone(),
-                currency.clone(),
-                money_amt,
-                cb.amount,
-                cb.currency.clone(),
-            )?;
+			self.lots.add_movement(
+				self.pending_entry_date(),
+				account.clone(),
+				currency.clone(),
+				money_amt,
+				cb.amount,
+				cb.currency.clone(),
+			)?;
 
-            cost_basis_input = Some(CostBasis {
-                unit_price: cb.amount,
-                currency: cb.currency,
-                associated_amount: money_amt,
-            });
-        }
+			cost_basis_input = Some(CostBasis {
+				unit_price: cb.amount,
+				currency: cb.currency,
+				associated_amount: money_amt,
+			});
+		}
 
-        self.pending_entry.as_mut().unwrap().add_detail(
-            account,
-            money_amt,
-            currency,
-            cost_basis_input,
-        )
-    }
+		self.pending_entry.as_mut().unwrap().add_detail(
+			account,
+			money_amt,
+			currency,
+			cost_basis_input,
+		)
+	}
 
-    pub fn set_virtual_detail(&mut self, account: String) -> Result<(), Error> {
-        self.check_account(&account)?;
+	pub fn set_virtual_detail(
+		&mut self,
+		account: String,
+	) -> Result<(), Error> {
+		self.check_account(&account)?;
 
-        if self.pending_entry.is_none() {
-            bail!("Orphaned entry detail")
-        }
+		if self.pending_entry.is_none() {
+			bail!("Orphaned entry detail")
+		}
 
-        self.pending_entry
-            .as_mut()
-            .unwrap()
-            .set_virtual_detail(account)
-    }
+		self.pending_entry
+			.as_mut()
+			.unwrap()
+			.set_virtual_detail(account)
+	}
 
-    pub fn finish_entry(&mut self) -> Result<(), Error> {
-        match self.pending_entry.take() {
-            None => Ok(()),
-            Some(mut entry) => {
-                entry.finalize(&mut self.exchange_rates)?;
-                self.entries.push(entry);
-                Ok(())
-            }
-        }
-    }
+	pub fn finish_entry(&mut self) -> Result<(), Error> {
+		match self.pending_entry.take() {
+			None => Ok(()),
+			Some(mut entry) => {
+				entry.finalize(&mut self.exchange_rates)?;
+				self.entries.push(entry);
+				Ok(())
+			},
+		}
+	}
 
-    pub fn pending_entry_date(&self) -> Date {
-        match &self.pending_entry {
-            Some(e) => *e.get_date(),
-            None => panic!("pending_entry_date called without pending entry"),
-        }
-    }
+	pub fn pending_entry_date(&self) -> Date {
+		match &self.pending_entry {
+			Some(e) => *e.get_date(),
+			None => panic!("pending_entry_date called without pending entry"),
+		}
+	}
 
-    /// Checks whether a currency has been declared for use, and checks the
-    /// pending entry to make sure the declaration date is not ahead of the
-    /// pending entry where the currency appears.
-    fn check_currency(&self, currency: &String) -> Result<(), Error> {
-        let declaration_date = match self.declared_currencies.get(currency) {
-            Some(d) => d,
-            None => bail!("Currency {} used without declaration", currency),
-        };
+	/// Checks whether a currency has been declared for use, and checks the
+	/// pending entry to make sure the declaration date is not ahead of the
+	/// pending entry where the currency appears.
+	fn check_currency(&self, currency: &String) -> Result<(), Error> {
+		let declaration_date =
+			match self.declared_currencies.get(currency) {
+				Some(d) => d,
+				None => bail!(
+					"Currency {} used without declaration",
+					currency
+				),
+			};
 
-        if self.pending_entry.as_ref().unwrap().get_date() < declaration_date {
-            bail!(
-                "Currency {} used prior to declaration on {}",
-                currency,
-                declaration_date
-            )
-        }
+		if self.pending_entry.as_ref().unwrap().get_date()
+			< declaration_date
+		{
+			bail!(
+				"Currency {} used prior to declaration on {}",
+				currency,
+				declaration_date
+			)
+		}
 
-        Ok(())
-    }
+		Ok(())
+	}
 
-    /// Checks whether an account has been declared for use, and checks the
-    /// pending entry to make sure the declaration date is not ahead of the
-    /// pending entry where the account appears.
-    fn check_account(&self, account: &String) -> Result<(), Error> {
-        let declaration_date = match self.declared_accounts.get(account) {
-            Some(d) => d,
-            None => bail!("Account {} used without declaration", account),
-        };
+	/// Checks whether an account has been declared for use, and checks the
+	/// pending entry to make sure the declaration date is not ahead of the
+	/// pending entry where the account appears.
+	fn check_account(&self, account: &String) -> Result<(), Error> {
+		let declaration_date = match self.declared_accounts.get(account)
+		{
+			Some(d) => d,
+			None => bail!(
+				"Account {} used without declaration",
+				account
+			),
+		};
 
-        if self.pending_entry.as_ref().unwrap().get_date() < declaration_date {
-            bail!(
-                "Account {} used prior to declaration on {}",
-                account,
-                declaration_date
-            )
-        }
+		if self.pending_entry.as_ref().unwrap().get_date()
+			< declaration_date
+		{
+			bail!(
+				"Account {} used prior to declaration on {}",
+				account,
+				declaration_date
+			)
+		}
 
-        Ok(())
-    }
+		Ok(())
+	}
 
-    // ----------------
-    // -- TABULATING --
-    // ----------------
+	// ----------------
+	// -- TABULATING --
+	// ----------------
 
-    /// Converts all possible balances to the currency provided, if exchange
-    /// rates are available. If a rate is not available for the given pair, then
-    /// we skip. There is no graph traversal: a direct rate must have been
-    /// observed.
-    pub fn collapse_to(&mut self, currency: String) {
-        self.entries
-            .iter_mut()
-            .flat_map(|e| e.details())
-            .for_each(|d| {
-                if let Some(rate) = self
-                    .exchange_rates
-                    .get_latest_rate(d.currency(), currency.clone())
-                {
-                    d.convert_to(&currency, rate)
-                }
-            })
-    }
+	/// Converts all possible balances to the currency provided, if exchange
+	/// rates are available. If a rate is not available for the given pair, then
+	/// we skip. There is no graph traversal: a direct rate must have been
+	/// observed.
+	pub fn collapse_to(&mut self, currency: String) {
+		self.entries.iter_mut().flat_map(|e| e.details()).for_each(
+			|d| {
+				if let Some(rate) =
+					self.exchange_rates.get_latest_rate(
+						d.currency(),
+						currency.clone(),
+					) {
+					d.convert_to(&currency, rate)
+				}
+			},
+		)
+	}
 
-    /// Removes cost basis from currencies. This is done for most reports that
-    /// do not specifically care about it.
-    pub fn remove_cost_basis(&mut self) {
-        self.entries
-            .iter_mut()
-            .flat_map(|e| e.details())
-            .for_each(|d| {
-                d.remove_cost_basis();
-            })
-    }
+	/// Removes cost basis from currencies. This is done for most reports that
+	/// do not specifically care about it.
+	pub fn remove_cost_basis(&mut self) {
+		self.entries.iter_mut().flat_map(|e| e.details()).for_each(
+			|d| {
+				d.remove_cost_basis();
+			},
+		)
+	}
 
-    /// Finalizes the entire ledger by standardizing the visible precision of
-    /// each currency, marking the ledger as finalized, and reporting totals
-    /// from it.
-    ///
-    /// Consumes the ledger.
-    pub fn finalize(mut self, overall_max_reso: Option<u32>) -> Result<Total, Error> {
-        let mut max_reso_by_currency: HashMap<String, u32> = HashMap::new();
-        let mut overall_max = 6;
-        if let Some(requested_max) = overall_max_reso {
-            overall_max = requested_max;
-        }
+	/// Finalizes the entire ledger by standardizing the visible precision of
+	/// each currency, marking the ledger as finalized, and reporting totals
+	/// from it.
+	///
+	/// Consumes the ledger.
+	pub fn finalize(
+		mut self,
+		overall_max_reso: Option<u32>,
+	) -> Result<Total, Error> {
+		let mut max_reso_by_currency: HashMap<String, u32> =
+			HashMap::new();
+		let mut overall_max = 6;
+		if let Some(requested_max) = overall_max_reso {
+			overall_max = requested_max;
+		}
 
-        // Iterate over each detail to determine the highest resolution per currency
-        for detail in self.entries.iter().flat_map(|x| x.get_details()) {
-            let reso = min(detail.amount.resolution(), overall_max);
-            let currency = detail.currency();
+		// Iterate over each detail to determine the highest resolution per currency
+		for detail in self.entries.iter().flat_map(|x| x.get_details())
+		{
+			let reso = min(detail.amount.resolution(), overall_max);
+			let currency = detail.currency();
 
-            // Update max resolution if this detail has higher resolution
-            max_reso_by_currency
-                .entry(currency.clone())
-                .and_modify(|max_reso| {
-                    if reso > *max_reso {
-                        *max_reso = reso;
-                    }
-                })
-                .or_insert(reso);
-        }
+			// Update max resolution if this detail has higher resolution
+			max_reso_by_currency
+				.entry(currency.clone())
+				.and_modify(|max_reso| {
+					if reso > *max_reso {
+						*max_reso = reso;
+					}
+				})
+				.or_insert(reso);
+		}
 
-        // Standardize all currencies to the highest precision found among them
-        for entry in &mut self.entries {
-            for (currency, &reso) in &max_reso_by_currency {
-                entry.set_resolution_for_currency(currency, reso)?
-            }
-        }
+		// Standardize all currencies to the highest precision found among them
+		for entry in &mut self.entries {
+			for (currency, &reso) in &max_reso_by_currency {
+				entry.set_resolution_for_currency(
+					currency, reso,
+				)?
+			}
+		}
 
-        // Transform this into a Total, and return that
-        let mut total = Total::new();
+		// Transform this into a Total, and return that
+		let mut total = Total::new();
 
-        let all_details: Vec<Detail> = self
-            .entries
-            .into_iter()
-            .flat_map(|e| e.take_details())
-            .collect();
+		let all_details: Vec<Detail> = self
+			.entries
+			.into_iter()
+			.flat_map(|e| e.take_details())
+			.collect();
 
-        total.ingest_details(&all_details);
-        Ok(total)
-    }
+		total.ingest_details(&all_details);
+		Ok(total)
+	}
 }
 
 #[derive(Debug, PartialEq)]
 pub enum CostBasisAmountType {
-    UnitCost,
-    TotalCost,
+	UnitCost,
+	TotalCost,
 }
 
 #[derive(Debug)]
 pub struct CostBasisInput {
-    pub amount: Scalar,
-    pub amount_type: CostBasisAmountType,
+	pub amount: Scalar,
+	pub amount_type: CostBasisAmountType,
 
-    pub currency: String,
+	pub currency: String,
 }

@@ -37,82 +37,85 @@ use std::collections::HashMap;
 /// time the top level will be nonzero is after filtering.
 #[derive(Default)]
 pub struct Total {
-    pub account: String,
-    pub amounts: HashMap<String, Scalar>, // currency -> balance held
-    pub subtotals: HashMap<String, Total>, // account name -> next total
-    pub depth: u32,                       // top level total is depth 0; Income/Expenses is 1, etc.
+	pub account: String,
+	pub amounts: HashMap<String, Scalar>, // currency -> balance held
+	pub subtotals: HashMap<String, Total>, // account name -> next total
+	pub depth: u32, // top level total is depth 0; Income/Expenses is 1, etc.
 }
 
 impl Total {
-    pub fn new() -> Self {
-        Default::default()
-    }
+	pub fn new() -> Self {
+		Default::default()
+	}
 
-    pub fn ingest_details(&mut self, details: &Vec<Detail>) {
-        for detail in details {
-            let mut current = &mut *self;
+	pub fn ingest_details(&mut self, details: &Vec<Detail>) {
+		for detail in details {
+			let mut current = &mut *self;
 
-            for segment in &detail.account.split(":").collect::<Vec<&str>>() {
-                // Update each total along the hierarchy
-                *current
-                    .amounts
-                    .entry(detail.currency())
-                    .or_insert_with(|| scalar::ZERO) += detail.amount;
+			for segment in &detail
+				.account
+				.split(":")
+				.collect::<Vec<&str>>()
+			{
+				// Update each total along the hierarchy
+				*current.amounts
+					.entry(detail.currency())
+					.or_insert_with(|| scalar::ZERO) += detail.amount;
 
-                current = current
-                    .subtotals
-                    .entry(segment.to_string())
-                    .or_insert_with(|| Total {
-                        account: segment.to_string(),
-                        amounts: HashMap::new(),
-                        subtotals: HashMap::new(),
-                        depth: current.depth + 1,
-                    });
-            }
+				current = current
+					.subtotals
+					.entry(segment.to_string())
+					.or_insert_with(|| Total {
+						account: segment.to_string(),
+						amounts: HashMap::new(),
+						subtotals: HashMap::new(),
+						depth: current.depth + 1,
+					});
+			}
 
-            // Update the leaf node with the final amount
-            *current
-                .amounts
-                .entry(detail.currency())
-                .or_insert_with(|| scalar::ZERO) += detail.amount;
-        }
-    }
+			// Update the leaf node with the final amount
+			*current.amounts
+				.entry(detail.currency())
+				.or_insert_with(|| scalar::ZERO) += detail.amount;
+		}
+	}
 
-    // -------------
-    // -- FILTERS --
-    // -------------
+	// -------------
+	// -- FILTERS --
+	// -------------
 
-    /// Drops those subtotals not matching the given strs vec, then sums all
-    /// subtotals by currency and updates top-level totals with them.
-    /// Designed for filtering to a subset of the VALID_PREFIXES.
-    pub fn filter_top_level(&mut self, strs: Vec<&str>) {
-        self.subtotals
-            .retain(|name, _| strs.contains(&name.as_str()));
+	/// Drops those subtotals not matching the given strs vec, then sums all
+	/// subtotals by currency and updates top-level totals with them.
+	/// Designed for filtering to a subset of the VALID_PREFIXES.
+	pub fn filter_top_level(&mut self, strs: Vec<&str>) {
+		self.subtotals
+			.retain(|name, _| strs.contains(&name.as_str()));
 
-        let mut currency_totals: HashMap<String, Scalar> = HashMap::new();
+		let mut currency_totals: HashMap<String, Scalar> =
+			HashMap::new();
 
-        // Sum subtotals; doesn't need to be recursive because we only dropped
-        // some top-level branches of the hierarchy; what remains is accurate
-        for subtotal in self.subtotals.values_mut() {
-            for (currency, amount) in &subtotal.amounts {
-                currency_totals
-                    .entry(currency.clone())
-                    .and_modify(|e| *e += *amount)
-                    .or_insert_with(|| *amount);
-            }
-        }
+		// Sum subtotals; doesn't need to be recursive because we only dropped
+		// some top-level branches of the hierarchy; what remains is accurate
+		for subtotal in self.subtotals.values_mut() {
+			for (currency, amount) in &subtotal.amounts {
+				currency_totals
+					.entry(currency.clone())
+					.and_modify(|e| *e += *amount)
+					.or_insert_with(|| *amount);
+			}
+		}
 
-        self.amounts = currency_totals.into_iter().collect();
-    }
+		self.amounts = currency_totals.into_iter().collect();
+	}
 
-    /// Invert the signs of every Scalar in the hierarchy
-    pub fn invert(&mut self) {
-        for scalar in self.amounts.values_mut() {
-            scalar.negate();
-        }
+	/// Invert the signs of every Scalar in the hierarchy
+	pub fn invert(&mut self) {
+		for scalar in self.amounts.values_mut() {
+			scalar.negate();
+		}
 
-        for subtotal in self.subtotals.values_mut() {
-            subtotal.invert();
-        }
-    }
+		for subtotal in self.subtotals.values_mut() {
+			subtotal.invert();
+		}
+	}
 }
