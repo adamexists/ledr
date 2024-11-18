@@ -77,11 +77,11 @@ impl Total {
 
     /// Invert the signs of every Money in the hierarchy
     pub fn invert(&mut self) {
-        for (_, money) in &mut self.amounts {
+        for money in self.amounts.values_mut() {
             money.negate();
         }
 
-        for (_, subtotal) in &mut self.subtotals {
+        for subtotal in self.subtotals.values_mut() {
             subtotal.invert();
         }
     }
@@ -92,12 +92,12 @@ impl Total {
 
         // Sum subtotals; doesn't need to be recursive because we only dropped
         // some top-level branches of the hierarchy; what remains is accurate
-        for (_, subtotal) in &mut self.subtotals {
+        for subtotal in self.subtotals.values_mut() {
             for (currency, amount) in &subtotal.amounts {
                 currency_totals
                     .entry(currency.clone())
                     .and_modify(|e| *e += *amount)
-                    .or_insert_with(|| amount.clone());
+                    .or_insert_with(|| *amount);
             }
         }
 

@@ -136,8 +136,8 @@ impl OrderedTotal {
     }
 
     fn amounts_match(
-        a: &Vec<(String, Scalar)>,
-        b: &Vec<(String, Scalar)>,
+        a: &[(String, Scalar)],
+        b: &[(String, Scalar)],
     ) -> bool {
         if a.len() != b.len() {
             return false;
@@ -164,7 +164,7 @@ impl OrderedTotal {
             return self.account.clone();
         }
 
-        let (_, subtotal) = self.subtotals.iter().next().unwrap();
+        let (_, subtotal) = self.subtotals.first().unwrap();
 
         // Recursively get the name from the next node and concatenate
         format!("{}:{}", self.account, subtotal.condensed_name())

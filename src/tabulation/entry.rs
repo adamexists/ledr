@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::string::ToString;
 use anyhow::{bail, Error};
 use crate::tabulation::exchange_rate::ExchangeRates;
@@ -42,7 +42,7 @@ impl Entry {
             bail!("entry already finalized")
         }
 
-        if account.len() == 0 {
+        if account.is_empty() {
             bail!("account is blank")
         }
 
@@ -74,7 +74,7 @@ impl Entry {
             bail!("entry already finalized")
         }
 
-        if account.len() == 0 {
+        if account.is_empty() {
             bail!("account is blank")
         }
 
@@ -98,7 +98,7 @@ impl Entry {
             bail!("only one line per entry may omit amount and currency")
         }
 
-        if account.len() == 0 {
+        if account.is_empty() {
             bail!("account is blank")
         }
 
@@ -145,7 +145,7 @@ impl Entry {
     pub fn finalize(&mut self, rates: &mut ExchangeRates) -> Result<(), Error> {
         let cost_basis_details = self.get_cost_basis_details();
 
-        let infer_rates = cost_basis_details.len() == 0;
+        let infer_rates = cost_basis_details.is_empty();
 
         // TODO: I think the cloning here is not optimal.
         if let Some(vd) = &self.virtual_detail.clone() {
@@ -175,7 +175,7 @@ impl Entry {
             _ => {
                 self.implicit_conversions_check(&mut imbalances, rates, infer_rates)?;
 
-                while let (Some((currency, amount))) = imbalances.pop() {
+                while let Some((currency, amount)) = imbalances.pop() {
                     if let Some(vd) = &self.virtual_detail {
                         self.handle_virtual_detail(vd.clone(), currency.clone(), amount)
                     } else {
@@ -278,7 +278,7 @@ impl Entry {
     /// Find all cost bases in the entry that do not sum to zero, with amounts
     fn get_cost_basis_details(&self) -> Vec<Detail> {
         // Collect the retained elements into a Vec
-        self.details.iter().filter_map(|(d)| {
+        self.details.iter().filter_map(|d| {
             if d.cost_basis.is_some() {
                 Some(d.clone())
             } else {

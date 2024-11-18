@@ -116,7 +116,7 @@ fn financial_statement(args: &Cli, mut ledger: Ledger) -> Result<Total, Error> {
     }
     ledger.finalize(args.precision)?;
 
-    let mut totals = ledger.to_totals()?;
+    let mut totals = ledger.totals()?;
 
     if args.invert {
         totals.invert();

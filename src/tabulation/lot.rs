@@ -24,7 +24,7 @@ impl Lots {
     ) -> Result<(), Error> {
 
         let movement = Movement {
-            action: if quantity > 0 { LotAction::BUY } else { LotAction::SELL },
+            action: if quantity > 0 { LotAction::Buy } else { LotAction::Sell },
             date,
             account,
             commodity,
@@ -45,9 +45,9 @@ impl Lots {
 
         for movement in &self.movements {
             match movement.action {
-                LotAction::BUY => {
+                LotAction::Buy => {
                     let lot = Lot {
-                        status: LotStatus::OPEN,
+                        status: LotStatus::Open,
                         account: movement.account.clone(),
                         commodity: movement.commodity.clone(),
                         quantity: movement.quantity,
@@ -60,7 +60,7 @@ impl Lots {
 
                     self.state
                         .entry(movement.commodity.clone())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(lot);
                 }
                 // TODO: Currently we use FIFO only; we could expand this to
@@ -72,10 +72,10 @@ impl Lots {
                 //  buys and then with all sells on that date. So by the time
                 //  we process a sell, all the buys are in, in chronological
                 //  order.
-                LotAction::SELL => {
+                LotAction::Sell => {
                     let lots = self.state.get_mut(&movement.commodity);
                     if let Some(lots) = lots {
-                        let mut remaining_quantity = movement.quantity.clone();
+                        let mut remaining_quantity = movement.quantity;
 
                         for lot in lots.iter_mut() {
                             if lot.acquisition_currency != movement.currency {
@@ -88,13 +88,13 @@ impl Lots {
                                 continue;
                             }
 
-                            if lot.status == LotStatus::CLOSED {
+                            if lot.status == LotStatus::Closed {
                                 continue;
                             }
 
                             // Determine how much can be sold from this lot
-                            let sell_quantity = remaining_quantity.min(lot.quantity.clone());
-                            lot.quantity -= sell_quantity.clone();
+                            let sell_quantity = remaining_quantity.min(lot.quantity);
+                            lot.quantity -= sell_quantity;
                             remaining_quantity -= sell_quantity;
 
                             // Register the sale against the lot
@@ -106,7 +106,7 @@ impl Lots {
 
                             // If the lot is fully sold, mark it as closed
                             if lot.quantity == 0 {
-                                lot.status = LotStatus::CLOSED;
+                                lot.status = LotStatus::Closed;
                                 lot.closed_date = Some(movement.date);
                             }
 
@@ -167,8 +167,8 @@ impl PartialOrd for Movement {
             Some(Ordering::Equal) => {
                 // If dates are equal, sort buys before sells TODO: manpage this
                 match (&self.action, &other.action) {
-                    (LotAction::BUY, LotAction::SELL) => Some(Ordering::Less),
-                    (LotAction::SELL, LotAction::BUY) => Some(Ordering::Greater),
+                    (LotAction::Buy, LotAction::Sell) => Some(Ordering::Less),
+                    (LotAction::Sell, LotAction::Buy) => Some(Ordering::Greater),
                     _ => {
                         // If actions are the same, compare by commodity string
                         self.commodity.partial_cmp(&other.commodity)
@@ -198,14 +198,14 @@ pub struct Lot {
 
 #[derive(Debug, PartialEq)]
 enum LotAction {
-    BUY,
-    SELL,
+    Buy,
+    Sell,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum LotStatus {
-    OPEN,
-    CLOSED,
+    Open,
+    Closed,
 }
 
 impl Lot {
@@ -218,7 +218,7 @@ impl Lot {
             Some(date) => if as_of < &date { as_of } else { &date.clone() },
             None => as_of
         };
-        self.acquisition_date.until(&end)
+        self.acquisition_date.until(end)
     }
 }
 

@@ -25,7 +25,6 @@ fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
         if let Some((date_str, remainder)) = line.split_once('!') {
             let date = Date::from_str(date_str.trim())?;
             let parts: Vec<&str> = remainder
-                .trim()
                 .split_whitespace()
                 .collect();
 
@@ -160,7 +159,7 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 /// reporting will use the latest one processed in the file. TODO: Manpage this.
 pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
     let path = Path::new(file_path);
-    let mut file = File::open(&path)?;
+    let mut file = File::open(path)?;
 
     first_pass(&file, ledger)?;
     file.rewind()?;

@@ -41,7 +41,7 @@ impl Date {
 
         Ok(Date { year, month, day })
     }
-    
+
     pub fn from_ymd(y: u32, m: u8, d: u8) -> Date {
         Date {
             year: y,
@@ -131,7 +131,7 @@ impl Date {
     }
 
     fn is_valid_date(year: u32, month: u8, day: u8) -> bool {
-        if month < 1 || month > 12 {
+        if !(1..=12).contains(&month) {
             return false;
         }
         if day < 1 || day > Date::days_in_month(year, month) {
@@ -144,7 +144,7 @@ impl Date {
     pub fn today() -> Date {
         let d = TODAY.lock().unwrap();
         if d.year > 0 {
-            return d.clone();
+            return *d;
         }
 
         // Get the current time as seconds since the UNIX epoch

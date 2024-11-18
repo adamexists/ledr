@@ -9,7 +9,7 @@ use crate::tabulation::lot::Lots;
 use crate::util::scalar::Scalar;
 use crate::util::date::Date;
 
-pub const VALID_PREFIXES: [&'static str; 5] =
+pub const VALID_PREFIXES: [&str; 5] =
     ["Assets", "Liabilities", "Equity", "Income", "Expenses"];
 
 #[derive(Debug, Default)]
@@ -93,7 +93,7 @@ impl Ledger {
             bail!("invalid account prefix: {}", account)
         }
 
-        let money_amt = Scalar::from_str(&*amount)?;
+        let money_amt = Scalar::from_str(&amount)?;
         let mut cost_basis_input = None;
 
         // TODO: Could still use another refactor eventually.
@@ -134,7 +134,7 @@ impl Ledger {
         self.pending_entry
             .as_mut()
             .unwrap()
-            .add_detail(account, money_amt.clone(), currency, cost_basis_input)
+            .add_detail(account, money_amt, currency, cost_basis_input)
     }
 
     pub fn set_virtual_detail(&mut self, account: String) -> Result<(), Error> {
@@ -159,7 +159,7 @@ impl Ledger {
     pub fn pending_entry_date(&self) -> Date {
         match &self.pending_entry {
             Some(e) => {
-                e.get_date().clone()
+                *e.get_date()
             }
             None => panic!("pending_entry_date called without pending entry"),
         }
@@ -247,7 +247,7 @@ impl Ledger {
     }
 
     /// Consumes the Ledger, transforming it into a Total.
-    pub fn to_totals(self) -> Result<Total, Error> {
+    pub fn totals(self) -> Result<Total, Error> {
         if !self.is_finalized {
             bail!("ledger not marked as finalized")
         }

@@ -247,7 +247,7 @@ impl Div for Scalar {
         }
 
         // TODO: This is slightly inefficient, but DRY.
-        let mut result = self.clone();
+        let mut result = self;
         result /= rhs;
         result
     }
@@ -338,8 +338,7 @@ impl Eq for Scalar {}
 
 impl PartialOrd for Scalar {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        let (amount_self, amount_other, _) = self.align_resolution(other);
-        amount_self.partial_cmp(&amount_other)
+        Some(self.cmp(other))
     }
 }
 

@@ -1,7 +1,7 @@
 use std::cmp::PartialEq;
 use std::collections::HashMap;
 use anyhow::{bail, Error};
-use crate::tabulation::exchange_rate::RateType::{DECLARED, INFERRED};
+use crate::tabulation::exchange_rate::RateType::{Declared, Inferred};
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
 
@@ -34,15 +34,15 @@ impl ExchangeRates {
             (quote, base)
         };
 
-        if self.get_exact_rate(&key, date, DECLARED).is_some() {
+        if self.get_exact_rate(&key, date, Declared).is_some() {
             bail!("cannot declare multiple exchange rates on same date")
         }
-        let new_rate = ExchangeRate::new(date, DECLARED, rate);
+        let new_rate = ExchangeRate::new(date, Declared, rate);
 
         // We do not need to check for existing inferred rates, because all
         // directives are calculated first, so one cannot exist.
 
-        self.rates.entry(key.clone()).or_insert_with(Vec::new).push(new_rate);
+        self.rates.entry(key.clone()).or_default().push(new_rate);
         self.rates.entry(key).
             and_modify(|e| e.sort_by(|a, b| b.date.cmp(&a.date)));
         Ok(())
@@ -68,7 +68,7 @@ impl ExchangeRates {
             (quote, base)
         };
 
-        if let Some(declared) = self.get_exact_rate(&key, date, DECLARED) {
+        if let Some(declared) = self.get_exact_rate(&key, date, Declared) {
             // Check if the inferred rate is within 1% of the declared rate. If
             // it is, ignore this inferred rate and use the declared; if not,
             // then the declared rate is too far from reality on this date to be
@@ -80,8 +80,8 @@ impl ExchangeRates {
             return Ok(());
         }
 
-        let new_rate = ExchangeRate::new(date, INFERRED, rate);
-        self.rates.entry(key.clone()).or_insert_with(Vec::new).push(new_rate);
+        let new_rate = ExchangeRate::new(date, Inferred, rate);
+        self.rates.entry(key.clone()).or_default().push(new_rate);
         self.rates.entry(key).
             and_modify(|e| e.sort_by(|a, b| b.date.cmp(&a.date)));
         Ok(())
@@ -107,12 +107,12 @@ impl ExchangeRates {
             .and_then(|rates| {
                 rates.iter().find(|rate| rate.date <= date)
             })
-            .and_then(|r| Some(r.rate))
-            .and_then(|found| {
+            .map(|r| r.rate)
+            .map(|found| {
                 if invert_rate {
-                    Some(1 / found)
+                    1 / found
                 } else {
-                    Some(found)
+                    found
                 }
             })
     }
@@ -133,12 +133,12 @@ impl ExchangeRates {
 
         self.rates.get(&key)
             .and_then(|rates| rates.first())
-            .and_then(|r| Some(r.rate))
-            .and_then(|found| {
+            .map(|r| r.rate)
+            .map(|found| {
                 if invert_rate {
-                    Some(1 / found)
+                    1 / found
                 } else {
-                    Some(found)
+                    found
                 }
             })
     }
@@ -149,17 +149,16 @@ impl ExchangeRates {
             .and_then(|rates| {
                 rates.iter()
                     .find(|rate| rate.date == date && rate.rate_type == rate_type)
-            })
-            .and_then(|r| Some(r.rate))
+            }).map(|r| r.rate)
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum RateType {
     /// the user said this is true
-    DECLARED,
+    Declared,
     /// we inferred this rate from an entry
-    INFERRED,
+    Inferred,
 }
 
 #[derive(Clone, Debug)]
