@@ -140,7 +140,7 @@ impl fmt::Display for Scalar {
 		let mut amount_str = self.amount.abs().to_string();
 
 		if self.resolution > 0 {
-			// Ensure the string has enough digits for the decimal placement
+			// Ensure the string has enough digits for the decimal
 			while amount_str.len() <= self.resolution as usize {
 				amount_str.insert(0, '0');
 			}
@@ -149,7 +149,7 @@ impl fmt::Display for Scalar {
 			amount_str.insert(decimal_index, '.');
 		}
 
-		// Insert commas every three digits on the left of the decimal point
+		// Insert commas every three digits on the left of the decimal
 		if let Some(decimal_index) = amount_str.find('.') {
 			let mut i = decimal_index as isize - 3;
 			while i > 0 {
@@ -157,7 +157,7 @@ impl fmt::Display for Scalar {
 				i -= 3;
 			}
 		} else {
-			// If there's no decimal point, add commas to the entire string
+			// If there's no decimal point, add commas to the string
 			let mut i = amount_str.len() as isize - 3;
 			while i > 0 {
 				amount_str.insert(i as usize, ',');
@@ -298,13 +298,13 @@ impl DivAssign for Scalar {
 		if rhs.amount == 0 {
 			panic!("Attempt to divide by zero");
 		}
-		// Start with the initial values of the amounts and resolutions
 		let (mut aligned_self, aligned_rhs, mut resolution) =
 			self.align_resolution(&rhs);
 
 		let initial_resolution = resolution;
 
-		// Scale the dividend until the division yields an integer, or until we reach MAX_RESOLUTION
+		// Scale the dividend until the division yields an integer, or
+		// until we reach MAX_RESOLUTION
 		while aligned_self % aligned_rhs != 0
 			&& resolution < MAX_RESOLUTION
 		{
@@ -312,15 +312,12 @@ impl DivAssign for Scalar {
 			resolution += 1;
 		}
 
-		// Perform the division
 		let quotient = aligned_self / aligned_rhs;
 
-		// Update self with the result and the final resolution
 		self.amount = quotient;
 		self.resolution = resolution - initial_resolution;
 		self.set_resolution(resolution);
 
-		// Reduce to remove any unnecessary trailing zeros while keeping precision
 		self.reduce(initial_resolution);
 	}
 }
@@ -418,123 +415,123 @@ mod tests {
 
 	#[test]
 	fn test_mul_same_resolution() {
-		let money1 = Scalar::from_str("2.50").unwrap(); // 250, resolution 2
-		let money2 = Scalar::from_str("3.00").unwrap(); // 300, resolution 2
+		let money1 = Scalar::from_str("2.50").unwrap();
+		let money2 = Scalar::from_str("3.00").unwrap();
 		let result = money1 * money2;
-		assert_eq!(result.amount, 750); // 75000 reduced to prior precision
+		assert_eq!(result.amount, 750);
 		assert_eq!(result.resolution, 2);
 	}
 
 	#[test]
 	fn test_mul_different_resolution() {
-		let money1 = Scalar::from_str("1.5").unwrap(); // 15, resolution 1
-		let money2 = Scalar::from_str("2.00").unwrap(); // 200, resolution 2
+		let money1 = Scalar::from_str("1.5").unwrap();
+		let money2 = Scalar::from_str("2.00").unwrap();
 		let result = money1 * money2;
-		assert_eq!(result.amount, 300); // 3000 reduced to prior precision
+		assert_eq!(result.amount, 300);
 		assert_eq!(result.resolution, 2);
 	}
 
 	#[test]
 	fn test_mul_negative_values() {
-		let money1 = Scalar::from_str("-2.50").unwrap(); // -250, resolution 2
-		let money2 = Scalar::from_str("4.00").unwrap(); // 400, resolution 2
+		let money1 = Scalar::from_str("-2.50").unwrap();
+		let money2 = Scalar::from_str("4.00").unwrap();
 		let result = money1 * money2;
-		assert_eq!(result.amount, -1000); // -100000 reduced to prior precision
+		assert_eq!(result.amount, -1000);
 		assert_eq!(result.resolution, 2);
 	}
 
 	#[test]
 	fn test_mul_both_negative() {
-		let money1 = Scalar::from_str("-3.25").unwrap(); // -325, resolution 2
-		let money2 = Scalar::from_str("-2.00").unwrap(); // -200, resolution 2
+		let money1 = Scalar::from_str("-3.25").unwrap();
+		let money2 = Scalar::from_str("-2.00").unwrap();
 		let result = money1 * money2;
-		assert_eq!(result.amount, 650); // 65000 reduced to prior precision
+		assert_eq!(result.amount, 650);
 		assert_eq!(result.resolution, 2);
 	}
 
 	#[test]
 	fn test_mul_large_numbers() {
-		let money1 = Scalar::from_str("1000.00").unwrap(); // 100000, resolution 2
-		let money2 = Scalar::from_str("2000.00").unwrap(); // 200000, resolution 2
+		let money1 = Scalar::from_str("1000.00").unwrap();
+		let money2 = Scalar::from_str("2000.00").unwrap();
 		let result = money1 * money2;
-		assert_eq!(result.amount, 200000000); // 20,000,000,000 reduced to prior precision
+		assert_eq!(result.amount, 200000000);
 		assert_eq!(result.resolution, 2);
 	}
 
 	#[test]
 	fn test_mul_high_resolution() {
-		let money1 = Scalar::from_str("0.1234").unwrap(); // 1234, resolution 4
-		let money2 = Scalar::from_str("0.5678").unwrap(); // 5678, resolution 4
+		let money1 = Scalar::from_str("0.1234").unwrap();
+		let money2 = Scalar::from_str("0.5678").unwrap();
 		let result = money1 * money2;
-		assert_eq!(result.amount, 1234 * 5678); // 7006652
-		assert_eq!(result.resolution, 8); // 4 + 4 = 8
+		assert_eq!(result.amount, 1234 * 5678);
+		assert_eq!(result.resolution, 8);
 	}
 
 	#[test]
 	fn test_mul_edge_case_high_precision() {
-		let money1 = Scalar::from_str("0.0001").unwrap(); // 1, resolution 4
-		let money2 = Scalar::from_str("0.0002").unwrap(); // 2, resolution 4
+		let money1 = Scalar::from_str("0.0001").unwrap();
+		let money2 = Scalar::from_str("0.0002").unwrap();
 		let result = money1 * money2;
-		assert_eq!(result.amount, 1 * 2); // 2
-		assert_eq!(result.resolution, 8); // 4 + 4 = 8
+		assert_eq!(result.amount, 1 * 2);
+		assert_eq!(result.resolution, 8);
 	}
 
 	#[test]
 	fn test_scalar_div_scalar_same_resolution() {
-		let scalar1 = Scalar::from_str("10.00").unwrap(); // 1000, resolution 2
-		let scalar2 = Scalar::from_str("2.00").unwrap(); // 200, resolution 2
+		let scalar1 = Scalar::from_str("10.00").unwrap();
+		let scalar2 = Scalar::from_str("2.00").unwrap();
 		let result = scalar1 / scalar2;
-		assert_eq!(result.amount, 500); // 10.00 / 2.00 = 5.00 -> 500
+		assert_eq!(result.amount, 500);
 		assert_eq!(result.resolution, 2);
 	}
 
 	#[test]
 	fn test_scalar_div_scalar_different_resolutions() {
-		let scalar1 = Scalar::from_str("10.5").unwrap(); // 105, resolution 1
-		let scalar2 = Scalar::from_str("0.5").unwrap(); // 5, resolution 1
+		let scalar1 = Scalar::from_str("10.5").unwrap();
+		let scalar2 = Scalar::from_str("0.5").unwrap();
 		let result = scalar1 / scalar2;
-		assert_eq!(result.amount, 210); // 10.5 / 0.5 = 21.0 -> 210
+		assert_eq!(result.amount, 210);
 		assert_eq!(result.resolution, 1);
 	}
 
 	#[test]
 	fn test_scalar_div_scalar_high_precision() {
-		let scalar1 = Scalar::from_str("1.0000").unwrap(); // 10000, resolution 4
-		let scalar2 = Scalar::from_str("0.25").unwrap(); // 25, resolution 2
+		let scalar1 = Scalar::from_str("1.0000").unwrap();
+		let scalar2 = Scalar::from_str("0.25").unwrap();
 		let result = scalar1 / scalar2;
-		assert_eq!(result.amount, 40000); // 1.0000 / 0.25 = 4.0000 -> 40000
+		assert_eq!(result.amount, 40000);
 		assert_eq!(result.resolution, 4);
 	}
 
 	#[test]
 	fn test_scalar_div_i128_no_resolution_change() {
-		let scalar = Scalar::from_str("10.00").unwrap(); // 1000, resolution 2
+		let scalar = Scalar::from_str("10.00").unwrap();
 		let result = scalar / 2;
-		assert_eq!(result.amount, 500); // 10.00 / 2 = 5.00 -> 500
+		assert_eq!(result.amount, 500);
 		assert_eq!(result.resolution, 2);
 	}
 
 	#[test]
 	fn test_scalar_div_i128_with_resolution_increase() {
-		let scalar = Scalar::from_str("1").unwrap(); // 1, resolution 0
+		let scalar = Scalar::from_str("1").unwrap();
 		let result = scalar / 2;
-		assert_eq!(result.amount, 5); // 1 / 2 = 0.5 -> 5
+		assert_eq!(result.amount, 5);
 		assert_eq!(result.resolution, 1);
 	}
 
 	#[test]
 	fn test_scalar_div_i128_large_number() {
-		let scalar = Scalar::from_str("1000.00").unwrap(); // 100000, resolution 2
+		let scalar = Scalar::from_str("1000.00").unwrap();
 		let result = scalar / 250;
-		assert_eq!(result.amount, 400); // 1000.00 / 250 = 4.00 -> 400
+		assert_eq!(result.amount, 400);
 		assert_eq!(result.resolution, 2);
 	}
 
 	#[test]
 	fn test_scalar_div_i128_small_number() {
-		let scalar = Scalar::from_str("0.001").unwrap(); // 1, resolution 3
+		let scalar = Scalar::from_str("0.001").unwrap();
 		let result = scalar / 2;
-		assert_eq!(result.amount, 5); // 0.001 / 2 = 0.0005 -> 5
+		assert_eq!(result.amount, 5);
 		assert_eq!(result.resolution, 4);
 	}
 
@@ -543,171 +540,171 @@ mod tests {
 	fn test_div_by_zero_scalar() {
 		let scalar1 = Scalar::from_str("10.00").unwrap();
 		let scalar2 = Scalar::from_str("0.00").unwrap();
-		let _ = scalar1 / scalar2; // Should panic
+		let _ = scalar1 / scalar2;
 	}
 
 	#[test]
 	#[should_panic(expected = "Attempt to divide by zero")]
 	fn test_div_by_zero_i128() {
 		let scalar = Scalar::from_str("10.00").unwrap();
-		let _ = scalar / 0; // Should panic
+		let _ = scalar / 0;
 	}
 
 	#[test]
 	fn test_div_negative_scalar() {
-		let scalar1 = Scalar::from_str("-10.00").unwrap(); // -1000, resolution 2
-		let scalar2 = Scalar::from_str("2.00").unwrap(); // 200, resolution 2
+		let scalar1 = Scalar::from_str("-10.00").unwrap();
+		let scalar2 = Scalar::from_str("2.00").unwrap();
 		let result = scalar1 / scalar2;
-		assert_eq!(result.amount, -500); // -10.00 / 2.00 = -5.00 -> -500
+		assert_eq!(result.amount, -500);
 		assert_eq!(result.resolution, 2);
 	}
 
 	#[test]
 	fn test_div_negative_i128() {
-		let scalar = Scalar::from_str("10.00").unwrap(); // 1000, resolution 2
+		let scalar = Scalar::from_str("10.00").unwrap();
 		let result = scalar / -2;
-		assert_eq!(result.amount, -500); // 10.00 / -2 = -5.00 -> -500
+		assert_eq!(result.amount, -500);
 		assert_eq!(result.resolution, 2);
 	}
 
 	#[test]
 	fn test_div_both_negative() {
-		let scalar1 = Scalar::from_str("-10.00").unwrap(); // -1000, resolution 2
-		let scalar2 = Scalar::from_str("-2.00").unwrap(); // -200, resolution 2
+		let scalar1 = Scalar::from_str("-10.00").unwrap();
+		let scalar2 = Scalar::from_str("-2.00").unwrap();
 		let result = scalar1 / scalar2;
-		assert_eq!(result.amount, 500); // -10.00 / -2.00 = 5.00 -> 500
+		assert_eq!(result.amount, 500);
 		assert_eq!(result.resolution, 2);
 	}
 
 	#[test]
 	fn test_div_assign_simple_case() {
-		let mut scalar1 = Scalar::from_str("10.00").unwrap(); // 1000, resolution 2
-		let scalar2 = Scalar::from_str("2.00").unwrap(); // 200, resolution 2
+		let mut scalar1 = Scalar::from_str("10.00").unwrap();
+		let scalar2 = Scalar::from_str("2.00").unwrap();
 		scalar1 /= scalar2;
-		assert_eq!(scalar1.amount, 500); // 10.00 / 2.00 = 5.00 -> 500
+		assert_eq!(scalar1.amount, 500);
 		assert_eq!(scalar1.resolution, 2);
 	}
 
 	#[test]
 	fn test_div_assign_with_different_resolutions() {
-		let mut scalar1 = Scalar::from_str("10.50").unwrap(); // 105, resolution 2
-		let scalar2 = Scalar::from_str("0.5").unwrap(); // 5, resolution 1
+		let mut scalar1 = Scalar::from_str("10.50").unwrap();
+		let scalar2 = Scalar::from_str("0.5").unwrap();
 		scalar1 /= scalar2;
-		assert_eq!(scalar1.amount, 2100); // 10.5 / 0.5 = 21.0 -> 2100
+		assert_eq!(scalar1.amount, 2100);
 		assert_eq!(scalar1.resolution, 2);
 	}
 
 	#[test]
 	fn test_div_assign_result_with_higher_resolution() {
-		let mut scalar1 = Scalar::from_str("1.0000").unwrap(); // 10000, resolution 4
-		let scalar2 = Scalar::from_str("0.25").unwrap(); // 25, resolution 2
+		let mut scalar1 = Scalar::from_str("1.0000").unwrap();
+		let scalar2 = Scalar::from_str("0.25").unwrap();
 		scalar1 /= scalar2;
-		assert_eq!(scalar1.amount, 40000); // 1.0000 / 0.25 = 4.0000 -> 40000
+		assert_eq!(scalar1.amount, 40000);
 		assert_eq!(scalar1.resolution, 4);
 	}
 
 	#[test]
 	fn test_div_assign_large_numbers() {
-		let mut scalar1 = Scalar::from_str("1000000.00").unwrap(); // 100000000, resolution 2
-		let scalar2 = Scalar::from_str("1000.00").unwrap(); // 100000, resolution 2
+		let mut scalar1 = Scalar::from_str("1000000.00").unwrap();
+		let scalar2 = Scalar::from_str("1000.00").unwrap();
 		scalar1 /= scalar2;
-		assert_eq!(scalar1.amount, 100000); // 1000000.00 / 1000.00 = 1000.00 -> 1000
+		assert_eq!(scalar1.amount, 100000);
 		assert_eq!(scalar1.resolution, 2);
 	}
 
 	#[test]
 	fn test_div_assign_small_numbers() {
-		let mut scalar1 = Scalar::from_str("0.001").unwrap(); // 1, resolution 3
-		let scalar2 = Scalar::from_str("0.0005").unwrap(); // 5, resolution 4
+		let mut scalar1 = Scalar::from_str("0.001").unwrap();
+		let scalar2 = Scalar::from_str("0.0005").unwrap();
 		scalar1 /= scalar2;
-		assert_eq!(scalar1.amount, 20000); // 0.001 / 0.0005 = 2.000 -> 2000
+		assert_eq!(scalar1.amount, 20000);
 		assert_eq!(scalar1.resolution, 4);
 	}
 
 	#[test]
 	fn test_div_assign_negative_numbers() {
-		let mut scalar1 = Scalar::from_str("-10.00").unwrap(); // -1000, resolution 2
-		let scalar2 = Scalar::from_str("2.00").unwrap(); // 200, resolution 2
+		let mut scalar1 = Scalar::from_str("-10.00").unwrap();
+		let scalar2 = Scalar::from_str("2.00").unwrap();
 		scalar1 /= scalar2;
-		assert_eq!(scalar1.amount, -500); // -10.00 / 2.00 = -5.00 -> -500
+		assert_eq!(scalar1.amount, -500);
 		assert_eq!(scalar1.resolution, 2);
 	}
 
 	#[test]
 	fn test_div_assign_both_negative() {
-		let mut scalar1 = Scalar::from_str("-10.00").unwrap(); // -1000, resolution 2
-		let scalar2 = Scalar::from_str("-2.00").unwrap(); // -200, resolution 2
+		let mut scalar1 = Scalar::from_str("-10.00").unwrap();
+		let scalar2 = Scalar::from_str("-2.00").unwrap();
 		scalar1 /= scalar2;
-		assert_eq!(scalar1.amount, 500); // -10.00 / -2.00 = 5.00 -> 500
+		assert_eq!(scalar1.amount, 500);
 		assert_eq!(scalar1.resolution, 2);
 	}
 
 	#[test]
 	fn test_div_assign_with_zero_amount() {
-		let mut scalar1 = Scalar::from_str("0.00").unwrap(); // 0, resolution 2
-		let scalar2 = Scalar::from_str("1.00").unwrap(); // 100, resolution 2
+		let mut scalar1 = Scalar::from_str("0.00").unwrap();
+		let scalar2 = Scalar::from_str("1.00").unwrap();
 		scalar1 /= scalar2;
-		assert_eq!(scalar1.amount, 0); // 0.00 / 1.00 = 0.00 -> 0
+		assert_eq!(scalar1.amount, 0);
 		assert_eq!(scalar1.resolution, 2);
 	}
 
 	#[test]
 	#[should_panic(expected = "Attempt to divide by zero")]
 	fn test_div_assign_by_zero() {
-		let mut scalar1 = Scalar::from_str("10.00").unwrap(); // 1000, resolution 2
-		let scalar2 = Scalar::from_str("0.00").unwrap(); // 0, resolution 2
-		scalar1 /= scalar2; // Should panic
+		let mut scalar1 = Scalar::from_str("10.00").unwrap();
+		let scalar2 = Scalar::from_str("0.00").unwrap();
+		scalar1 /= scalar2;
 	}
 
 	#[test]
 	fn test_div_assign_high_precision() {
-		let mut scalar1 = Scalar::from_str("0.00012345").unwrap(); // 12345, resolution 8
-		let scalar2 = Scalar::from_str("0.0001").unwrap(); // 1, resolution 4
+		let mut scalar1 = Scalar::from_str("0.00012345").unwrap();
+		let scalar2 = Scalar::from_str("0.0001").unwrap();
 		scalar1 /= scalar2;
-		assert_eq!(scalar1.amount, 123450000); // 0.00012345 / 0.0001 = 1.2345
-		assert_eq!(scalar1.resolution, 8); // preserved from highest-precision operand
+		assert_eq!(scalar1.amount, 123450000);
+		assert_eq!(scalar1.resolution, 8);
 	}
 
 	#[test]
 	fn test_mul_large_numbers_extreme() {
-		let money1 = Scalar::from_str("999999999999.99").unwrap(); // 99999999999999, resolution 2
-		let money2 = Scalar::from_str("0.0000000001").unwrap(); // 1, resolution 10
+		let money1 = Scalar::from_str("999999999999.99").unwrap();
+		let money2 = Scalar::from_str("0.0000000001").unwrap();
 		let result = money1 * money2;
-		assert_eq!(result.amount, 99999999999999); // Result should retain as much precision as possible
-		assert_eq!(result.resolution, 12); // 2 + 10 = 12
+		assert_eq!(result.amount, 99999999999999);
+		assert_eq!(result.resolution, 12);
 	}
 
 	#[test]
 	fn test_mul_minimal_numbers() {
-		let money1 = Scalar::from_str("0.0000000001").unwrap(); // 1, resolution 10
-		let money2 = Scalar::from_str("0.0000000001").unwrap(); // 1, resolution 10
+		let money1 = Scalar::from_str("0.0000000001").unwrap();
+		let money2 = Scalar::from_str("0.0000000001").unwrap();
 		let result = money1 * money2;
-		assert_eq!(result.amount, 1); // 1 * 1 = 1
-		assert_eq!(result.resolution, 20); // 10 + 10 = 20
+		assert_eq!(result.amount, 1);
+		assert_eq!(result.resolution, 20);
 	}
 
 	#[test]
 	fn test_mul_max_resolution_limit() {
-		let money1 = Scalar::from_str("1.234567890123456789").unwrap(); // 1234567890123456789, resolution 18
-		let money2 = Scalar::from_str("0.000000000000000001").unwrap(); // 1, resolution 18
+		let money1 = Scalar::from_str("1.234567890123456789").unwrap();
+		let money2 = Scalar::from_str("0.000000000000000001").unwrap();
 		let result = money1 * money2;
-		assert_eq!(result.amount, 1234567890123456789); // Retain maximum precision
-		assert_eq!(result.resolution, 36); // 18 + 18 = 36
+		assert_eq!(result.amount, 1234567890123456789);
+		assert_eq!(result.resolution, 36);
 	}
 
 	#[test]
 	fn test_mul_max_resolution_edge_case() {
-		let money1 = Scalar::from_str("1").unwrap(); // 1, resolution 0
-		let money2 = Scalar::from_str("0.000000000000000001").unwrap(); // 1, resolution 18
+		let money1 = Scalar::from_str("1").unwrap();
+		let money2 = Scalar::from_str("0.000000000000000001").unwrap();
 		let result = money1 * money2;
-		assert_eq!(result.amount, 1); // Minimal precision case
-		assert_eq!(result.resolution, 18); // 0 + 18 = 18
+		assert_eq!(result.amount, 1);
+		assert_eq!(result.resolution, 18);
 	}
 
 	#[test]
 	fn test_mul_large_reduce() {
-		let money1 = Scalar::from_str("1000000.000").unwrap(); // 1000000, resolution 3
-		let money2 = Scalar::from_str("12345.000").unwrap(); // 12345, resolution 3
+		let money1 = Scalar::from_str("1000000.000").unwrap();
+		let money2 = Scalar::from_str("12345.000").unwrap();
 		let result = money1 * money2;
 		assert_eq!(result.amount, 12345000000000);
 		assert_eq!(result.resolution, 3);
@@ -716,8 +713,8 @@ mod tests {
 	#[test]
 	fn test_div_large_numbers_with_precision_loss() {
 		let scalar1 =
-			Scalar::from_str("12345678901234567890.00").unwrap(); // 1234567890123456789000, resolution 2
-		let scalar2 = Scalar::from_str("3.00").unwrap(); // 300, resolution 2
+			Scalar::from_str("12345678901234567890.00").unwrap();
+		let scalar2 = Scalar::from_str("3.00").unwrap();
 		let result = scalar1 / scalar2;
 		assert_eq!(result.amount, 411522630041152263000);
 		assert_eq!(result.resolution, 2);
@@ -725,8 +722,8 @@ mod tests {
 
 	#[test]
 	fn test_div_large_numbers_with_larger_divisor() {
-		let scalar1 = Scalar::from_str("3.00").unwrap(); // 300, resolution 2
-		let scalar2 = Scalar::from_str("12345678901234.00").unwrap(); // 1234567890123400, resolution 2
+		let scalar1 = Scalar::from_str("3.00").unwrap();
+		let scalar2 = Scalar::from_str("12345678901234.00").unwrap();
 		let result = scalar1 / scalar2;
 		assert_eq!(result.amount, 243000002187011197);
 		assert_eq!(result.resolution, 30);
@@ -734,38 +731,38 @@ mod tests {
 
 	#[test]
 	fn test_div_small_numbers_high_resolution() {
-		let scalar1 = Scalar::from_str("0.000000000000001").unwrap(); // 1, resolution 15
-		let scalar2 = Scalar::from_str("0.0000000001").unwrap(); // 1, resolution 10
+		let scalar1 = Scalar::from_str("0.000000000000001").unwrap();
+		let scalar2 = Scalar::from_str("0.0000000001").unwrap();
 		let result = scalar1 / scalar2;
-		assert_eq!(result.amount, 10000000000); // 1, resolution 15
-		assert_eq!(result.resolution, 15); // highest resolution among operands
+		assert_eq!(result.amount, 10000000000);
+		assert_eq!(result.resolution, 15);
 	}
 
 	#[test]
 	fn test_div_near_zero_with_high_resolution() {
-		let scalar1 = Scalar::from_str("0.0000001").unwrap(); // 1, resolution 7
-		let scalar2 = Scalar::from_str("1000000").unwrap(); // 1000000, resolution 0
+		let scalar1 = Scalar::from_str("0.0000001").unwrap();
+		let scalar2 = Scalar::from_str("1000000").unwrap();
 		let result = scalar1 / scalar2;
-		assert_eq!(result.amount, 1); // Near-zero division
+		assert_eq!(result.amount, 1);
 		assert_eq!(result.resolution, 13);
 	}
 
 	#[test]
 	fn test_mul_extremely_small_numbers() {
-		let scalar1 = Scalar::from_str("0.0000000000000001").unwrap(); // 1, resolution 16
-		let scalar2 = Scalar::from_str("0.0000000000000001").unwrap(); // 1, resolution 16
+		let scalar1 = Scalar::from_str("0.0000000000000001").unwrap();
+		let scalar2 = Scalar::from_str("0.0000000000000001").unwrap();
 		let result = scalar1 * scalar2;
-		assert_eq!(result.amount, 1); // 1 * 1 = 1
-		assert_eq!(result.resolution, 32); // 16 + 16 = 32
+		assert_eq!(result.amount, 1);
+		assert_eq!(result.resolution, 32);
 	}
 
 	#[test]
 	fn test_div_high_resolution_numbers() {
-		let scalar1 = Scalar::from_str("0.123456789012345678").unwrap(); // 123456789012345678, resolution 18
-		let scalar2 = Scalar::from_str("0.000000000000000001").unwrap(); // 1, resolution 18
+		let scalar1 = Scalar::from_str("0.123456789012345678").unwrap();
+		let scalar2 = Scalar::from_str("0.000000000000000001").unwrap();
 		let result = scalar1 / scalar2;
 		assert_eq!(result.amount, 123456789012345678000000000000000000);
-		assert_eq!(result.resolution, 18); // Precision maintained
+		assert_eq!(result.resolution, 18);
 	}
 
 	#[test]
@@ -797,8 +794,8 @@ mod tests {
 			resolution: 4,
 		};
 		scalar.reduce(2);
-		assert_eq!(scalar.amount, 10); // Reduced from 1000 to 10
-		assert_eq!(scalar.resolution, 2); // Stopped at min_resolution
+		assert_eq!(scalar.amount, 10);
+		assert_eq!(scalar.resolution, 2);
 	}
 
 	#[test]
@@ -808,8 +805,8 @@ mod tests {
 			resolution: 2,
 		};
 		scalar.reduce(2);
-		assert_eq!(scalar.amount, 100); // Should not change
-		assert_eq!(scalar.resolution, 2); // Should not change
+		assert_eq!(scalar.amount, 100);
+		assert_eq!(scalar.resolution, 2);
 	}
 
 	#[test]
@@ -819,19 +816,19 @@ mod tests {
 			resolution: 0,
 		};
 		scalar.reduce(0);
-		assert_eq!(scalar.amount, 0); // No change for amount of 0
-		assert_eq!(scalar.resolution, 0); // No change for resolution of 0
+		assert_eq!(scalar.amount, 0);
+		assert_eq!(scalar.resolution, 0);
 	}
 
 	#[test]
 	fn test_display() {
-		let money = Scalar::from_str("12345.6789").unwrap(); // 123456789, resolution 4
+		let money = Scalar::from_str("12345.6789").unwrap();
 		assert_eq!(money.to_string(), "12,345.6789");
 
-		let negative_money = Scalar::from_str("-1000000.50").unwrap(); // -100000050, resolution 2
+		let negative_money = Scalar::from_str("-1000000.50").unwrap();
 		assert_eq!(negative_money.to_string(), "-1,000,000.50");
 
-		let zero_money = Scalar::from_str("0.00").unwrap(); // 0, resolution 2
+		let zero_money = Scalar::from_str("0.00").unwrap();
 		assert_eq!(zero_money.to_string(), "0.00")
 	}
 }

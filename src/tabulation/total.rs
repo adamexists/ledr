@@ -94,8 +94,9 @@ impl Total {
 		let mut currency_totals: HashMap<String, Scalar> =
 			HashMap::new();
 
-		// Sum subtotals; doesn't need to be recursive because we only dropped
-		// some top-level branches of the hierarchy; what remains is accurate
+		// Sum subtotals; doesn't need to be recursive because we only
+		// dropped some top-level branches of the hierarchy; what
+		// remains is accurate
 		for subtotal in self.subtotals.values_mut() {
 			for (currency, amount) in &subtotal.amounts {
 				currency_totals

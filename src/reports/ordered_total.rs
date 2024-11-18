@@ -271,8 +271,8 @@ impl OrderedTotal {
 
 			let mut has_printed_acct = false;
 			while let Some((currency, amount)) = amts.next() {
-				// we avoid repeating the same account name on subsequent lines
-				// when multi-currency balances would otherwise cause that
+				// when the same account name would appear on
+				// consecutive lines, replace it with a symbol
 				let acct = match (
 					has_printed_acct,
 					amts.peek().is_some(),

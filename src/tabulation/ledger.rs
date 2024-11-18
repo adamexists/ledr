@@ -161,10 +161,11 @@ impl Ledger {
 				cb.amount /= money_amt;
 			}
 
-			// A cost basis has the authority of a declaration in many ways,
-			// but in case there are multiple intraday transactions that differ
-			// from each other (as day traders etc. experience all the time),
-			// we must treat them as inferred rates here.
+			// A cost basis has the authority of a declaration in
+			// many ways, but in case there are multiple intraday
+			// transactions that differ from each other (as day
+			// traders etc. experience all the time), we must treat
+			// them as inferred rates here.
 			self.exchange_rates.infer(
 				self.pending_entry_date(),
 				currency.clone(),
@@ -226,7 +227,7 @@ impl Ledger {
 	pub fn pending_entry_date(&self) -> Date {
 		match &self.pending_entry {
 			Some(e) => *e.get_date(),
-			None => panic!("pending_entry_date called without pending entry"),
+			None => panic!("pending_entry_date has no entry"),
 		}
 	}
 
@@ -287,9 +288,9 @@ impl Ledger {
 	// ----------------
 
 	/// Converts all possible balances to the currency provided, if exchange
-	/// rates are available. If a rate is not available for the given pair, then
-	/// we skip. There is no graph traversal: a direct rate must have been
-	/// observed.
+	/// rates are available. If a rate is not available for the given pair,
+	/// then we skip. There is no graph traversal: a direct rate must have
+	/// been observed.
 	pub fn collapse_to(&mut self, currency: String) {
 		self.entries.iter_mut().flat_map(|e| e.details()).for_each(
 			|d| {
@@ -304,19 +305,9 @@ impl Ledger {
 		)
 	}
 
-	/// Removes cost basis from currencies. This is done for most reports that
-	/// do not specifically care about it.
-	pub fn remove_cost_basis(&mut self) {
-		self.entries.iter_mut().flat_map(|e| e.details()).for_each(
-			|d| {
-				d.remove_cost_basis();
-			},
-		)
-	}
-
-	/// Finalizes the entire ledger by standardizing the visible precision of
-	/// each currency, marking the ledger as finalized, and reporting totals
-	/// from it.
+	/// Finalizes the entire ledger by standardizing the visible precision
+	/// of each currency, marking the ledger as finalized, and reporting
+	/// totals from it.
 	///
 	/// Consumes the ledger.
 	pub fn finalize(
@@ -330,13 +321,12 @@ impl Ledger {
 			overall_max = requested_max;
 		}
 
-		// Iterate over each detail to determine the highest resolution per currency
 		for detail in self.entries.iter().flat_map(|x| x.get_details())
 		{
 			let reso = min(detail.amount.resolution(), overall_max);
 			let currency = detail.currency();
 
-			// Update max resolution if this detail has higher resolution
+			// Update max if this detail has higher resolution
 			max_reso_by_currency
 				.entry(currency.clone())
 				.and_modify(|max_reso| {
@@ -347,7 +337,7 @@ impl Ledger {
 				.or_insert(reso);
 		}
 
-		// Standardize all currencies to the highest precision found among them
+		// Standardize all currencies to the highest precision found
 		for entry in &mut self.entries {
 			for (currency, &reso) in &max_reso_by_currency {
 				entry.set_resolution_for_currency(

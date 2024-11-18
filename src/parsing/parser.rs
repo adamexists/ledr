@@ -36,65 +36,61 @@ fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 		}
 
 		// Handle directive lines starting with a date and '!'
-		if let Some((date_str, remainder)) = line.split_once('!') {
-			let date = Date::from_str(date_str.trim())
-				.map_err(|e| anyhow!("{} (line {})", e, i))?;
-			let parts: Vec<&str> =
-				remainder.split_whitespace().collect();
+		let directive = line.split_once('!');
+		if directive.is_none() {
+			continue;
+		}
+		let (date_str, remainder) = directive.unwrap();
 
-			if parts.is_empty() {
-				bail!("Invalid directive format (line {}): {}", i + 1, line);
-			}
+		let date = Date::from_str(date_str.trim())
+			.map_err(|e| anyhow!("{} (line {})", e, i))?;
+		let parts: Vec<&str> = remainder.split_whitespace().collect();
 
-			match parts[0] {
-				"account" if parts.len() == 2 => {
-					let account = parts[1].to_string();
-					ledger.declare_account(account, date)
-						.map_err(|e| {
+		if parts.is_empty() {
+			bail!(
+				"Invalid directive format (line {}): {}",
+				i + 1,
+				line
+			);
+		}
+
+		match parts[0] {
+			"account" if parts.len() == 2 => {
+				let account = parts[1].to_string();
+				ledger.declare_account(account, date).map_err(
+					|e| anyhow!("{} (line {})", e, i),
+				)?;
+			},
+			"currency" if parts.len() == 2 => {
+				let currency = parts[1].to_string();
+				ledger.declare_currency(currency, date)
+					.map_err(|e| {
 						anyhow!("{} (line {})", e, i)
 					})?;
-				},
-				"currency" if parts.len() == 2 => {
-					let currency = parts[1].to_string();
-					ledger.declare_currency(currency, date)
-						.map_err(|e| {
-							anyhow!(
-								"{} (line {})",
-								e,
-								i
-							)
-						})?;
-				},
-				"rate" if parts.len() == 4 => {
-					let from = parts[1].to_string();
-					let to = parts[2].to_string();
-					let rate = parts[3];
-					ledger.exchange_rates
-						.declare(
-							date,
-							from,
-							to,
-							Scalar::from_str(rate)
-								.map_err(
-									|e| {
-										anyhow!("{} (line {})", e, i)
-									},
-								)?,
-						)
-						.map_err(|e| {
-							anyhow!(
-								"{} (line {})",
-								e,
-								i
-							)
-						})?;
-				},
-				_ => bail!(
-					"Invalid directive or arguments (line {}): {}",
-					i + 1,
-					line,
-				),
-			}
+			},
+			"rate" if parts.len() == 4 => {
+				let from = parts[1].to_string();
+				let to = parts[2].to_string();
+				let rate = parts[3];
+				ledger.exchange_rates
+					.declare(
+						date,
+						from,
+						to,
+						Scalar::from_str(rate)
+							.map_err(|e| {
+								anyhow!("{} (line {})", e, i)
+							})?,
+					)
+					.map_err(|e| {
+						anyhow!("{} (line {})", e, i)
+					})?;
+			},
+			_ => bail!(
+				"Invalid directive or arguments (line {}): {}",
+				i + 1,
+				line,
+			),
 		}
 	}
 
@@ -110,27 +106,23 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 
 	while let Some(Ok(line)) = lines.next() {
 		i += 1;
-		let line = line.trim();
+		let l = line.trim();
 
-		// ignore comment lines completely
-		if line.starts_with("#") {
+		// ignore comment lines completely and skip directives
+		// TODO: Document the ! as an illegal character bc directives
+		if l.starts_with("#") || l.contains('!') {
 			continue;
 		}
 
 		// Skip blank lines or process them as a signal to finish an entry
-		if line.is_empty() {
+		if l.is_empty() {
 			ledger.finish_entry()
 				.map_err(|e| anyhow!("{} (line {})", e, i))?;
 			continue;
 		}
 
-		// Skip directive lines
-		if line.contains('!') {
-			continue;
-		}
-
 		// Handle entry declaration lines with a date and description
-		if let Some((date_str, desc)) = line.split_once(' ') {
+		if let Some((date_str, desc)) = l.split_once(' ') {
 			if let Ok(date) = Date::from_str(date_str.trim()) {
 				ledger.new_entry(date, desc.trim().to_string())
 					.map_err(|e| {
@@ -141,70 +133,66 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 		}
 
 		// Handle entry detail lines
-		let parts: Vec<&str> = line.split_whitespace().collect();
-		if parts.len() >= 3 {
-			let account = parts[0].to_string();
-			let amount = parts[1].to_string();
-			let currency = parts[2].to_string();
+		let parts: Vec<&str> = l.split_whitespace().collect();
 
-			// Handle optional cost basis
-			let cost_basis = if parts.len() > 3 {
-				let basis_str = parts[3..].join(" ");
-				if let Some((operator, basis)) =
-					basis_str.split_once(' ')
-				{
-					let b_parts: Vec<&str> = basis
-						.split_whitespace()
-						.collect();
-					if b_parts.len() != 2 {
-						bail!("Invalid cost basis (line {}): {}", i, line);
-					}
-
-					let amount_type = match operator {
-						"@" => CostBasisAmountType::UnitCost,
-						"@@" => CostBasisAmountType::TotalCost,
-						_ => bail!("Invalid cost basis (line {}): {}", i, line),
-					};
-
-					let amount =
-						Scalar::from_str(b_parts[0])
-							.map_err(|_| {
-								anyhow!(
-								"Invalid scalar value (line {}): {}",
-								i,
-								line
-							)
-							})?;
-					let currency = b_parts[1].to_string();
-
-					Some(CostBasisInput {
-						amount,
-						amount_type,
-						currency,
-					})
-				} else {
-					bail!("Invalid cost basis (line {}): {}", i, line);
-				}
-			} else {
-				None
-			};
-
-			ledger.add_detail(
-				account, amount, currency, cost_basis,
-			)
-			.map_err(|e| anyhow!("{} (line {})", e, i))?;
-			continue;
-		}
-
-		// Handle virtual entry detail lines (only account)
+		// Handle virtual entry detail lines (account name only)
 		if parts.len() == 1 {
 			let account = parts[0].to_string();
 			ledger.set_virtual_detail(account)
 				.map_err(|e| anyhow!("{} (line {})", e, i))?;
 			continue;
+		} else if parts.len() < 3 {
+			bail!("Invalid line format (line {}): {}", i, l);
 		}
 
-		bail!("Invalid line format (line {}): {}", i, line);
+		let account = parts[0].to_string();
+		let amount = parts[1].to_string();
+		let currency = parts[2].to_string();
+
+		// if exactly three parts, no cost basis
+		if parts.len() == 3 {
+			ledger.add_detail(account, amount, currency, None)
+				.map_err(|e| anyhow!("{} (line {})", e, i))?;
+			continue;
+		}
+
+		// If we get here, we know we have a cost basis
+		let basis_str = parts[3..].join(" ");
+		let basis_parts = basis_str.split_once(' ');
+
+		if basis_parts.is_none() {
+			bail!("Invalid cost basis (line {}): {}", i, l);
+		}
+
+		let (operator, basis) = basis_parts.unwrap();
+
+		let b_parts: Vec<&str> = basis.split_whitespace().collect();
+		if b_parts.len() != 2 {
+			bail!("Invalid cost basis (line {}): {}", i, l);
+		}
+
+		let amount_type = match operator {
+			"@" => CostBasisAmountType::UnitCost,
+			"@@" => CostBasisAmountType::TotalCost,
+			_ => bail!("Invalid cost basis (line {}): {}", i, l),
+		};
+
+		let cb_amount = Scalar::from_str(b_parts[0]).map_err(|_| {
+			anyhow!("Invalid scalar value (line {}): {}", i, l)
+		})?;
+		let cb_currency = b_parts[1].to_string();
+
+		ledger.add_detail(
+			account,
+			amount,
+			currency,
+			Some(CostBasisInput {
+				amount: cb_amount,
+				amount_type,
+				currency: cb_currency,
+			}),
+		)
+		.map_err(|e| anyhow!("{} (line {})", e, i))?;
 	}
 
 	// Make sure to finish the last entry if the file ends without an empty line

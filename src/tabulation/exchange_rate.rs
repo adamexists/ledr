@@ -28,8 +28,8 @@ pub struct ExchangeRates {
 }
 
 impl ExchangeRates {
-	/// Add a new exchange rate declared via directive. Might fail if there is
-	/// an existing declared rate on the same date.
+	/// Add a new exchange rate declared via directive. Might fail if there
+	/// is an existing declared rate on the same date.
 	pub fn declare(
 		&mut self,
 		date: Date,
@@ -44,7 +44,7 @@ impl ExchangeRates {
 			bail!("Exchange rate must be positive")
 		}
 
-		// to standardize lookups, base should be alphabetically before quote
+		// to standardize lookups, put base alphabetically before quote
 		let key = if base < quote {
 			(base, quote)
 		} else {
@@ -53,12 +53,12 @@ impl ExchangeRates {
 		};
 
 		if self.get_exact_rate(&key, date, Declared).is_some() {
-			bail!("Cannot declare multiple exchange rates on same date")
+			bail!("Cannot declare multiple rates on same date")
 		}
 		let new_rate = ExchangeRate::new(date, Declared, rate);
 
-		// We do not need to check for existing inferred rates, because all
-		// directives are calculated first, so one cannot exist.
+		// We do not need to check for existing inferred rates, because
+		// all directives are calculated first, so one cannot exist.
 
 		self.rates.entry(key.clone()).or_default().push(new_rate);
 		self.rates
@@ -67,10 +67,10 @@ impl ExchangeRates {
 		Ok(())
 	}
 
-	/// Add a new exchange rate inferred from an entry. Might fail if there is
-	/// an existing declared rate that is outside tolerance from this new rate.
-	/// If there is an existing declared rate at all, this one will definitely
-	/// be ignored.
+	/// Add a new exchange rate inferred from an entry. Might fail if there
+	/// is an existing declared rate that is outside tolerance from this new
+	/// rate. If there is an existing declared rate at all, this one will
+	/// definitely be ignored.
 	pub fn infer(
 		&mut self,
 		date: Date,
@@ -85,7 +85,7 @@ impl ExchangeRates {
 			bail!("Exchange rate must be positive");
 		}
 
-		// to standardize lookups, base should be alphabetically before quote
+		// to standardize lookups, put base alphabetically before quote
 		let key = if base < quote {
 			(base, quote)
 		} else {
@@ -96,10 +96,11 @@ impl ExchangeRates {
 		if let Some(declared) =
 			self.get_exact_rate(&key, date, Declared)
 		{
-			// Check if the inferred rate is within 1% of the declared rate. If
-			// it is, ignore this inferred rate and use the declared; if not,
-			// then the declared rate is too far from reality on this date to be
-			// accurate, so we should error to stop tabulation here.
+			// Check if the inferred rate is within 1% of the
+			// declared rate. If it is, ignore this inferred rate
+			// and use the declared; if not, then the declared rate
+			// is too far from reality on this date to be accurate,
+			// so we should error to stop tabulation here.
 			if !within_tolerance_of(
 				Scalar::new(1, 2),
 				declared,
@@ -180,7 +181,7 @@ impl ExchangeRates {
 			)
 	}
 
-	/// Returns a rate that already exists for the *exact* passed date, if any.
+	/// Returns a rate that exists for the *exact* passed date, if any.
 	fn get_exact_rate(
 		&self,
 		key: &(String, String),

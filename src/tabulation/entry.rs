@@ -100,10 +100,10 @@ impl Entry {
 		self.details
 	}
 
-	/// Adjusts all Details for a certain currency to a certain resolution. In
-	/// doing so, precision may be lost, but not gained (because the extra
-	/// decimal places will just fill in with zeroes). This is more about the
-	/// clean display of currency amounts for reporting.
+	/// Adjusts all Details for a certain currency to a certain resolution.
+	/// In doing so, precision may be lost, but not gained (because the
+	/// extra decimal places will just fill in with zeroes). This is more
+	/// about the clean display of currency amounts for reporting.
 	pub fn set_resolution_for_currency(
 		&mut self,
 		currency: &String,
@@ -119,12 +119,13 @@ impl Entry {
 	}
 
 	/// Completes an entry. We have to pass the exchange rate set in here,
-	/// because this is where exchange rates are inferred in some cases, i.e. if
-	/// exactly two currencies are imbalanced.
+	/// because this is where exchange rates are inferred in some cases,
+	/// i.e. if exactly two currencies are imbalanced.
 	///
-	/// This method also handles the resolution of cost bases and their related
-	/// syntactical magic, particularly decomposing it such that it has the
-	/// appropriate effect on balances for the currency it was exchanged with.
+	/// This method also handles the resolution of cost bases and their
+	/// related syntactical magic, particularly decomposing it such that it
+	/// has the appropriate effect on balances for the currency it was
+	/// exchanged with.
 	pub fn finalize(
 		&mut self,
 		rates: &mut ExchangeRates,
@@ -137,11 +138,13 @@ impl Entry {
 			for mut d in cost_basis_details {
 				let cbd = d.cost_basis.take().unwrap();
 
-				// Move cost basis (after @ sign) component to virtual detail
-				// account, offsetting with conversion account. Effectively, we
-				// are manually creating an imbalance, but in the cost basis
-				// currency. The virtual account will then absorb it in the
-				// correct currency, alongside any other imbalances.
+				// Move cost basis (after @ sign) component to
+				// virtual detail account, offsetting with the
+				// conversion account. Effectively, we are
+				// manually creating an imbalance, but in the
+				// cost basis currency. The virtual account will
+				// then absorb it in the correct currency,
+				// alongside any other imbalances.
 				self.add_detail(
 					vd.clone(),
 					-cbd.unit_price * cbd.associated_amount,
@@ -166,8 +169,8 @@ impl Entry {
 
 		let mut imbalances = self.get_imbalances();
 
-		// Special case if exactly two currencies are unbalanced with no virtual
-		// account, in which case we net them against each other.
+		// Special case if exactly two currencies are unbalanced with no
+		// virtual account, in which case we net them against each other
 		if imbalances.len() == 2 && self.virtual_detail.is_none() {
 			self.multiline_implicit_currency_conversion(
 				&mut imbalances,
@@ -195,9 +198,9 @@ impl Entry {
 		Ok(())
 	}
 
-	/// This is a special case in which there is no virtual detail, but there
-	/// are exactly two lines that we can net against each other if they are
-	/// cardinally opposed.
+	/// This is a special case in which there is no virtual detail, but
+	/// there are exactly two lines that we can net against each other if
+	/// they are cardinally opposed.
 	fn multiline_implicit_currency_conversion(
 		&mut self,
 		imbalances: &mut Vec<(String, Scalar)>,
@@ -226,11 +229,13 @@ impl Entry {
 			cost_basis: None,
 		};
 
-		// This implies an exchange rate between the currencies, except in
-		// some cases related to cost basis processing where we've entered
-		// reconciling details manually and should not make assumptions here.
+		// This implies an exchange rate between the currencies, except
+		// in some cases related to cost basis processing where we've
+		// entered reconciling details manually and should not make
+		// assumptions here.
 		//
-		// We use a quick hack to make the underlying integer division nicer.
+		// We use a lame method here to make the underlying integer
+		// division nicer.
 		if can_infer_rates {
 			if amount1.abs() > amount2.abs() {
 				rates.infer(
@@ -255,7 +260,7 @@ impl Entry {
 		Ok(())
 	}
 
-	/// Find all currencies in the entry that do not sum to zero, with amounts
+	/// Find all currencies that don't sum to zero, with amounts
 	fn get_imbalances(&self) -> Vec<(String, Scalar)> {
 		// Collect the retained elements into a Vec
 		self.totals
@@ -444,7 +449,7 @@ mod tests {
 		assert!(result.is_ok());
 
 		let detail = &entry.get_details()[0];
-		assert_eq!(detail.amount.amount(), 12345); // Check for truncation
+		assert_eq!(detail.amount.amount(), 12345); // truncation check
 		assert_eq!(detail.amount.resolution(), 2);
 	}
 }

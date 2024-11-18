@@ -170,29 +170,26 @@ impl Date {
 		true
 	}
 
-	/// Today gets the current date, which I insisted upon doing this way just
-	/// to avoid importing another dependency! In my defense, it only executes
-	/// once per run of the program, and only for specific reports.
+	/// Today gets the current date, which I insisted upon doing this way
+	/// just to avoid importing another dependency! In my defense, it only
+	/// executes once per run of the program, and only for specific reports.
 	pub fn today() -> Date {
 		let d = TODAY.lock().unwrap();
 		if d.year > 0 {
 			return *d;
 		}
 
-		// Get the current time as seconds since the UNIX epoch
 		let now = SystemTime::now()
 			.duration_since(UNIX_EPOCH)
 			.expect("Time went backwards");
 		let seconds = now.as_secs();
 
-		// Calculate days since UNIX epoch and convert to a date
-		let days_since_epoch = seconds / 86400; // 86400 seconds in a day
+		let days_since_epoch = seconds / 86400;
 		let mut year = 1970;
 		let mut month = 1;
 		let mut day = 1;
 
 		let mut days = days_since_epoch as u32;
-		// Calculate the year
 		while days >= if Date::is_leap_year(year) { 366 } else { 365 } {
 			days -= if Date::is_leap_year(year) {
 				366
@@ -202,13 +199,11 @@ impl Date {
 			year += 1;
 		}
 
-		// Calculate the month
 		while days >= Date::days_in_month(year, month) as u32 {
 			days -= Date::days_in_month(year, month) as u32;
 			month += 1;
 		}
 
-		// Remaining days are the day of the month
 		day += days as u8;
 
 		let mut d = TODAY.lock().unwrap();
@@ -376,8 +371,9 @@ mod tests {
 
 	#[test]
 	fn test_end_of_month() {
+		// leap year test case
 		let date1 = Date::from_str("2024-01-31").unwrap();
-		let date2 = Date::from_str("2024-02-29").unwrap(); // Leap year
+		let date2 = Date::from_str("2024-02-29").unwrap();
 		let result = date1.until(&date2);
 		assert_eq!(
 			(

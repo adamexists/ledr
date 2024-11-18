@@ -119,8 +119,9 @@ fn main() -> Result<(), Error> {
 		},
 		Directive::OpenLots => {
 			// TODO: Add customization for this directive.
-			// TODO: Need to implement pretty-printing for this. Right now,
-			//  I've tested it but it has no output anymore.
+			// TODO: Need to implement pretty-printing for this.
+			//  Right now, I've tested it but it has no output
+			//  anymore.
 			ledger.lots.tabulate(&Date::today())?
 		},
 	}
@@ -129,7 +130,6 @@ fn main() -> Result<(), Error> {
 }
 
 fn financial_statement(args: &Cli, mut ledger: Ledger) -> Result<Total, Error> {
-	ledger.remove_cost_basis();
 	if let Some(collapse) = &args.collapse {
 		ledger.collapse_to(collapse.clone());
 	}
