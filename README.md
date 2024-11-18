@@ -38,6 +38,6 @@ but feel free to email me for any other reason!
 
 ## Copyright & License
 
-© Adam House 2024.
+Copyright © Adam House 2024 <adam@adamexists.com>
 
 Ledr is licensed under the GPLv3.
