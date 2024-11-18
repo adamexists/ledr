@@ -15,7 +15,7 @@ impl ExchangeRates {
     pub fn new() -> Self {
         Default::default()
     }
-    
+
     /// Add a new exchange rate declared via directive. Might fail if there is
     /// an existing declared rate on the same date.
     pub fn declare(&mut self, date: Date, base: String, quote: String, mut rate: Scalar) -> Result<(), Error> {
@@ -85,6 +85,7 @@ impl ExchangeRates {
         self.rates.entry(key).
             and_modify(|e| e.sort_by(|a, b| b.date.cmp(&a.date)));
         Ok(())
+        
     }
 
     /// Retrieve the most recent rate before a given date, if any

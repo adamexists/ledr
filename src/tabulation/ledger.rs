@@ -69,19 +69,13 @@ impl Ledger {
         currency: String,
         cost_basis: Option<CostBasisInput>,
     ) -> Result<(), Error> {
-        let declaration_date = match self.declared_currencies.get(&currency) {
-            Some(d) => d,
-            None => bail!("currency {} used without declaration", currency)
-        };
+        self.check_currency(&currency)?;
+        if let Some(cost_basis_currency) = &cost_basis {
+            self.check_currency(&cost_basis_currency.currency)?;
+        }
 
         if self.pending_entry.is_none() {
             bail!("orphaned entry detail")
-        }
-
-        if self.pending_entry.as_ref().unwrap().get_date() < declaration_date {
-            bail!("currency {} used prior to declaration on {}",
-                currency,
-                declaration_date)
         }
 
         if account.is_empty() {
@@ -124,15 +118,19 @@ impl Ledger {
                 CostBasis {
                     currency: cb.currency.clone(),
                     unit_price: cb.amount,
+                    associated_amount: money_amt, // TODO: Silly this is here
+                    associated_currency: currency.clone(), // TODO: Silly this is here
                 },
             )?;
-            
+
             cost_basis_input = Some(CostBasis {
                 unit_price: cb.amount,
                 currency: cb.currency,
+                associated_amount: money_amt,
+                associated_currency: currency.clone(),
             });
         }
-        
+
         self.pending_entry
             .as_mut()
             .unwrap()
@@ -165,6 +163,21 @@ impl Ledger {
             }
             None => panic!("pending_entry_date called without pending entry"),
         }
+    }
+
+    fn check_currency(&self, currency: &String) -> Result<(), Error> {
+        let declaration_date = match self.declared_currencies.get(currency) {
+            Some(d) => d,
+            None => bail!("currency {} used without declaration", currency)
+        };
+
+        if self.pending_entry.as_ref().unwrap().get_date() < declaration_date {
+            bail!("currency {} used prior to declaration on {}",
+                currency,
+                declaration_date)
+        }
+
+        Ok(())
     }
 
     // ----------------
@@ -261,6 +274,6 @@ pub enum CostBasisAmountType {
 pub struct CostBasisInput {
     pub(crate) amount: Scalar,
     pub(crate) amount_type: CostBasisAmountType,
-    
+
     pub(crate) currency: String,
 }

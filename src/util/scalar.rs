@@ -7,7 +7,7 @@ const MAX_RESOLUTION: u32 = 32; // TODO: Document.
 
 /// A general-purpose number, capable of holding an exact decimal value, backed
 /// by integer arithmetic and not float arithmetic.
-#[derive(Clone, Copy, Debug, Default, Hash)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Scalar {
     amount: i128,
     resolution: u32,
@@ -25,7 +25,7 @@ impl Scalar {
             resolution,
         }
     }
-    
+
     pub fn from_i128(amount: i128) -> Self {
         Self::new(amount, 0)
     }
@@ -260,7 +260,7 @@ impl Div<i128> for Scalar {
         if rhs == 0 {
             panic!("Attempt to divide by zero");
         }
-        
+
         let scalar = Scalar::from_i128(rhs);
         self / scalar
     }
@@ -284,7 +284,7 @@ impl DivAssign for Scalar {
         let (mut aligned_self, aligned_rhs, mut resolution) = self.align_resolution(&rhs);
 
         let initial_resolution = resolution;
-        
+
         // Scale the dividend until the division yields an integer, or until we reach MAX_RESOLUTION
         while aligned_self % aligned_rhs != 0 && resolution < MAX_RESOLUTION {
             aligned_self *= 10;

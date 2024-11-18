@@ -66,7 +66,7 @@ fn main() -> Result<(), Error> {
     let args = Cli::parse();
 
     let mut ledger = Ledger::new();
-    parse_ledger(&*args.file, &mut ledger)?;
+    parse_ledger(&args.file, &mut ledger)?;
 
     match args.command {
         Directive::BS => {

@@ -56,18 +56,34 @@ impl OrderedTotal {
         self.amounts.sort_by(|(a, _), (b, _)| a.cmp(b));
 
         // Sort subtotals by the absolute value of the sum of their Money components
-        self.subtotals.sort_by(|(_, a), (_, b)| {
+        // Sort subtotals by the absolute value of the sum of their Money components,
+        // then by sign (positive first), and finally alphabetically by account name
+        self.subtotals.sort_by(|(name_a, a), (name_b, b)| {
             let sum_a: Scalar = a
                 .amounts
                 .iter()
                 .map(|(_, money)| *money)
-                .sum::<Scalar>().abs();
+                .sum::<Scalar>();
             let sum_b: Scalar = b
                 .amounts
                 .iter()
                 .map(|(_, money)| *money)
-                .sum::<Scalar>().abs();
-            sum_b.partial_cmp(&sum_a).unwrap_or(std::cmp::Ordering::Equal)
+                .sum::<Scalar>();
+
+            let abs_sum_a = sum_a.abs();
+            let abs_sum_b = sum_b.abs();
+
+            // Compare by absolute value first
+            match abs_sum_b.partial_cmp(&abs_sum_a).unwrap_or(std::cmp::Ordering::Equal) {
+                std::cmp::Ordering::Equal => {
+                    // If absolute values are equal, prioritize positive values
+                    match (sum_b > 0).cmp(&(sum_a > 0)) {
+                        std::cmp::Ordering::Equal => name_a.cmp(name_b), // Fallback to account name
+                        other => other,
+                    }
+                }
+                other => other,
+            }
         });
 
         for (_, subtotal) in &mut self.subtotals {
@@ -196,9 +212,8 @@ impl OrderedTotal {
         println!("{:>width$}", "------------------", width = column_width);
         for (currency, amount) in &self.amounts {
             println!(
-                "{:>width$}  {}",
+                "{:>width$}",
                 format!("{} {}", currency, amount),
-                self.account,
                 width = column_width
             );
         }
