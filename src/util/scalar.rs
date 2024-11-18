@@ -252,7 +252,6 @@ impl Div for Scalar {
             panic!("Attempt to divide by zero");
         }
 
-        // TODO: This is slightly inefficient, but DRY.
         let mut result = self;
         result /= rhs;
         result

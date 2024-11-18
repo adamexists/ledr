@@ -29,7 +29,6 @@ pub struct Entry {
     date: Date,
     desc: String,
     details: Vec<Detail>,
-    is_finalized: bool,
 
     virtual_detail: Option<String>,
     totals: HashMap<String, Scalar>, // Currency -> Amount
@@ -42,7 +41,6 @@ impl Entry {
             desc,
             details: vec![],
             virtual_detail: None,
-            is_finalized: false,
             totals: HashMap::new(),
         }
     }
@@ -54,10 +52,6 @@ impl Entry {
         currency: String,
         cost_basis: Option<CostBasis>,
     ) -> Result<(), Error> {
-        if self.is_finalized {
-            bail!("entry already finalized")
-        }
-
         if account.is_empty() {
             bail!("account is blank")
         }
@@ -74,10 +68,6 @@ impl Entry {
     }
 
     pub fn set_virtual_detail(&mut self, account: String) -> Result<(), Error> {
-        if self.is_finalized {
-            bail!("entry already finalized")
-        }
-
         if self.virtual_detail.is_some() {
             bail!("only one line per entry may omit amount and currency")
         }
@@ -173,7 +163,6 @@ impl Entry {
         // account, in which case we net them against each other.
         if imbalances.len() == 2 && self.virtual_detail.is_none() {
             self.multiline_implicit_currency_conversion(&mut imbalances, rates, infer_rates)?;
-            self.is_finalized = true;
             return Ok(());
         }
 
@@ -192,7 +181,6 @@ impl Entry {
             }
         }
 
-        self.is_finalized = true;
         Ok(())
     }
 
@@ -328,7 +316,6 @@ mod tests {
         let entry = create_entry(0);
         assert_eq!(entry.get_date(), &sample_date(0));
         assert!(entry.get_details().is_empty());
-        assert!(!entry.is_finalized);
     }
 
     #[test]
@@ -402,7 +389,6 @@ mod tests {
 
         // Expect success since the entry is balanced
         assert!(result.is_ok());
-        assert!(entry.is_finalized);
     }
 
     // Test for setting virtual detail

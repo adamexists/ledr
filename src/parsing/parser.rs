@@ -23,8 +23,6 @@ use std::io;
 use std::io::{BufRead, Seek};
 use std::path::Path;
 
-// TODO: Implement strict account declaration.
-
 // First pass to process only directive lines
 fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
     let reader = io::BufReader::new(file);
@@ -47,6 +45,10 @@ fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
             }
 
             match parts[0] {
+                "account" if parts.len() == 2 => {
+                    let account = parts[1].to_string();
+                    ledger.declare_account(account, date)?;
+                }
                 "currency" if parts.len() == 2 => {
                     let currency = parts[1].to_string();
                     ledger.declare_currency(currency, date)?;

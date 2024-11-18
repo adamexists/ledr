@@ -3,6 +3,10 @@
 2024-11-10 ! currency USD
 2024-11-10 ! currency BTC
 
+2024-11-10 ! account Assets:Cash
+2024-11-10 ! account Assets:AR
+2024-11-10 ! account Equity:OpeningBalances
+
 2024-11-10 ! rate BTC USD 50000
 
 2024-11-10 Many Initial Balances Case

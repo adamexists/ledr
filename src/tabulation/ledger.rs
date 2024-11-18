@@ -34,15 +34,19 @@ use std::collections::HashMap;
 /// implement a parallel one for your language.
 pub const VALID_PREFIXES: [&str; 5] = ["Assets", "Liabilities", "Equity", "Income", "Expenses"];
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Ledger {
     entries: Vec<Entry>,
     /// entry currently being assembled, if any
     pending_entry: Option<Entry>,
-    is_finalized: bool,
+
+    /// Ignore currency and account directives
+    lenient_mode: bool,
 
     /// currency -> the earliest date currency is allowed to appear
     declared_currencies: HashMap<String, Date>,
+    /// account -> the earliest date account is allowed to appear
+    declared_accounts: HashMap<String, Date>,
 
     // other modules the ledger must populate or access
     pub exchange_rates: ExchangeRates,
@@ -50,8 +54,16 @@ pub struct Ledger {
 }
 
 impl Ledger {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new(lenient: bool) -> Self {
+        Self {
+            entries: vec![],
+            pending_entry: None,
+            lenient_mode: lenient,
+            declared_currencies: Default::default(),
+            declared_accounts: Default::default(),
+            exchange_rates: Default::default(),
+            lots: Default::default(),
+        }
     }
 
     // -----------
@@ -59,11 +71,29 @@ impl Ledger {
     // -----------
 
     pub fn declare_currency(&mut self, currency: String, date: Date) -> Result<(), Error> {
+        if self.lenient_mode {
+            return Ok(());
+        }
+
         if self.declared_currencies.contains_key(&currency) {
             bail!("currency {} declared twice", currency)
         }
 
         self.declared_currencies.insert(currency.clone(), date);
+
+        Ok(())
+    }
+
+    pub fn declare_account(&mut self, account: String, date: Date) -> Result<(), Error> {
+        if self.lenient_mode {
+            return Ok(());
+        }
+
+        if self.declared_accounts.contains_key(&account) {
+            bail!("account {} declared twice", account)
+        }
+
+        self.declared_accounts.insert(account.clone(), date);
 
         Ok(())
     }
@@ -84,7 +114,9 @@ impl Ledger {
         currency: String,
         cost_basis: Option<CostBasisInput>,
     ) -> Result<(), Error> {
+        self.check_account(&account)?;
         self.check_currency(&currency)?;
+
         if let Some(cost_basis_currency) = &cost_basis {
             self.check_currency(&cost_basis_currency.currency)?;
         }
@@ -115,6 +147,11 @@ impl Ledger {
             if cb.amount_type == TotalCost {
                 cb.amount /= money_amt;
             }
+
+            // A cost basis has the authority of a declaration in many ways,
+            // but in case there are multiple intraday transactions that differ
+            // from each other (as day traders etc. experience all the time),
+            // we must treat them as inferred rates here.
             self.exchange_rates.infer(
                 self.pending_entry_date(),
                 currency.clone(),
@@ -147,6 +184,8 @@ impl Ledger {
     }
 
     pub fn set_virtual_detail(&mut self, account: String) -> Result<(), Error> {
+        self.check_account(&account)?;
+
         if self.pending_entry.is_none() {
             bail!("orphaned entry detail")
         }
@@ -176,7 +215,7 @@ impl Ledger {
     }
 
     /// Checks whether a currency has been declared for use, and checks the
-    /// pending entry ot make sure the declaration date is not ahead of the
+    /// pending entry to make sure the declaration date is not ahead of the
     /// pending entry where the currency appears.
     fn check_currency(&self, currency: &String) -> Result<(), Error> {
         let declaration_date = match self.declared_currencies.get(currency) {
@@ -188,6 +227,26 @@ impl Ledger {
             bail!(
                 "currency {} used prior to declaration on {}",
                 currency,
+                declaration_date
+            )
+        }
+
+        Ok(())
+    }
+
+    /// Checks whether an account has been declared for use, and checks the
+    /// pending entry to make sure the declaration date is not ahead of the
+    /// pending entry where the account appears.
+    fn check_account(&self, account: &String) -> Result<(), Error> {
+        let declaration_date = match self.declared_accounts.get(account) {
+            Some(d) => d,
+            None => bail!("account {} used without declaration", account),
+        };
+
+        if self.pending_entry.as_ref().unwrap().get_date() < declaration_date {
+            bail!(
+                "account {} used prior to declaration on {}",
+                account,
                 declaration_date
             )
         }
@@ -285,8 +344,8 @@ pub enum CostBasisAmountType {
 
 #[derive(Debug)]
 pub struct CostBasisInput {
-    pub(crate) amount: Scalar,
-    pub(crate) amount_type: CostBasisAmountType,
+    pub amount: Scalar,
+    pub amount_type: CostBasisAmountType,
 
-    pub(crate) currency: String,
+    pub currency: String,
 }

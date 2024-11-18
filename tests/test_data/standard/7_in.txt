@@ -2,6 +2,9 @@
 2024-11-10 ! currency ETH
 2024-11-10 ! currency USD
 
+2024-11-10 ! account Assets:Cash
+2024-11-10 ! account Assets:Investments:ETH
+
 # This one should be allowed, and should result in:
 #  1. -3000 USD posting to Assets:Cash on the virtual entry
 #  2. -3100 CAD posting to Assets:Cash on the virtual entry

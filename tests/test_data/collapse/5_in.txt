@@ -2,6 +2,9 @@
 2024-11-10 ! currency BTC
 2024-11-10 ! currency ETH
 
+2024-11-10 ! account Assets:Investments:ETH
+2024-11-10 ! account Assets:Cash
+
 # Test multiline implicit currency conversion
 
 2024-11-10 Multiline Implicit Conversion (Normal)

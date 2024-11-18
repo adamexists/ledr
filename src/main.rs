@@ -27,8 +27,8 @@ mod reports;
 mod tabulation;
 mod util;
 
+// TODO: scdoc and man page!
 // TODO: Do a sweep for the usefulness of errors.
-// TODO: Sweep "pub" stuff that can actually be "pub(crate)".
 
 #[derive(Parser)]
 #[command(name = "ledr", version = "1.0", about = "Plain text accounting tool")]
@@ -62,6 +62,10 @@ struct Cli {
     #[arg(short, long)]
     invert: bool,
 
+    /// Ignore directives designed to catch and correct bad input data
+    #[arg(long)]
+    lenient: bool,
+
     /// Maximum amount of decimal places to show for any amounts
     #[arg(short, long)]
     precision: Option<u32>,
@@ -78,7 +82,7 @@ enum Directive {
 fn main() -> Result<(), Error> {
     let args = Cli::parse();
 
-    let mut ledger = Ledger::new();
+    let mut ledger = Ledger::new(args.lenient);
     parse_ledger(&args.file, &mut ledger)?;
 
     match args.command {
