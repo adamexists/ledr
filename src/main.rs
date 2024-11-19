@@ -14,7 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::parsing::parser::parse_ledger;
+use crate::parsing::parser::parse;
 use crate::reports::ordered_total::OrderedTotal;
 use crate::tabulation::total::Total;
 use crate::util::date::Date;
@@ -82,7 +82,7 @@ fn main() -> Result<(), Error> {
 	let args = Cli::parse();
 
 	let mut ledger = Ledger::new(args.lenient);
-	parse_ledger(&args.file, &mut ledger)?;
+	parse(&args.file, &mut ledger)?;
 
 	match args.command {
 		Directive::BS => {

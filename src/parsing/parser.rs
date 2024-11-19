@@ -23,8 +23,16 @@ use std::io;
 use std::io::{BufRead, Seek};
 use std::path::Path;
 
-// First pass to process only directive lines
-fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
+/// First pass to process only directive lines. Include statements in the file
+/// may cause this to be called recursively, so it uses the passed Ledger struct
+/// to keep track of files it's traversed before, and block circular inclusion.
+fn first_pass(
+	path: &str,
+	file: &File,
+	ledger: &mut Ledger,
+) -> Result<(), Error> {
+	ledger.declare_file(path)?;
+
 	let reader = io::BufReader::new(file);
 
 	for (i, line) in reader.lines().enumerate() {
@@ -32,6 +40,23 @@ fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 
 		// Skip blank lines and comments
 		if line.is_empty() || line.starts_with("#") {
+			continue;
+		}
+
+		// Handle includes, which recursively first_passes when seen
+		// TODO: Document how includes work. They are not directives
+		//  because they do not include a date. The file path is
+		//  relative to the working directory, so the best practice is
+		//  to use fully qualified paths for include directives.
+		if line.starts_with("include") {
+			let include: Vec<&str> =
+				line.split_whitespace().collect();
+			if include.len() != 2 {
+				bail!("Invalid include (line {})", i)
+			}
+
+			let file = file_from_path(include[1])?;
+			first_pass(include[1], &file, ledger)?;
 			continue;
 		}
 
@@ -97,7 +122,10 @@ fn first_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 	Ok(())
 }
 
-// Second pass to process everything else
+/// Second pass to process everything else other than directives. Include
+/// statements may cause this method to call itself recursively, but it does
+/// not need to keep track of where it is to avoid circular include statements
+/// because first_pass has already done that.
 fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 	let reader = io::BufReader::new(file);
 
@@ -107,6 +135,18 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 	while let Some(Ok(line)) = lines.next() {
 		i += 1;
 		let l = line.trim();
+
+		// Handle includes, which recursively second_passes when seen.
+		// No need to check the structure of the include because the
+		// first pass would've failed by now if it were invalid.
+		if line.starts_with("include") {
+			let include: Vec<&str> =
+				line.split_whitespace().collect();
+
+			let file = file_from_path(include[1])?;
+			second_pass(&file, ledger)?;
+			continue;
+		}
 
 		// ignore comment lines completely and skip directives
 		// TODO: Document the ! as an illegal character bc directives
@@ -208,13 +248,18 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 /// contents of the file. The only exception is that when multiple implicit
 /// currency conversions occur in the same day between the same currencies, all
 /// reporting will use the latest one processed in the file. TODO: Manpage this.
-pub fn parse_ledger(file_path: &str, ledger: &mut Ledger) -> Result<(), Error> {
-	let path = Path::new(file_path);
-	let mut file = File::open(path)?;
+pub fn parse(path: &str, ledger: &mut Ledger) -> Result<(), Error> {
+	let mut file = file_from_path(path)?;
 
-	first_pass(&file, ledger)?;
+	first_pass(&path, &file, ledger)?;
 	file.rewind()?;
 	second_pass(&file, ledger)?;
 
 	Ok(())
+}
+
+fn file_from_path(file_path: &str) -> Result<File, Error> {
+	let path = Path::new(file_path);
+	let file = File::open(path)?;
+	Ok(file)
 }

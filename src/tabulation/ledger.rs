@@ -23,7 +23,7 @@ use crate::util::date::Date;
 use crate::util::scalar::Scalar;
 use anyhow::{bail, Error};
 use std::cmp::min;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// The only valid top-level account names. This is an accounting system, after
 /// all! Society has rules! Granted, there is no functional reason to have this
@@ -48,6 +48,9 @@ pub struct Ledger {
 	declared_currencies: HashMap<String, Date>,
 	/// account -> the earliest date account is allowed to appear
 	declared_accounts: HashMap<String, Date>,
+	/// set of file paths that have been passed to this ledger, used to
+	/// avoid circular includes
+	included_files: HashSet<String>,
 
 	// other modules the ledger must populate or access
 	pub exchange_rates: ExchangeRates,
@@ -62,6 +65,7 @@ impl Ledger {
 			lenient_mode: lenient,
 			declared_currencies: Default::default(),
 			declared_accounts: Default::default(),
+			included_files: Default::default(),
 			exchange_rates: Default::default(),
 			lots: Default::default(),
 		}
@@ -70,6 +74,14 @@ impl Ledger {
 	// -----------
 	// -- INPUT --
 	// -----------
+
+	pub fn declare_file(&mut self, file_path: &str) -> Result<(), Error> {
+		if self.included_files.contains(file_path) {
+			bail!("Circular file includes: {}", file_path)
+		}
+		self.included_files.insert(file_path.parse()?);
+		Ok(())
+	}
 
 	pub fn declare_currency(
 		&mut self,
