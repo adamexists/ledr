@@ -13,11 +13,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-
 use crate::tabulation::ledger::{CostBasisAmountType, CostBasisInput, Ledger};
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
 use anyhow::{anyhow, bail, Error};
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, Seek};
@@ -36,10 +36,10 @@ fn first_pass(
 	let reader = io::BufReader::new(file);
 
 	for (i, line) in reader.lines().enumerate() {
-		let line = line?.trim().to_string();
+		let l = line?.trim().to_string();
 
 		// Skip blank lines and comments
-		if line.is_empty() || line.starts_with("#") {
+		if l.is_empty() || l.starts_with("#") {
 			continue;
 		}
 
@@ -48,9 +48,8 @@ fn first_pass(
 		//  because they do not include a date. The file path is
 		//  relative to the working directory, so the best practice is
 		//  to use fully qualified paths for include directives.
-		if line.starts_with("include") {
-			let include: Vec<&str> =
-				line.split_whitespace().collect();
+		if l.starts_with("include") {
+			let include: Vec<&str> = l.split_whitespace().collect();
 			if include.len() != 2 {
 				bail!("Invalid include (line {})", i)
 			}
@@ -60,43 +59,37 @@ fn first_pass(
 			continue;
 		}
 
-		// Handle directive lines starting with a date and '!'
-		let directive = line.split_once('!');
-		if directive.is_none() {
-			continue;
-		}
-		let (date_str, remainder) = directive.unwrap();
+		let mut directive: VecDeque<&str> = match l.strip_prefix("!") {
+			None => continue,
+			Some(d) => d.split_whitespace().collect(),
+		};
 
+		if directive.len() < 2 {
+			bail!("Invalid directive (line {}): {}", i + 1, l);
+		}
+
+		let date_str = directive.pop_front().unwrap();
 		let date = Date::from_str(date_str.trim())
 			.map_err(|e| anyhow!("{} (line {})", e, i))?;
-		let parts: Vec<&str> = remainder.split_whitespace().collect();
 
-		if parts.is_empty() {
-			bail!(
-				"Invalid directive format (line {}): {}",
-				i + 1,
-				line
-			);
-		}
-
-		match parts[0] {
-			"account" if parts.len() == 2 => {
-				let account = parts[1].to_string();
+		match directive[0] {
+			"account" if directive.len() == 2 => {
+				let account = directive[1].to_string();
 				ledger.declare_account(account, date).map_err(
 					|e| anyhow!("{} (line {})", e, i),
 				)?;
 			},
-			"currency" if parts.len() == 2 => {
-				let currency = parts[1].to_string();
+			"currency" if directive.len() == 2 => {
+				let currency = directive[1].to_string();
 				ledger.declare_currency(currency, date)
 					.map_err(|e| {
 						anyhow!("{} (line {})", e, i)
 					})?;
 			},
-			"rate" if parts.len() == 4 => {
-				let from = parts[1].to_string();
-				let to = parts[2].to_string();
-				let rate = parts[3];
+			"rate" if directive.len() == 4 => {
+				let from = directive[1].to_string();
+				let to = directive[2].to_string();
+				let rate = directive[3];
 				ledger.exchange_rates
 					.declare(
 						date,
@@ -111,11 +104,7 @@ fn first_pass(
 						anyhow!("{} (line {})", e, i)
 					})?;
 			},
-			_ => bail!(
-				"Invalid directive or arguments (line {}): {}",
-				i + 1,
-				line,
-			),
+			_ => bail!("Invalid directive (line {}): {}", i + 1, l),
 		}
 	}
 
@@ -136,6 +125,13 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 		i += 1;
 		let l = line.trim();
 
+		// If a line is blank, this entry is over (or we are not in one)
+		if l.is_empty() {
+			ledger.finish_entry()
+				.map_err(|e| anyhow!("{} (line {})", e, i))?;
+			continue;
+		}
+
 		// Handle includes, which recursively second_passes when seen.
 		// No need to check the structure of the include because the
 		// first pass would've failed by now if it were invalid.
@@ -148,17 +144,18 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 			continue;
 		}
 
-		// ignore comment lines completely and skip directives
-		// TODO: Document the ! as an illegal character bc directives
-		if l.starts_with("#") || l.contains('!') {
+		// ignore comment lines and directives
+		if l.starts_with("#") || l.starts_with('!') {
 			continue;
 		}
 
-		// Skip blank lines or process them as a signal to finish an entry
-		if l.is_empty() {
-			ledger.finish_entry()
-				.map_err(|e| anyhow!("{} (line {})", e, i))?;
-			continue;
+		// Lines that start with two slashes are reference lines.
+		// Empty references are fine; they just do nothing
+		if l.starts_with("//") && l.len() > 2 {
+			let content = l[2..].trim();
+			if !content.is_empty() {
+				ledger.add_reference(content.to_string())?;
+			}
 		}
 
 		// Handle entry declaration lines with a date and description

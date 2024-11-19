@@ -32,6 +32,7 @@ pub struct Entry {
 
 	virtual_detail: Option<String>,
 	totals: HashMap<String, Scalar>, // Currency -> Amount
+	reference: Option<String>,       // optional string, not inspected
 }
 
 impl Entry {
@@ -42,6 +43,7 @@ impl Entry {
 			details: vec![],
 			virtual_detail: None,
 			totals: HashMap::new(),
+			reference: None,
 		}
 	}
 
@@ -83,6 +85,25 @@ impl Entry {
 
 		self.virtual_detail = Some(account);
 		Ok(())
+	}
+
+	/// Adds a reference to the entry, to be used for reference purposes.
+	/// The system is guaranteed not to analyze it or use it for any reason
+	/// or purpose. Some reports and queries will display it, however.
+	///
+	/// If a note is already present, it appends the two, separated by one
+	/// newline character.
+	pub fn add_reference(&mut self, reference: String) {
+		match &mut self.reference {
+			Some(existing_note) => {
+				existing_note.push('\n');
+				existing_note.push_str(&reference.trim());
+			},
+			None => {
+				self.reference =
+					Some(reference.trim().to_string());
+			},
+		}
 	}
 
 	pub fn get_date(&self) -> &Date {

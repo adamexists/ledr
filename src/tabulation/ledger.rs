@@ -230,6 +230,16 @@ impl Ledger {
 			.set_virtual_detail(account)
 	}
 
+	pub fn add_reference(
+		&mut self,
+		reference: String,
+	) -> Result<(), Error> {
+		match &mut self.pending_entry {
+			Some(e) => Ok(e.add_reference(reference)),
+			None => bail!("Orphaned reference"),
+		}
+	}
+
 	pub fn finish_entry(&mut self) -> Result<(), Error> {
 		match self.pending_entry.take() {
 			None => Ok(()),
@@ -241,7 +251,7 @@ impl Ledger {
 		}
 	}
 
-	pub fn pending_entry_date(&self) -> Date {
+	fn pending_entry_date(&self) -> Date {
 		match &self.pending_entry {
 			Some(e) => *e.get_date(),
 			None => panic!("pending_entry_date has no entry"),
