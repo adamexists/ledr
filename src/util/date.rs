@@ -43,6 +43,14 @@ pub struct Duration {
 }
 
 impl Date {
+	pub fn new(y: u32, m: u8, d: u8) -> Date {
+		Date {
+			year: y,
+			month: m,
+			day: d,
+		}
+	}
+
 	/// Constructor to parse a string in the "YYYY-mm-dd" format
 	pub fn from_str(date_str: &str) -> Result<Date, Error> {
 		let parts: Vec<&str> = date_str.split('-').collect();
@@ -60,14 +68,6 @@ impl Date {
 		}
 
 		Ok(Date { year, month, day })
-	}
-
-	pub fn from_ymd(y: u32, m: u8, d: u8) -> Date {
-		Date {
-			year: y,
-			month: m,
-			day: d,
-		}
 	}
 
 	/// Calculate the duration in calendar years, months, and days, and the

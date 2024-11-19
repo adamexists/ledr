@@ -120,3 +120,193 @@ impl Total {
 		}
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::tabulation::entry::Detail;
+	use crate::util::scalar::Scalar;
+
+	#[test]
+	fn test_total_initialization() {
+		let total = Total::new();
+		assert_eq!(total.account, "");
+		assert_eq!(total.amounts.len(), 0);
+		assert_eq!(total.subtotals.len(), 0);
+		assert_eq!(total.depth, 0);
+	}
+
+	#[test]
+	fn test_ingest_details_single_detail() {
+		let mut total = Total::new();
+		let detail = Detail::new(
+			"Assets:Cash".to_string(),
+			"USD".to_string(),
+			Scalar::new(1000, 1),
+		);
+		total.ingest_details(&vec![detail]);
+
+		assert_eq!(total.subtotals.len(), 1);
+		assert!(total.subtotals.contains_key("Assets"));
+		assert_eq!(total.subtotals["Assets"].subtotals.len(), 1);
+		assert!(total.subtotals["Assets"]
+			.subtotals
+			.contains_key("Cash"));
+
+		let cash_total = &total.subtotals["Assets"].subtotals["Cash"];
+		assert_eq!(
+			cash_total.amounts.get("USD"),
+			Some(&Scalar::new(1000, 1))
+		);
+	}
+
+	#[test]
+	fn test_ingest_details_multiple_details_same_currency() {
+		let mut total = Total::new();
+		let details = vec![
+			Detail::new(
+				"Assets:Cash".to_string(),
+				"USD".to_string(),
+				Scalar::new(1000, 1),
+			),
+			Detail::new(
+				"Assets:AR".to_string(),
+				"USD".to_string(),
+				Scalar::new(2000, 1),
+			),
+		];
+		total.ingest_details(&details);
+
+		assert_eq!(total.subtotals.len(), 1);
+		assert!(total.subtotals.contains_key("Assets"));
+
+		let assets_total = &total.subtotals["Assets"];
+		assert_eq!(assets_total.subtotals.len(), 2);
+		assert!(assets_total.subtotals.contains_key("Cash"));
+		assert!(assets_total.subtotals.contains_key("AR"));
+
+		let cash_total = &assets_total.subtotals["Cash"];
+		let ar_total = &assets_total.subtotals["AR"];
+		assert_eq!(
+			cash_total.amounts.get("USD"),
+			Some(&Scalar::new(1000, 1))
+		);
+		assert_eq!(
+			ar_total.amounts.get("USD"),
+			Some(&Scalar::new(2000, 1))
+		);
+	}
+
+	#[test]
+	fn test_ingest_details_hierarchy() {
+		let mut total = Total::new();
+		let detail = Detail::new(
+			"Liabilities:Short-Term:CreditCard".to_string(),
+			"EUR".to_string(),
+			Scalar::new(500, 1),
+		);
+		total.ingest_details(&vec![detail]);
+
+		assert_eq!(total.subtotals.len(), 1);
+		assert!(total.subtotals.contains_key("Liabilities"));
+
+		let liabilities_total = &total.subtotals["Liabilities"];
+		assert!(liabilities_total.subtotals.contains_key("Short-Term"));
+
+		let short_term_total =
+			&liabilities_total.subtotals["Short-Term"];
+		assert!(short_term_total.subtotals.contains_key("CreditCard"));
+
+		let credit_card_total =
+			&short_term_total.subtotals["CreditCard"];
+		assert_eq!(
+			credit_card_total.amounts.get("EUR"),
+			Some(&Scalar::new(500, 1))
+		);
+	}
+
+	#[test]
+	fn test_filter_top_level() {
+		let mut total = Total::new();
+		total.ingest_details(&vec![
+			Detail::new(
+				"Assets:Cash".to_string(),
+				"USD".to_string(),
+				Scalar::new(1000, 1),
+			),
+			Detail::new(
+				"Liabilities:CreditCard".to_string(),
+				"USD".to_string(),
+				Scalar::new(500, 1),
+			),
+		]);
+
+		total.filter_top_level(vec!["Assets"]);
+		assert_eq!(total.subtotals.len(), 1);
+		assert!(total.subtotals.contains_key("Assets"));
+		assert!(!total.subtotals.contains_key("Liabilities"));
+
+		let assets_total = &total.subtotals["Assets"];
+		assert_eq!(
+			assets_total.amounts.get("USD"),
+			Some(&Scalar::new(1000, 1))
+		);
+	}
+
+	#[test]
+	fn test_invert() {
+		let mut total = Total::new();
+		total.ingest_details(&vec![
+			Detail::new(
+				"Income:Sales".to_string(),
+				"USD".to_string(),
+				Scalar::new(3000, 1),
+			),
+			Detail::new(
+				"Expenses:Rent".to_string(),
+				"USD".to_string(),
+				Scalar::new(1000, 1),
+			),
+		]);
+
+		total.invert();
+
+		let sales_total = &total.subtotals["Income"].subtotals["Sales"];
+		let rent_total = &total.subtotals["Expenses"].subtotals["Rent"];
+
+		assert_eq!(
+			sales_total.amounts.get("USD"),
+			Some(&Scalar::new(-3000, 1))
+		);
+		assert_eq!(
+			rent_total.amounts.get("USD"),
+			Some(&Scalar::new(-1000, 1))
+		);
+	}
+
+	#[test]
+	fn test_no_subtotals_in_empty_total() {
+		let total = Total::new();
+		assert!(total.subtotals.is_empty());
+	}
+
+	#[test]
+	fn test_filter_top_level_empty_filter() {
+		let mut total = Total::new();
+		total.ingest_details(&vec![
+			Detail::new(
+				"Assets:Cash".to_string(),
+				"USD".to_string(),
+				Scalar::new(1000, 1),
+			),
+			Detail::new(
+				"Liabilities:CreditCard".to_string(),
+				"USD".to_string(),
+				Scalar::new(500, 1),
+			),
+		]);
+
+		total.filter_top_level(vec![]);
+		assert!(total.subtotals.is_empty());
+	}
+}

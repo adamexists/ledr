@@ -139,11 +139,14 @@ impl Ledger {
 		currency: String,
 		cost_basis: Option<CostBasisInput>,
 	) -> Result<(), Error> {
-		self.check_account(&account)?;
-		self.check_currency(&currency)?;
-
-		if let Some(cost_basis_currency) = &cost_basis {
-			self.check_currency(&cost_basis_currency.currency)?;
+		if !self.lenient_mode {
+			self.check_account(&account)?;
+			self.check_currency(&currency)?;
+			if let Some(cost_basis_currency) = &cost_basis {
+				self.check_currency(
+					&cost_basis_currency.currency,
+				)?;
+			}
 		}
 
 		if self.pending_entry.is_none() {
@@ -213,7 +216,9 @@ impl Ledger {
 		&mut self,
 		account: String,
 	) -> Result<(), Error> {
-		self.check_account(&account)?;
+		if !self.lenient_mode {
+			self.check_account(&account)?;
+		}
 
 		if self.pending_entry.is_none() {
 			bail!("Orphaned entry detail")
@@ -384,4 +389,237 @@ pub struct CostBasisInput {
 	pub amount_type: CostBasisAmountType,
 
 	pub currency: String,
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::util::date::Date;
+
+	#[test]
+	fn test_ledger_initialization() {
+		let ledger = Ledger::new(true);
+		assert!(ledger.entries.is_empty());
+		assert!(ledger.pending_entry.is_none());
+		assert!(ledger.declared_currencies.is_empty());
+		assert!(ledger.declared_accounts.is_empty());
+		assert!(ledger.included_files.is_empty());
+		assert!(ledger.lenient_mode);
+	}
+
+	#[test]
+	fn test_declare_file() {
+		let mut ledger = Ledger::new(false);
+		assert!(ledger.declare_file("path/to/file").is_ok());
+		assert!(ledger.included_files.contains("path/to/file"));
+		assert!(ledger.declare_file("path/to/file").is_err());
+	}
+
+	#[test]
+	fn test_declare_currency() {
+		let mut ledger = Ledger::new(false);
+		let date = Date::new(2024, 1, 1);
+
+		assert!(ledger
+			.declare_currency("USD".to_string(), date)
+			.is_ok());
+		assert!(ledger.declared_currencies.contains_key("USD"));
+
+		assert!(ledger
+			.declare_currency("USD".to_string(), date)
+			.is_err());
+	}
+
+	#[test]
+	fn test_declare_account() {
+		let mut ledger = Ledger::new(false);
+		let date = Date::new(2024, 1, 1);
+
+		assert!(ledger
+			.declare_account("Assets:Cash".to_string(), date)
+			.is_ok());
+		assert!(ledger.declared_accounts.contains_key("Assets:Cash"));
+
+		assert!(ledger
+			.declare_account("Assets:Cash".to_string(), date)
+			.is_err());
+	}
+
+	#[test]
+	fn test_new_entry() {
+		let mut ledger = Ledger::new(false);
+		let date = Date::new(2024, 1, 1);
+
+		assert!(ledger
+			.new_entry(date, "Test Entry".to_string())
+			.is_ok());
+		assert!(ledger.pending_entry.is_some());
+		assert_eq!(ledger.pending_entry_date(), date);
+	}
+
+	#[test]
+	fn test_add_detail_valid() {
+		let mut ledger = Ledger::new(false);
+		let date = Date::new(2024, 1, 1);
+		ledger.declare_currency("USD".to_string(), date).unwrap();
+		ledger.declare_account("Assets:Cash".to_string(), date)
+			.unwrap();
+
+		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
+
+		assert!(ledger
+			.add_detail(
+				"Assets:Cash".to_string(),
+				"100.0".to_string(),
+				"USD".to_string(),
+				None
+			)
+			.is_ok());
+	}
+
+	#[test]
+	fn test_add_detail_invalid_currency() {
+		let mut ledger = Ledger::new(false);
+		let date = Date::new(2024, 1, 1);
+		ledger.declare_account("Assets:Cash".to_string(), date)
+			.unwrap();
+
+		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
+
+		assert!(ledger
+			.add_detail(
+				"Assets:Cash".to_string(),
+				"100.0".to_string(),
+				"EUR".to_string(),
+				None
+			)
+			.is_err());
+	}
+
+	#[test]
+	fn test_add_detail_invalid_account() {
+		let mut ledger = Ledger::new(false);
+		let date = Date::new(2024, 1, 1);
+		ledger.declare_currency("USD".to_string(), date).unwrap();
+
+		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
+
+		assert!(ledger
+			.add_detail(
+				"Liabilities:Loan".to_string(),
+				"100.0".to_string(),
+				"USD".to_string(),
+				None
+			)
+			.is_err());
+	}
+
+	#[test]
+	fn test_add_detail_orphaned_entry() {
+		let mut ledger = Ledger::new(false);
+
+		assert!(ledger
+			.add_detail(
+				"Assets:Cash".to_string(),
+				"100.0".to_string(),
+				"USD".to_string(),
+				None
+			)
+			.is_err());
+	}
+
+	#[test]
+	fn test_finish_entry() {
+		let mut ledger = Ledger::new(false);
+		let date = Date::new(2024, 1, 1);
+		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
+		assert!(ledger.finish_entry().is_ok());
+		assert!(ledger.pending_entry.is_none());
+		assert_eq!(ledger.entries.len(), 1);
+	}
+
+	#[test]
+	fn test_check_currency_before_declaration() {
+		let mut ledger = Ledger::new(false);
+		let date = Date::new(2024, 1, 1);
+		ledger.declare_currency(
+			"USD".to_string(),
+			Date::new(2024, 1, 2),
+		)
+		.unwrap();
+
+		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
+		let result = ledger.check_currency(&"USD".to_string());
+
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_check_account_before_declaration() {
+		let mut ledger = Ledger::new(false);
+		let date = Date::new(2024, 1, 1);
+		ledger.declare_account(
+			"Assets:Cash".to_string(),
+			Date::new(2024, 1, 2),
+		)
+		.unwrap();
+
+		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
+		let result = ledger.check_account(&"Assets:Cash".to_string());
+
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_add_detail_without_currency_declaration_in_lenient_mode() {
+		let mut ledger = Ledger::new(true);
+		let date = Date::new(2024, 1, 1);
+
+		ledger.new_entry(date, "Lenient Test Entry".to_string())
+			.unwrap();
+
+		assert!(ledger
+			.add_detail(
+				"Assets:Cash".to_string(),
+				"50.0".to_string(),
+				"EUR".to_string(),
+				None
+			)
+			.is_ok());
+	}
+
+	#[test]
+	fn test_add_detail_without_account_declaration_in_lenient_mode() {
+		let mut ledger = Ledger::new(true);
+		let date = Date::new(2024, 1, 1);
+
+		ledger.new_entry(date, "Lenient Test Entry".to_string())
+			.unwrap();
+
+		assert!(ledger
+			.add_detail(
+				"Liabilities:Loan".to_string(),
+				"100.0".to_string(),
+				"USD".to_string(),
+				None
+			)
+			.is_ok());
+	}
+
+	#[test]
+	fn test_set_virtual_detail_without_account_declaration_in_lenient_mode()
+	{
+		let mut ledger = Ledger::new(true);
+		let date = Date::new(2024, 1, 1);
+
+		ledger.new_entry(
+			date,
+			"Lenient Virtual Detail Test".to_string(),
+		)
+		.unwrap();
+
+		assert!(ledger
+			.set_virtual_detail("Equity:OpeningBalance".to_string())
+			.is_ok());
+	}
 }

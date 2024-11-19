@@ -380,29 +380,142 @@ impl PartialOrd<i128> for Scalar {
 mod tests {
 	use super::*;
 
+	// ---------------
+	// -- ADD TESTS --
+	// ---------------
+
 	#[test]
-	fn test_set_resolution() {
-		let mut money = Scalar::from_str("123.45").unwrap();
-		assert_eq!(money.amount, 12345);
-		assert_eq!(money.resolution, 2);
-		money.set_resolution(0);
-		assert_eq!(money.amount, 123);
-		assert_eq!(money.resolution, 0);
-
-		let mut money = Scalar::from_str("123.4567").unwrap();
-		assert_eq!(money.amount, 1234567);
-		assert_eq!(money.resolution, 4);
-		money.set_resolution(6);
-		assert_eq!(money.amount, 123456700);
-		assert_eq!(money.resolution, 6);
-
-		let mut money = Scalar::from_str("123.45").unwrap();
-		assert_eq!(money.amount, 12345);
-		assert_eq!(money.resolution, 2);
-		money.set_resolution(2);
-		assert_eq!(money.amount, 12345);
-		assert_eq!(money.resolution, 2);
+	fn test_add_same_resolution() {
+		let scalar1 = Scalar::from_str("1.50").unwrap();
+		let scalar2 = Scalar::from_str("2.50").unwrap();
+		let result = scalar1 + scalar2;
+		assert_eq!(result.amount, 400);
+		assert_eq!(result.resolution, 2);
 	}
+
+	#[test]
+	fn test_add_different_resolutions() {
+		let scalar1 = Scalar::from_str("1.5").unwrap();
+		let scalar2 = Scalar::from_str("0.25").unwrap();
+		let result = scalar1 + scalar2;
+		assert_eq!(result.amount, 175);
+		assert_eq!(result.resolution, 2);
+	}
+
+	#[test]
+	fn test_add_with_negative_value() {
+		let scalar1 = Scalar::from_str("2.500").unwrap();
+		let scalar2 = Scalar::from_str("-1.500").unwrap();
+		let result = scalar1 + scalar2;
+		assert_eq!(result.amount, 1000);
+		assert_eq!(result.resolution, 3);
+	}
+
+	#[test]
+	fn test_add_large_numbers() {
+		let scalar1 = Scalar::from_str("1000000000.00").unwrap();
+		let scalar2 = Scalar::from_str("2000000000.00").unwrap();
+		let result = scalar1 + scalar2;
+		assert_eq!(result.amount, 300000000000);
+		assert_eq!(result.resolution, 2);
+	}
+
+	// ---------------------
+	// -- ADDASSIGN TESTS --
+	// ---------------------
+
+	#[test]
+	fn test_add_assign_same_resolution() {
+		let mut scalar = Scalar::from_str("1.50").unwrap();
+		let other = Scalar::from_str("2.50").unwrap();
+		scalar += other;
+		assert_eq!(scalar.amount, 400);
+		assert_eq!(scalar.resolution, 2);
+	}
+
+	#[test]
+	fn test_add_assign_different_resolutions() {
+		let mut scalar = Scalar::from_str("1.5").unwrap();
+		let other = Scalar::from_str("0.25").unwrap();
+		scalar += other;
+		assert_eq!(scalar.amount, 175);
+		assert_eq!(scalar.resolution, 2);
+	}
+
+	#[test]
+	fn test_add_assign_negative_value() {
+		let mut scalar = Scalar::from_str("2.50").unwrap();
+		let other = Scalar::from_str("-1.50").unwrap();
+		scalar += other;
+		assert_eq!(scalar.amount, 100);
+		assert_eq!(scalar.resolution, 2);
+	}
+
+	// ---------------
+	// -- SUB TESTS --
+	// ---------------
+
+	#[test]
+	fn test_sub_same_resolution() {
+		let scalar1 = Scalar::from_str("5.50").unwrap();
+		let scalar2 = Scalar::from_str("2.50").unwrap();
+		let result = scalar1 - scalar2;
+		assert_eq!(result.amount, 300);
+		assert_eq!(result.resolution, 2);
+	}
+
+	#[test]
+	fn test_sub_different_resolutions() {
+		let scalar1 = Scalar::from_str("1.75").unwrap();
+		let scalar2 = Scalar::from_str("0.5").unwrap();
+		let result = scalar1 - scalar2;
+		assert_eq!(result.amount, 125);
+		assert_eq!(result.resolution, 2);
+	}
+
+	#[test]
+	fn test_sub_with_negative_value() {
+		let scalar1 = Scalar::from_str("2.50").unwrap();
+		let scalar2 = Scalar::from_str("-1.50").unwrap();
+		let result = scalar1 - scalar2;
+		assert_eq!(result.amount, 400);
+		assert_eq!(result.resolution, 2);
+	}
+
+	// ---------------------
+	// -- SUBASSIGN TESTS --
+	// ---------------------
+
+	#[test]
+	fn test_sub_assign_same_resolution() {
+		let mut scalar = Scalar::from_str("5.50").unwrap();
+		let other = Scalar::from_str("2.50").unwrap();
+		scalar -= other;
+		assert_eq!(scalar.amount, 300);
+		assert_eq!(scalar.resolution, 2);
+	}
+
+	#[test]
+	fn test_sub_assign_different_resolutions() {
+		let mut scalar = Scalar::from_str("1.75").unwrap();
+		let other = Scalar::from_str("0.5").unwrap();
+		scalar -= other;
+		assert_eq!(scalar.amount, 125);
+		assert_eq!(scalar.resolution, 2);
+	}
+
+	#[test]
+	fn test_sub_assign_with_negative_value() {
+		let mut scalar = Scalar::from_str("2.50").unwrap();
+		let other = Scalar::from_str("-1.50").unwrap();
+		scalar -= other;
+		assert_eq!(scalar.amount, 400);
+		assert_eq!(scalar.resolution, 2);
+	}
+
+	// ---------------
+	// -- MUL TESTS --
+	// ---------------
 
 	#[test]
 	fn test_mul_with_zero() {
@@ -475,6 +588,131 @@ mod tests {
 		assert_eq!(result.amount, 1 * 2);
 		assert_eq!(result.resolution, 8);
 	}
+
+	#[test]
+	fn test_mul_large_numbers_extreme() {
+		let money1 = Scalar::from_str("999999999999.99").unwrap();
+		let money2 = Scalar::from_str("0.0000000001").unwrap();
+		let result = money1 * money2;
+		assert_eq!(result.amount, 99999999999999);
+		assert_eq!(result.resolution, 12);
+	}
+
+	#[test]
+	fn test_mul_minimal_numbers() {
+		let money1 = Scalar::from_str("0.0000000001").unwrap();
+		let money2 = Scalar::from_str("0.0000000001").unwrap();
+		let result = money1 * money2;
+		assert_eq!(result.amount, 1);
+		assert_eq!(result.resolution, 20);
+	}
+
+	#[test]
+	fn test_mul_max_resolution_limit() {
+		let money1 = Scalar::from_str("1.234567890123456789").unwrap();
+		let money2 = Scalar::from_str("0.000000000000000001").unwrap();
+		let result = money1 * money2;
+		assert_eq!(result.amount, 1234567890123456789);
+		assert_eq!(result.resolution, 36);
+	}
+
+	#[test]
+	fn test_mul_max_resolution_edge_case() {
+		let money1 = Scalar::from_str("1").unwrap();
+		let money2 = Scalar::from_str("0.000000000000000001").unwrap();
+		let result = money1 * money2;
+		assert_eq!(result.amount, 1);
+		assert_eq!(result.resolution, 18);
+	}
+
+	#[test]
+	fn test_mul_large_reduce() {
+		let money1 = Scalar::from_str("1000000.000").unwrap();
+		let money2 = Scalar::from_str("12345.000").unwrap();
+		let result = money1 * money2;
+		assert_eq!(result.amount, 12345000000000);
+		assert_eq!(result.resolution, 3);
+	}
+
+	#[test]
+	fn test_mul_extremely_small_numbers() {
+		let scalar1 = Scalar::from_str("0.0000000000000001").unwrap();
+		let scalar2 = Scalar::from_str("0.0000000000000001").unwrap();
+		let result = scalar1 * scalar2;
+		assert_eq!(result.amount, 1);
+		assert_eq!(result.resolution, 32);
+	}
+
+	// ---------------------
+	// -- MULASSIGN TESTS --
+	// ---------------------
+
+	#[test]
+	fn test_mul_assign_simple_case() {
+		let mut scalar = Scalar::from_str("2.50").unwrap();
+		let other = Scalar::from_str("4.00").unwrap();
+		scalar *= other;
+		assert_eq!(scalar.amount, 1000);
+		assert_eq!(scalar.resolution, 2);
+	}
+
+	#[test]
+	fn test_mul_assign_different_resolutions() {
+		let mut scalar = Scalar::from_str("1.5").unwrap();
+		let other = Scalar::from_str("2.00").unwrap();
+		scalar *= other;
+		assert_eq!(scalar.amount, 300);
+		assert_eq!(scalar.resolution, 2);
+	}
+
+	#[test]
+	fn test_mul_assign_with_zero() {
+		let mut scalar = Scalar::from_str("123.45").unwrap();
+		let other = Scalar::from_str("0.00").unwrap();
+		scalar *= other;
+		assert_eq!(scalar.amount, 0);
+		assert_eq!(scalar.resolution, 2);
+	}
+
+	#[test]
+	fn test_mul_assign_with_negative_value() {
+		let mut scalar = Scalar::from_str("3.00").unwrap();
+		let other = Scalar::from_str("-2.50").unwrap();
+		scalar *= other;
+		assert_eq!(scalar.amount, -750);
+		assert_eq!(scalar.resolution, 2);
+	}
+
+	#[test]
+	fn test_mul_assign_both_negative() {
+		let mut scalar = Scalar::from_str("-2.00").unwrap();
+		let other = Scalar::from_str("-3.00").unwrap();
+		scalar *= other;
+		assert_eq!(scalar.amount, 600);
+		assert_eq!(scalar.resolution, 2);
+	}
+
+	#[test]
+	fn test_mul_assign_large_numbers() {
+		let mut scalar = Scalar::from_str("1000.00").unwrap();
+		let other = Scalar::from_str("2000.00").unwrap();
+		scalar *= other;
+		assert_eq!(scalar.amount, 200000000);
+		assert_eq!(scalar.resolution, 2);
+	}
+
+	#[test]
+	fn test_mul_assign_high_resolution() {
+		let mut scalar = Scalar::from_str("0.1234").unwrap();
+		let other = Scalar::from_str("0.5678").unwrap();
+		scalar *= other;
+		assert_eq!(scalar.amount, 1234 * 5678);
+		assert_eq!(scalar.resolution, 8);
+	}
+
+	// ---------------
+	// -- DIV TESTS --
+	// ---------------
 
 	#[test]
 	fn test_scalar_div_scalar_same_resolution() {
@@ -577,6 +815,56 @@ mod tests {
 	}
 
 	#[test]
+	fn test_div_large_numbers_with_precision_loss() {
+		let scalar1 =
+			Scalar::from_str("12345678901234567890.00").unwrap();
+		let scalar2 = Scalar::from_str("3.00").unwrap();
+		let result = scalar1 / scalar2;
+		assert_eq!(result.amount, 411522630041152263000);
+		assert_eq!(result.resolution, 2);
+	}
+
+	#[test]
+	fn test_div_large_numbers_with_larger_divisor() {
+		let scalar1 = Scalar::from_str("3.00").unwrap();
+		let scalar2 = Scalar::from_str("12345678901234.00").unwrap();
+		let result = scalar1 / scalar2;
+		assert_eq!(result.amount, 243000002187011197);
+		assert_eq!(result.resolution, 30);
+	}
+
+	#[test]
+	fn test_div_small_numbers_high_resolution() {
+		let scalar1 = Scalar::from_str("0.000000000000001").unwrap();
+		let scalar2 = Scalar::from_str("0.0000000001").unwrap();
+		let result = scalar1 / scalar2;
+		assert_eq!(result.amount, 10000000000);
+		assert_eq!(result.resolution, 15);
+	}
+
+	#[test]
+	fn test_div_near_zero_with_high_resolution() {
+		let scalar1 = Scalar::from_str("0.0000001").unwrap();
+		let scalar2 = Scalar::from_str("1000000").unwrap();
+		let result = scalar1 / scalar2;
+		assert_eq!(result.amount, 1);
+		assert_eq!(result.resolution, 13);
+	}
+
+	#[test]
+	fn test_div_high_resolution_numbers() {
+		let scalar1 = Scalar::from_str("0.123456789012345678").unwrap();
+		let scalar2 = Scalar::from_str("0.000000000000000001").unwrap();
+		let result = scalar1 / scalar2;
+		assert_eq!(result.amount, 123456789012345678000000000000000000);
+		assert_eq!(result.resolution, 18);
+	}
+
+	// ---------------------
+	// -- DIVASSIGN TESTS --
+	// ---------------------
+
+	#[test]
 	fn test_div_assign_simple_case() {
 		let mut scalar1 = Scalar::from_str("10.00").unwrap();
 		let scalar2 = Scalar::from_str("2.00").unwrap();
@@ -665,105 +953,9 @@ mod tests {
 		assert_eq!(scalar1.resolution, 8);
 	}
 
-	#[test]
-	fn test_mul_large_numbers_extreme() {
-		let money1 = Scalar::from_str("999999999999.99").unwrap();
-		let money2 = Scalar::from_str("0.0000000001").unwrap();
-		let result = money1 * money2;
-		assert_eq!(result.amount, 99999999999999);
-		assert_eq!(result.resolution, 12);
-	}
-
-	#[test]
-	fn test_mul_minimal_numbers() {
-		let money1 = Scalar::from_str("0.0000000001").unwrap();
-		let money2 = Scalar::from_str("0.0000000001").unwrap();
-		let result = money1 * money2;
-		assert_eq!(result.amount, 1);
-		assert_eq!(result.resolution, 20);
-	}
-
-	#[test]
-	fn test_mul_max_resolution_limit() {
-		let money1 = Scalar::from_str("1.234567890123456789").unwrap();
-		let money2 = Scalar::from_str("0.000000000000000001").unwrap();
-		let result = money1 * money2;
-		assert_eq!(result.amount, 1234567890123456789);
-		assert_eq!(result.resolution, 36);
-	}
-
-	#[test]
-	fn test_mul_max_resolution_edge_case() {
-		let money1 = Scalar::from_str("1").unwrap();
-		let money2 = Scalar::from_str("0.000000000000000001").unwrap();
-		let result = money1 * money2;
-		assert_eq!(result.amount, 1);
-		assert_eq!(result.resolution, 18);
-	}
-
-	#[test]
-	fn test_mul_large_reduce() {
-		let money1 = Scalar::from_str("1000000.000").unwrap();
-		let money2 = Scalar::from_str("12345.000").unwrap();
-		let result = money1 * money2;
-		assert_eq!(result.amount, 12345000000000);
-		assert_eq!(result.resolution, 3);
-	}
-
-	#[test]
-	fn test_div_large_numbers_with_precision_loss() {
-		let scalar1 =
-			Scalar::from_str("12345678901234567890.00").unwrap();
-		let scalar2 = Scalar::from_str("3.00").unwrap();
-		let result = scalar1 / scalar2;
-		assert_eq!(result.amount, 411522630041152263000);
-		assert_eq!(result.resolution, 2);
-	}
-
-	#[test]
-	fn test_div_large_numbers_with_larger_divisor() {
-		let scalar1 = Scalar::from_str("3.00").unwrap();
-		let scalar2 = Scalar::from_str("12345678901234.00").unwrap();
-		let result = scalar1 / scalar2;
-		assert_eq!(result.amount, 243000002187011197);
-		assert_eq!(result.resolution, 30);
-	}
-
-	#[test]
-	fn test_div_small_numbers_high_resolution() {
-		let scalar1 = Scalar::from_str("0.000000000000001").unwrap();
-		let scalar2 = Scalar::from_str("0.0000000001").unwrap();
-		let result = scalar1 / scalar2;
-		assert_eq!(result.amount, 10000000000);
-		assert_eq!(result.resolution, 15);
-	}
-
-	#[test]
-	fn test_div_near_zero_with_high_resolution() {
-		let scalar1 = Scalar::from_str("0.0000001").unwrap();
-		let scalar2 = Scalar::from_str("1000000").unwrap();
-		let result = scalar1 / scalar2;
-		assert_eq!(result.amount, 1);
-		assert_eq!(result.resolution, 13);
-	}
-
-	#[test]
-	fn test_mul_extremely_small_numbers() {
-		let scalar1 = Scalar::from_str("0.0000000000000001").unwrap();
-		let scalar2 = Scalar::from_str("0.0000000000000001").unwrap();
-		let result = scalar1 * scalar2;
-		assert_eq!(result.amount, 1);
-		assert_eq!(result.resolution, 32);
-	}
-
-	#[test]
-	fn test_div_high_resolution_numbers() {
-		let scalar1 = Scalar::from_str("0.123456789012345678").unwrap();
-		let scalar2 = Scalar::from_str("0.000000000000000001").unwrap();
-		let result = scalar1 / scalar2;
-		assert_eq!(result.amount, 123456789012345678000000000000000000);
-		assert_eq!(result.resolution, 18);
-	}
+	// ----------------------
+	// -- RESOLUTION TESTS --
+	// ----------------------
 
 	#[test]
 	fn test_reduce_no_trailing_zeros() {
@@ -819,6 +1011,285 @@ mod tests {
 		assert_eq!(scalar.amount, 0);
 		assert_eq!(scalar.resolution, 0);
 	}
+
+	#[test]
+	fn test_set_resolution() {
+		let mut money = Scalar::from_str("123.45").unwrap();
+		assert_eq!(money.amount, 12345);
+		assert_eq!(money.resolution, 2);
+		money.set_resolution(0);
+		assert_eq!(money.amount, 123);
+		assert_eq!(money.resolution, 0);
+
+		let mut money = Scalar::from_str("123.4567").unwrap();
+		assert_eq!(money.amount, 1234567);
+		assert_eq!(money.resolution, 4);
+		money.set_resolution(6);
+		assert_eq!(money.amount, 123456700);
+		assert_eq!(money.resolution, 6);
+
+		let mut money = Scalar::from_str("123.45").unwrap();
+		assert_eq!(money.amount, 12345);
+		assert_eq!(money.resolution, 2);
+		money.set_resolution(2);
+		assert_eq!(money.amount, 12345);
+		assert_eq!(money.resolution, 2);
+	}
+
+	// ----------------
+	// -- NEG TESTS --
+	// ----------------
+
+	#[test]
+	fn test_neg_positive_value() {
+		let scalar = Scalar::from_str("123.45").unwrap();
+		let result = -scalar;
+		assert_eq!(result.amount, -12345);
+		assert_eq!(result.resolution, 2);
+	}
+
+	#[test]
+	fn test_neg_negative_value() {
+		let scalar = Scalar::from_str("-123.45").unwrap();
+		let result = -scalar;
+		assert_eq!(result.amount, 12345);
+		assert_eq!(result.resolution, 2);
+	}
+
+	#[test]
+	fn test_neg_zero() {
+		let scalar = Scalar::from_str("0.00").unwrap();
+		let result = -scalar;
+		assert_eq!(result.amount, 0);
+		assert_eq!(result.resolution, 2);
+	}
+
+	#[test]
+	fn test_neg_varying_resolutions() {
+		let scalar = Scalar::from_str("123.4567").unwrap();
+		let result = -scalar;
+		assert_eq!(result.amount, -1234567);
+		assert_eq!(result.resolution, 4);
+
+		let scalar = Scalar::from_str("-0.000123").unwrap();
+		let result = -scalar;
+		assert_eq!(result.amount, 123);
+		assert_eq!(result.resolution, 6);
+	}
+
+	#[test]
+	fn test_neg_high_resolution() {
+		let scalar = Scalar::from_str("0.0000001").unwrap();
+		let result = -scalar;
+		assert_eq!(result.amount, -1);
+		assert_eq!(result.resolution, 7);
+	}
+
+	// ---------------------
+	// -- PARTIALEQ TESTS --
+	// ---------------------
+
+	#[test]
+	fn test_partial_eq_same_resolution() {
+		let scalar1 = Scalar::from_str("123.45").unwrap();
+		let scalar2 = Scalar::from_str("123.45").unwrap();
+		assert_eq!(scalar1, scalar2);
+	}
+
+	#[test]
+	fn test_partial_eq_different_resolutions() {
+		let scalar1 = Scalar::from_str("123.450").unwrap();
+		let scalar2 = Scalar::from_str("123.45").unwrap();
+		assert_eq!(scalar1, scalar2);
+	}
+
+	#[test]
+	fn test_partial_eq_inequality() {
+		let scalar1 = Scalar::from_str("123.45").unwrap();
+		let scalar2 = Scalar::from_str("123.46").unwrap();
+		assert_ne!(scalar1, scalar2);
+	}
+
+	#[test]
+	fn test_partial_eq_i128_match() {
+		let scalar = Scalar::from_str("123.00").unwrap();
+		assert_eq!(scalar, 123i128);
+	}
+
+	#[test]
+	fn test_partial_eq_i128_no_match() {
+		let scalar = Scalar::from_str("123.45").unwrap();
+		assert_ne!(scalar, 123i128);
+	}
+
+	#[test]
+	fn test_partial_eq_varying_resolutions() {
+		let scalar1 = Scalar::from_str("123.4500").unwrap();
+		let scalar2 = Scalar::from_str("123.45").unwrap();
+		assert_eq!(scalar1, scalar2);
+
+		let scalar1 = Scalar::from_str("123.000000").unwrap();
+		let scalar2 = Scalar::from_str("123").unwrap();
+		assert_eq!(scalar1, scalar2);
+	}
+
+	#[test]
+	fn test_partial_eq_inequality_high_resolution() {
+		let scalar1 = Scalar::from_str("123.000123").unwrap();
+		let scalar2 = Scalar::from_str("123.000124").unwrap();
+		assert_ne!(scalar1, scalar2);
+	}
+
+	#[test]
+	fn test_partial_eq_i128_varying_resolutions() {
+		let scalar = Scalar::from_str("123.000000").unwrap();
+		assert_eq!(scalar, 123i128);
+
+		let scalar = Scalar::from_str("0.000001").unwrap();
+		assert_ne!(scalar, 0i128);
+	}
+
+	// ----------------------
+	// -- PARTIALORD TESTS --
+	// ----------------------
+
+	#[test]
+	fn test_partial_cmp_greater() {
+		let scalar1 = Scalar::from_str("124.00").unwrap();
+		let scalar2 = Scalar::from_str("123.99").unwrap();
+		assert!(scalar1 > scalar2);
+	}
+
+	#[test]
+	fn test_partial_cmp_less() {
+		let scalar1 = Scalar::from_str("123.99").unwrap();
+		let scalar2 = Scalar::from_str("124.00").unwrap();
+		assert!(scalar1 < scalar2);
+	}
+
+	#[test]
+	fn test_partial_cmp_equal_different_resolutions() {
+		let scalar1 = Scalar::from_str("123.4500").unwrap();
+		let scalar2 = Scalar::from_str("123.45").unwrap();
+		assert_eq!(
+			scalar1.partial_cmp(&scalar2),
+			Some(std::cmp::Ordering::Equal)
+		);
+	}
+
+	#[test]
+	fn test_partial_cmp_i128_greater() {
+		let scalar = Scalar::from_str("124.00").unwrap();
+		assert!(scalar > 123i128);
+	}
+
+	#[test]
+	fn test_partial_cmp_i128_less() {
+		let scalar = Scalar::from_str("122.00").unwrap();
+		assert!(scalar < 123i128);
+	}
+
+	#[test]
+	fn test_partial_cmp_i128_equal() {
+		let scalar = Scalar::from_str("123.00").unwrap();
+		assert_eq!(
+			scalar.partial_cmp(&123i128),
+			Some(std::cmp::Ordering::Equal)
+		);
+	}
+
+	#[test]
+	fn test_partial_cmp_varying_resolutions() {
+		let scalar1 = Scalar::from_str("123.4500").unwrap();
+		let scalar2 = Scalar::from_str("123.45").unwrap();
+		assert_eq!(
+			scalar1.partial_cmp(&scalar2),
+			Some(std::cmp::Ordering::Equal)
+		);
+
+		let scalar1 = Scalar::from_str("0.12345678").unwrap();
+		let scalar2 = Scalar::from_str("0.12345679").unwrap();
+		assert_eq!(
+			scalar1.partial_cmp(&scalar2),
+			Some(std::cmp::Ordering::Less)
+		);
+	}
+
+	#[test]
+	fn test_partial_cmp_greater_with_high_resolution() {
+		let scalar1 = Scalar::from_str("124.0000001").unwrap();
+		let scalar2 = Scalar::from_str("124.0000000").unwrap();
+		assert!(scalar1 > scalar2);
+	}
+
+	#[test]
+	fn test_partial_cmp_less_with_high_resolution() {
+		let scalar1 = Scalar::from_str("123.0000000").unwrap();
+		let scalar2 = Scalar::from_str("123.0000001").unwrap();
+		assert!(scalar1 < scalar2);
+	}
+
+	#[test]
+	fn test_partial_cmp_i128_varying_resolutions() {
+		let scalar = Scalar::from_str("123.000000").unwrap();
+		assert_eq!(
+			scalar.partial_cmp(&123i128),
+			Some(std::cmp::Ordering::Equal)
+		);
+
+		let scalar = Scalar::from_str("123.000001").unwrap();
+		assert!(scalar > 123i128);
+	}
+
+	// ---------------
+	// -- ORD TESTS --
+	// ---------------
+
+	#[test]
+	fn test_cmp_greater() {
+		let scalar1 = Scalar::from_str("125.00").unwrap();
+		let scalar2 = Scalar::from_str("124.99").unwrap();
+		assert_eq!(scalar1.cmp(&scalar2), std::cmp::Ordering::Greater);
+	}
+
+	#[test]
+	fn test_cmp_less() {
+		let scalar1 = Scalar::from_str("123.00").unwrap();
+		let scalar2 = Scalar::from_str("123.01").unwrap();
+		assert_eq!(scalar1.cmp(&scalar2), std::cmp::Ordering::Less);
+	}
+
+	#[test]
+	fn test_cmp_equal() {
+		let scalar1 = Scalar::from_str("123.0000").unwrap();
+		let scalar2 = Scalar::from_str("123.00").unwrap();
+		assert_eq!(scalar1.cmp(&scalar2), std::cmp::Ordering::Equal);
+	}
+
+	#[test]
+	fn test_cmp_greater_with_varying_resolutions() {
+		let scalar1 = Scalar::from_str("125.0000").unwrap();
+		let scalar2 = Scalar::from_str("124.9999").unwrap();
+		assert_eq!(scalar1.cmp(&scalar2), std::cmp::Ordering::Greater);
+	}
+
+	#[test]
+	fn test_cmp_less_with_varying_resolutions() {
+		let scalar1 = Scalar::from_str("123.0000").unwrap();
+		let scalar2 = Scalar::from_str("123.0001").unwrap();
+		assert_eq!(scalar1.cmp(&scalar2), std::cmp::Ordering::Less);
+	}
+
+	#[test]
+	fn test_cmp_equal_high_resolution() {
+		let scalar1 = Scalar::from_str("123.0000000").unwrap();
+		let scalar2 = Scalar::from_str("123.0").unwrap();
+		assert_eq!(scalar1.cmp(&scalar2), std::cmp::Ordering::Equal);
+	}
+
+	// -----------------
+	// -- OTHER TESTS --
+	// -----------------
 
 	#[test]
 	fn test_display() {

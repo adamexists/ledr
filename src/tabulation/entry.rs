@@ -58,12 +58,13 @@ impl Entry {
 
 		*self.totals.entry(currency.clone()).or_insert(scalar::ZERO) +=
 			amount;
-		self.details.push(Detail {
-			account,
-			amount,
-			currency,
-			cost_basis,
-		});
+
+		let mut detail = Detail::new(account, currency, amount);
+		if let Some(cb) = cost_basis {
+			detail.add_cost_basis(cb)
+		}
+
+		self.details.push(detail);
 
 		Ok(())
 	}
@@ -182,14 +183,11 @@ impl Entry {
 
 		while let Some((currency, amount)) = imbalances.pop() {
 			if let Some(vd) = &self.virtual_detail {
-				let new_detail = Detail {
-					account: vd.clone(),
-					amount: -amount,
+				self.details.push(Detail::new(
+					vd.clone(),
 					currency,
-					cost_basis: None,
-				};
-
-				self.details.push(new_detail);
+					-amount,
+				));
 			} else {
 				bail!("Unbalanced entry")
 			}
@@ -215,19 +213,16 @@ impl Entry {
 			bail!("Unbalanced entry")
 		}
 
-		let virtual_detail1 = Detail {
-			account: VIRTUAL_CONVERSION_ACCOUNT.to_string(),
-			amount: -amount1,
-			currency: currency1.clone(),
-			cost_basis: None,
-		};
-
-		let virtual_detail2 = Detail {
-			account: VIRTUAL_CONVERSION_ACCOUNT.to_string(),
-			amount: -amount2,
-			currency: currency2.clone(),
-			cost_basis: None,
-		};
+		self.details.push(Detail::new(
+			VIRTUAL_CONVERSION_ACCOUNT.to_string(),
+			currency1.clone(),
+			-amount1,
+		));
+		self.details.push(Detail::new(
+			VIRTUAL_CONVERSION_ACCOUNT.to_string(),
+			currency2.clone(),
+			-amount2,
+		));
 
 		// This implies an exchange rate between the currencies, except
 		// in some cases related to cost basis processing where we've
@@ -253,9 +248,6 @@ impl Entry {
 				)?;
 			}
 		}
-
-		self.details.push(virtual_detail1);
-		self.details.push(virtual_detail2);
 
 		Ok(())
 	}
@@ -301,6 +293,19 @@ pub struct Detail {
 }
 
 impl Detail {
+	pub fn new(account: String, currency: String, amount: Scalar) -> Self {
+		Self {
+			account,
+			currency,
+			amount,
+			cost_basis: None,
+		}
+	}
+
+	pub fn add_cost_basis(&mut self, cb: CostBasis) {
+		self.cost_basis = Some(cb);
+	}
+
 	pub fn currency(&self) -> String {
 		self.currency.clone()
 	}
@@ -312,10 +317,6 @@ impl Detail {
 
 		self.currency = currency.clone();
 		self.amount *= rate;
-	}
-
-	pub fn remove_cost_basis(&mut self) {
-		self.cost_basis = None
 	}
 }
 
@@ -336,7 +337,7 @@ mod tests {
 
 	// Helper function to create a sample Date for testing
 	fn sample_date(offset: u8) -> Date {
-		Date::from_ymd(2024, 1, 1 + offset)
+		Date::new(2024, 1, 1 + offset)
 	}
 
 	// Helper function to set up an Entry with a date and description
@@ -368,6 +369,43 @@ mod tests {
 		assert_eq!(detail.account, "Assets:Cash");
 		assert_eq!(detail.amount, Scalar::new(1000, 1));
 		assert_eq!(detail.currency, "USD");
+	}
+
+	#[test]
+	fn test_add_detail_empty_account() {
+		let mut entry = create_entry(0);
+		let result = entry.add_detail(
+			"".to_string(),
+			Scalar::new(1000, 1),
+			"USD".to_string(),
+			None,
+		);
+
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_add_detail_multiple_same_currency() {
+		let mut entry = create_entry(0);
+		entry.add_detail(
+			"Assets:Cash".to_string(),
+			Scalar::new(1000, 1),
+			"USD".to_string(),
+			None,
+		)
+		.unwrap();
+		entry.add_detail(
+			"Assets:Savings".to_string(),
+			Scalar::new(500, 1),
+			"USD".to_string(),
+			None,
+		)
+		.unwrap();
+
+		assert_eq!(
+			entry.totals.get("USD"),
+			Some(&Scalar::new(1500, 1))
+		);
 	}
 
 	#[test]
@@ -420,7 +458,6 @@ mod tests {
 		assert!(result.is_ok());
 	}
 
-	// Test for setting virtual detail
 	#[test]
 	fn test_set_virtual_detail() {
 		let mut entry = create_entry(0);
@@ -432,7 +469,25 @@ mod tests {
 		assert_eq!(entry.virtual_detail.unwrap(), "Assets:Virtual")
 	}
 
-	// Placeholder for future tests, e.g., testing resolution adjustments
+	#[test]
+	fn test_set_virtual_detail_twice() {
+		let mut entry = create_entry(0);
+		entry.set_virtual_detail("Assets:Virtual".to_string())
+			.unwrap();
+		let result =
+			entry.set_virtual_detail("Assets:Another".to_string());
+
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_set_virtual_detail_empty_account() {
+		let mut entry = create_entry(0);
+		let result = entry.set_virtual_detail("".to_string());
+
+		assert!(result.is_err());
+	}
+
 	#[test]
 	fn test_set_resolution_for_currency() {
 		let mut entry = create_entry(0);
@@ -451,5 +506,115 @@ mod tests {
 		let detail = &entry.get_details()[0];
 		assert_eq!(detail.amount.amount(), 12345); // truncation check
 		assert_eq!(detail.amount.resolution(), 2);
+	}
+
+	#[test]
+	fn test_set_resolution_for_currency_different_currency() {
+		let mut entry = create_entry(0);
+		entry.add_detail(
+			"Assets:Cash".to_string(),
+			Scalar::new(1234567, 4),
+			"USD".to_string(),
+			None,
+		)
+		.unwrap();
+		entry.add_detail(
+			"Assets:Cash".to_string(),
+			Scalar::new(9876543, 4),
+			"EUR".to_string(),
+			None,
+		)
+		.unwrap();
+
+		let result = entry
+			.set_resolution_for_currency(&"USD".to_string(), 2);
+		assert!(result.is_ok());
+
+		let usd_detail = &entry.get_details()[0];
+		assert_eq!(usd_detail.amount.amount(), 12345);
+		assert_eq!(usd_detail.amount.resolution(), 2);
+
+		let eur_detail = &entry.get_details()[1];
+		assert_eq!(eur_detail.amount.amount(), 9876543);
+		assert_eq!(eur_detail.amount.resolution(), 4);
+	}
+
+	#[test]
+	fn test_get_cost_basis_details() {
+		let mut entry = create_entry(0);
+		entry.add_detail(
+			"Assets:Cash".to_string(),
+			Scalar::new(1000, 1),
+			"USD".to_string(),
+			Some(CostBasis {
+				unit_price: Scalar::new(10, 1),
+				currency: "EUR".to_string(),
+				associated_amount: Scalar::new(100, 1),
+			}),
+		)
+		.unwrap();
+
+		let cost_basis_details = entry.get_cost_basis_details();
+		assert_eq!(cost_basis_details.len(), 1);
+	}
+
+	#[test]
+	fn test_multiline_implicit_currency_conversion() {
+		let mut entry = create_entry(0);
+		entry.add_detail(
+			"Assets:Cash".to_string(),
+			Scalar::new(1000, 1),
+			"USD".to_string(),
+			None,
+		)
+		.unwrap();
+		entry.add_detail(
+			"Assets:Bank".to_string(),
+			Scalar::new(-2000, 1),
+			"EUR".to_string(),
+			None,
+		)
+		.unwrap();
+
+		let mut rates = ExchangeRates::default();
+		let mut imbalances = entry.get_imbalances();
+		let result = entry.multiline_implicit_currency_conversion(
+			&mut imbalances,
+			&mut rates,
+			true,
+		);
+
+		assert!(result.is_ok());
+		assert_eq!(entry.get_details().len(), 4);
+	}
+
+	#[test]
+	fn test_multiline_implicit_currency_conversion_error() {
+		let mut entry = create_entry(0);
+		entry.add_detail(
+			"Assets:Cash".to_string(),
+			Scalar::new(1000, 1),
+			"USD".to_string(),
+			None,
+		)
+		.unwrap();
+		entry.add_detail(
+			"Assets:Bank".to_string(),
+			Scalar::new(2000, 1),
+			"EUR".to_string(),
+			None,
+		)
+		.unwrap(); // Both amounts are positive
+
+		let mut rates = ExchangeRates::default();
+		let mut imbalances = entry.get_imbalances();
+		let result = entry.multiline_implicit_currency_conversion(
+			&mut imbalances,
+			&mut rates,
+			true,
+		);
+
+		// Both imbalances are in the same direction, which is bad
+		assert!(result.is_err());
 	}
 }

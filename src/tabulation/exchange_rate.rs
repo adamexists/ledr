@@ -230,3 +230,190 @@ impl ExchangeRate {
 fn within_tolerance_of(tolerance: Scalar, a: Scalar, b: Scalar) -> bool {
 	(a - b).abs() <= tolerance * a.abs().max(b.abs())
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::util::date::Date;
+	use crate::util::scalar::Scalar;
+
+	fn setup_exchange_rates() -> ExchangeRates {
+		ExchangeRates::default()
+	}
+
+	#[test]
+	fn test_declare_valid_rate() {
+		let mut exchange_rates = setup_exchange_rates();
+		let date = Date::new(2024, 11, 1);
+		let base = "USD".to_string();
+		let quote = "EUR".to_string();
+		let rate = Scalar::new(11, 1);
+
+		assert!(exchange_rates
+			.declare(date, base.clone(), quote.clone(), rate)
+			.is_ok());
+
+		let date2 = Date::new(2024, 11, 2);
+		assert!(exchange_rates
+			.declare(date2, base, quote, Scalar::new(12, 1))
+			.is_ok());
+	}
+
+	#[test]
+	fn test_declare_self_exchange() {
+		let mut exchange_rates = setup_exchange_rates();
+		let date = Date::new(2024, 11, 1);
+		let base = "USD".to_string();
+		let rate = Scalar::new(11, 1);
+
+		assert!(exchange_rates
+			.declare(date, base.clone(), base.clone(), rate)
+			.is_err());
+
+		let date2 = Date::new(2024, 11, 2);
+		assert!(exchange_rates
+			.declare(date2, base.clone(), base, Scalar::new(9, 1))
+			.is_err());
+	}
+
+	#[test]
+	fn test_declare_non_positive_rate() {
+		let mut exchange_rates = setup_exchange_rates();
+		let date = Date::new(2024, 11, 1);
+		let base = "USD".to_string();
+		let quote = "EUR".to_string();
+
+		assert!(exchange_rates
+			.declare(
+				date,
+				base.clone(),
+				quote.clone(),
+				Scalar::new(0, 0)
+			)
+			.is_err());
+		assert!(exchange_rates
+			.declare(date, base, quote, Scalar::new(-1, 1))
+			.is_err());
+	}
+
+	#[test]
+	fn test_infer_rate_within_tolerance() {
+		let mut exchange_rates = setup_exchange_rates();
+		let date = Date::new(2024, 11, 1);
+		let base = "USD".to_string();
+		let quote = "EUR".to_string();
+		let declared_rate = Scalar::new(11, 1);
+
+		exchange_rates
+			.declare(
+				date,
+				base.clone(),
+				quote.clone(),
+				declared_rate,
+			)
+			.unwrap();
+
+		let inferred_rate = Scalar::new(1099, 3);
+		assert!(exchange_rates
+			.infer(date, base.clone(), quote.clone(), inferred_rate)
+			.is_ok());
+
+		let date2 = Date::new(2024, 11, 2);
+		assert!(exchange_rates
+			.infer(date2, base, quote, Scalar::new(111, 2))
+			.is_ok());
+	}
+
+	#[test]
+	fn test_infer_rate_outside_tolerance() {
+		let mut exchange_rates = setup_exchange_rates();
+		let date = Date::new(2024, 11, 1);
+		let base = "USD".to_string();
+		let quote = "EUR".to_string();
+		let declared_rate = Scalar::new(11, 1);
+
+		exchange_rates
+			.declare(
+				date,
+				base.clone(),
+				quote.clone(),
+				declared_rate,
+			)
+			.unwrap();
+
+		let inferred_rate = Scalar::new(112, 2);
+		assert!(exchange_rates
+			.infer(date, base.clone(), quote.clone(), inferred_rate)
+			.is_err());
+
+		assert!(exchange_rates
+			.infer(date, base, quote, Scalar::new(97, 2))
+			.is_err());
+	}
+
+	#[test]
+	fn test_get_effective_rate_on() {
+		let mut exchange_rates = setup_exchange_rates();
+		let date = Date::new(2024, 11, 1);
+		let base = "USD".to_string();
+		let quote = "EUR".to_string();
+		let rate = Scalar::new(11, 1);
+
+		exchange_rates
+			.declare(date, base.clone(), quote.clone(), rate)
+			.unwrap();
+
+		assert_eq!(
+			exchange_rates.get_effective_rate_on(
+				date,
+				base.clone(),
+				quote.clone()
+			),
+			Some(rate)
+		);
+
+		let earlier_date = Date::new(2024, 10, 31);
+		assert_eq!(
+			exchange_rates.get_effective_rate_on(
+				earlier_date,
+				base,
+				quote
+			),
+			None
+		);
+	}
+
+	#[test]
+	fn test_get_latest_rate() {
+		let mut exchange_rates = setup_exchange_rates();
+		let date1 = Date::new(2024, 11, 1);
+		let date2 = Date::new(2024, 11, 2);
+		let base = "USD".to_string();
+		let quote = "EUR".to_string();
+		let rate1 = Scalar::new(11, 1);
+		let rate2 = Scalar::new(12, 1);
+
+		exchange_rates
+			.declare(date1, base.clone(), quote.clone(), rate1)
+			.unwrap();
+		exchange_rates
+			.declare(date2, base.clone(), quote.clone(), rate2)
+			.unwrap();
+
+		assert_eq!(
+			exchange_rates
+				.get_latest_rate(base.clone(), quote.clone()),
+			Some(rate2)
+		);
+
+		let date3 = Date::new(2024, 11, 3);
+		let rate3 = Scalar::new(115, 2);
+		exchange_rates
+			.declare(date3, base.clone(), quote.clone(), rate3)
+			.unwrap();
+		assert_eq!(
+			exchange_rates.get_latest_rate(base, quote),
+			Some(rate3)
+		);
+	}
+}
