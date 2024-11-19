@@ -32,9 +32,31 @@ Ledr is a passion project. I use it every day for my own finances and
 accounting, and I am currently putting substantial time into adding features
 to the project.
 
-I welcome constructive feedback and patchsets via mailing list onSourcehut,
-where this project is hosted. Please do not email me directly with patchsets,
-but feel free to email me for any other reason!
+The most important type of contribution you can provide is an example of a
+ledger that is being processed incorrectly or unexpectedly, is unintuitive to
+you, or is unable to represent a legitimate financial situation that you or
+someone is in.
+
+## Roadmap
+
+The current targeted features are:
+- Adding support for associating arbitrary text notes to entries
+- Completing functionality related to lot management and capital gains/losses
+- Thereafter, expanding the set of reports available, including at least:
+  - Lots, capital gains / losses, assignment strategies, holdings, & net worth
+  - Transaction-based reports, views, & searching
+  - Arbitrary filtering of financial statement reports (fuzzy account matching)
+  - Prices and rates, declared and inferred, over time 
+
+Once the project is feature-complete, I will do a documentation push, which
+will signal the end of the first phase of development. I am targeting Q2 2025
+for this.
+
+The second phase of development is looser, but will likely consist of an API
+server capable of reporting on the contents of the file and performing updates
+to it. After that, the goal would be a UI. The goal is a world-class accounting
+system, ready for mainstream use by any individual or corporation, backed by a
+collection of text files and released for free under the GPL.
 
 ## Copyright & License
 
