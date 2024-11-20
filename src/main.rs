@@ -14,7 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::parsing::parser::parse;
+use crate::parsing::parser::{parse, ParseResult};
 use crate::reports::ordered_total::OrderedTotal;
 use crate::tabulation::total::Total;
 use crate::util::date::Date;
@@ -82,11 +82,15 @@ fn main() -> Result<(), Error> {
 	let args = Cli::parse();
 
 	let mut ledger = Ledger::new(args.lenient);
-	parse(&args.file, &mut ledger)?;
+	let parse_result = parse(&args.file, &mut ledger)?;
 
 	match args.command {
 		Directive::BS => {
-			let mut totals = financial_statement(&args, ledger)?;
+			let mut totals = financial_statement(
+				&args,
+				ledger,
+				parse_result,
+			)?;
 
 			let mut top_levels = vec!["Assets", "Liabilities"];
 			if !args.ignore_equity {
@@ -100,7 +104,11 @@ fn main() -> Result<(), Error> {
 			ordered_totals.print_ledger_format(args.depth);
 		},
 		Directive::IS => {
-			let mut totals = financial_statement(&args, ledger)?;
+			let mut totals = financial_statement(
+				&args,
+				ledger,
+				parse_result,
+			)?;
 
 			totals.filter_top_level(vec!["Income", "Expenses"]);
 			let mut ordered_totals =
@@ -110,7 +118,11 @@ fn main() -> Result<(), Error> {
 			ordered_totals.print_ledger_format(args.depth);
 		},
 		Directive::TB => {
-			let totals = financial_statement(&args, ledger)?;
+			let totals = financial_statement(
+				&args,
+				ledger,
+				parse_result,
+			)?;
 			let mut ordered_totals =
 				OrderedTotal::from_total(totals);
 
@@ -129,11 +141,19 @@ fn main() -> Result<(), Error> {
 	Ok(())
 }
 
-fn financial_statement(args: &Cli, mut ledger: Ledger) -> Result<Total, Error> {
+fn financial_statement(
+	args: &Cli,
+	mut ledger: Ledger,
+	parse_result: ParseResult,
+) -> Result<Total, Error> {
 	if let Some(collapse) = &args.collapse {
 		ledger.collapse_to(collapse.clone());
 	}
-	let mut totals = ledger.finalize(args.precision)?;
+
+	let mut totals = ledger.finalize(
+		parse_result.max_precision_by_currency,
+		args.precision,
+	)?;
 
 	if args.invert {
 		totals.invert();

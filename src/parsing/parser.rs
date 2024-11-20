@@ -17,11 +17,26 @@ use crate::tabulation::ledger::{CostBasisAmountType, CostBasisInput, Ledger};
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
 use anyhow::{anyhow, bail, Error};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, Seek};
 use std::path::Path;
+
+#[derive(Debug, Default)]
+pub struct ParseResult {
+	pub max_precision_by_currency: HashMap<String, u32>, // currency > precision
+}
+
+impl ParseResult {
+	fn note_precision(&mut self, currency: String, precision: u32) {
+		let entry = self
+			.max_precision_by_currency
+			.entry(currency)
+			.or_insert(0);
+		*entry = (*entry).max(precision);
+	}
+}
 
 /// First pass to process only directive lines. Include statements in the file
 /// may cause this to be called recursively, so it uses the passed Ledger struct
@@ -115,7 +130,11 @@ fn first_pass(
 /// statements may cause this method to call itself recursively, but it does
 /// not need to keep track of where it is to avoid circular include statements
 /// because first_pass has already done that.
-fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
+fn second_pass(
+	file: &File,
+	ledger: &mut Ledger,
+	parse_result: &mut ParseResult,
+) -> Result<(), Error> {
 	let reader = io::BufReader::new(file);
 
 	let mut lines = reader.lines();
@@ -140,7 +159,7 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 				line.split_whitespace().collect();
 
 			let file = file_from_path(include[1])?;
-			second_pass(&file, ledger)?;
+			second_pass(&file, ledger, parse_result)?;
 			continue;
 		}
 
@@ -188,11 +207,15 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 		}
 
 		let account = parts[0].to_string();
-		let amount = parts[1].to_string();
+		let amount = Scalar::from_str(&parts[1])?;
 		let currency = parts[2].to_string();
 
 		// if exactly three parts, no cost basis
 		if parts.len() == 3 {
+			parse_result.note_precision(
+				currency.clone(),
+				amount.resolution(),
+			);
 			ledger.add_detail(account, amount, currency, None)
 				.map_err(|e| anyhow!("{} (line {})", e, i))?;
 			continue;
@@ -224,6 +247,11 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 		})?;
 		let cb_currency = b_parts[1].to_string();
 
+		parse_result.note_precision(
+			cb_currency.clone(),
+			cb_amount.resolution(),
+		);
+
 		ledger.add_detail(
 			account,
 			amount,
@@ -250,14 +278,18 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 /// contents of the file. The only exception is that when multiple implicit
 /// currency conversions occur in the same day between the same currencies, all
 /// reporting will use the latest one processed in the file. TODO: Manpage this.
-pub fn parse(path: &str, ledger: &mut Ledger) -> Result<(), Error> {
+pub fn parse(path: &str, ledger: &mut Ledger) -> Result<ParseResult, Error> {
 	let mut file = file_from_path(path)?;
 
 	first_pass(&path, &file, ledger)?;
 	file.rewind()?;
-	second_pass(&file, ledger)?;
 
-	Ok(())
+	// Second pass is responsible for assembling the ParseResult object,
+	// which we pass in this way so it can be passed recursively within.
+	let mut output: ParseResult = Default::default();
+	second_pass(&file, ledger, &mut output)?;
+
+	Ok(output)
 }
 
 fn file_from_path(file_path: &str) -> Result<File, Error> {

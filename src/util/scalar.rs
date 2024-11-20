@@ -115,6 +115,39 @@ impl Scalar {
 		)
 	}
 
+	/// Sets resolution of the Scalar to the given value, rounding it if
+	/// necessary using Banker's rounding (round to nearest, ties to even).
+	/// TODO: Document about Banker's rounding.
+	pub fn round(&mut self, resolution: u32) {
+		if resolution >= self.resolution {
+			self.set_resolution(resolution)
+		} else {
+			let scale = 10i128.pow(self.resolution - resolution);
+
+			let remainder = self.amount % scale;
+			let halfway = scale / 2;
+			self.amount /= scale;
+
+			if remainder.abs() > halfway {
+				if self.amount >= 0 {
+					self.amount += 1;
+				} else {
+					self.amount -= 1;
+				}
+			} else if remainder.abs() == halfway {
+				if self.amount % 2 != 0 {
+					if self.amount >= 0 {
+						self.amount += 1;
+					} else {
+						self.amount -= 1;
+					}
+				}
+			}
+
+			self.resolution = resolution;
+		}
+	}
+
 	pub fn abs(&self) -> Self {
 		Self {
 			amount: self.amount.abs(),
@@ -971,6 +1004,95 @@ mod tests {
 			scalar1 /= scalar2;
 			assert_eq!(scalar1.amount, 123450000);
 			assert_eq!(scalar1.resolution, 8);
+		}
+	}
+
+	mod rounding {
+		use super::*;
+
+		#[test]
+		fn test_round_up() {
+			let mut scalar = Scalar::new(155, 2);
+			scalar.round(1);
+			assert_eq!(scalar.amount(), 16);
+
+			let mut scalar = Scalar::new(150, 2);
+			scalar.round(0);
+			assert_eq!(scalar.amount(), 2);
+		}
+
+		#[test]
+		fn test_round_down() {
+			let mut scalar = Scalar::new(149, 2);
+			scalar.round(1);
+			assert_eq!(scalar.amount(), 15);
+
+			let mut scalar = Scalar::new(149, 2);
+			scalar.round(0);
+			assert_eq!(scalar.amount(), 1);
+		}
+
+		#[test]
+		fn test_round_negative() {
+			let mut scalar = Scalar::new(-155, 2);
+			scalar.round(1);
+			assert_eq!(scalar.amount(), -16);
+
+			let mut scalar = Scalar::new(-151, 2);
+			scalar.round(0);
+			assert_eq!(scalar.amount(), -2);
+
+			let mut scalar = Scalar::new(-154, 2);
+			scalar.round(1);
+			assert_eq!(scalar.amount(), -15);
+
+			let mut scalar = Scalar::new(-149, 2);
+			scalar.round(0);
+			assert_eq!(scalar.amount(), -1);
+		}
+
+		#[test]
+		fn test_round_no_change() {
+			let mut scalar = Scalar::new(100, 2);
+			scalar.round(2);
+			assert_eq!(scalar.amount(), 100);
+
+			let mut scalar = Scalar::new(-100, 2);
+			scalar.round(2);
+			assert_eq!(scalar.amount(), -100);
+		}
+
+		#[test]
+		fn test_round_higher_precision() {
+			let mut scalar = Scalar::new(123, 1);
+			scalar.round(3);
+			assert_eq!(scalar.amount(), 12300);
+
+			let mut scalar = Scalar::new(-45, 0);
+			scalar.round(2);
+			assert_eq!(scalar.amount(), -4500);
+		}
+
+		#[test]
+		fn test_banker_rounding_up_to_even() {
+			let mut scalar = Scalar::new(255, 2);
+			scalar.round(1);
+			assert_eq!(scalar.amount(), 26);
+
+			let mut scalar = Scalar::new(-6555, 3);
+			scalar.round(2);
+			assert_eq!(scalar.amount(), -656);
+		}
+
+		#[test]
+		fn test_banker_rounding_down_to_even() {
+			let mut scalar = Scalar::new(35, 2);
+			scalar.round(1);
+			assert_eq!(scalar.amount(), 4);
+
+			let mut scalar = Scalar::new(-445, 2);
+			scalar.round(1);
+			assert_eq!(scalar.amount(), -44);
 		}
 	}
 

@@ -135,7 +135,7 @@ impl Ledger {
 	pub fn add_detail(
 		&mut self,
 		account: String,
-		amount: String,
+		amount: Scalar,
 		currency: String,
 		cost_basis: Option<CostBasisInput>,
 	) -> Result<(), Error> {
@@ -157,10 +157,6 @@ impl Ledger {
 			bail!("Account is empty")
 		}
 
-		if amount.is_empty() {
-			bail!("Amount is empty")
-		}
-
 		let has_valid_prefix = VALID_PREFIXES
 			.iter()
 			.any(|&prefix| account.starts_with(prefix));
@@ -168,12 +164,11 @@ impl Ledger {
 			bail!("Invalid account prefix: {}", account)
 		}
 
-		let money_amt = Scalar::from_str(&amount)?;
 		let mut cost_basis_input = None;
 
 		if let Some(mut cb) = cost_basis {
 			if cb.amount_type == TotalCost {
-				cb.amount /= money_amt;
+				cb.amount /= amount;
 			}
 
 			// A cost basis has the authority of a declaration in
@@ -192,7 +187,7 @@ impl Ledger {
 				self.pending_entry_date(),
 				account.clone(),
 				currency.clone(),
-				money_amt,
+				amount,
 				cb.amount,
 				cb.currency.clone(),
 			)?;
@@ -200,13 +195,13 @@ impl Ledger {
 			cost_basis_input = Some(CostBasis {
 				unit_price: cb.amount,
 				currency: cb.currency,
-				associated_amount: money_amt,
+				associated_amount: amount,
 			});
 		}
 
 		self.pending_entry.as_mut().unwrap().add_detail(
 			account,
-			money_amt,
+			amount,
 			currency,
 			cost_basis_input,
 		)
@@ -339,36 +334,16 @@ impl Ledger {
 	/// Consumes the ledger.
 	pub fn finalize(
 		mut self,
+		max_reso_by_currency: HashMap<String, u32>,
 		overall_max_reso: Option<u32>,
 	) -> Result<Total, Error> {
-		let mut max_reso_by_currency: HashMap<String, u32> =
-			HashMap::new();
-		let mut overall_max = 6;
-		if let Some(requested_max) = overall_max_reso {
-			overall_max = requested_max;
-		}
+		let max_reso = overall_max_reso.unwrap_or(99);
 
-		for detail in self.entries.iter().flat_map(|x| x.get_details())
-		{
-			let reso = min(detail.amount.resolution(), overall_max);
-			let currency = detail.currency();
-
-			// Update max if this detail has higher resolution
-			max_reso_by_currency
-				.entry(currency.clone())
-				.and_modify(|max_reso| {
-					if reso > *max_reso {
-						*max_reso = reso;
-					}
-				})
-				.or_insert(reso);
-		}
-
-		// Standardize all currencies to the highest precision found
 		for entry in &mut self.entries {
 			for (currency, &reso) in &max_reso_by_currency {
-				entry.set_resolution_for_currency(
-					currency, reso,
+				entry.round_for_currency(
+					currency,
+					min(reso, max_reso),
 				)?
 			}
 		}
@@ -480,7 +455,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				"100.0".to_string(),
+				Scalar::new(1000, 1),
 				"USD".to_string(),
 				None
 			)
@@ -499,7 +474,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				"100.0".to_string(),
+				Scalar::new(1000, 1),
 				"EUR".to_string(),
 				None
 			)
@@ -517,7 +492,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Liabilities:Loan".to_string(),
-				"100.0".to_string(),
+				Scalar::new(1000, 1),
 				"USD".to_string(),
 				None
 			)
@@ -531,7 +506,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				"100.0".to_string(),
+				Scalar::new(1000, 1),
 				"USD".to_string(),
 				None
 			)
@@ -591,7 +566,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				"50.0".to_string(),
+				Scalar::new(500, 1),
 				"EUR".to_string(),
 				None
 			)
@@ -609,7 +584,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Liabilities:Loan".to_string(),
-				"100.0".to_string(),
+				Scalar::new(1000, 1),
 				"USD".to_string(),
 				None
 			)

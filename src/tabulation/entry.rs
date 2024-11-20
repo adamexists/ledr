@@ -122,18 +122,18 @@ impl Entry {
 		self.details
 	}
 
-	/// Adjusts all Details for a certain currency to a certain resolution.
+	/// Rounds all Details for a certain currency to a certain resolution.
 	/// In doing so, precision may be lost, but not gained (because the
 	/// extra decimal places will just fill in with zeroes). This is more
 	/// about the clean display of currency amounts for reporting.
-	pub fn set_resolution_for_currency(
+	pub fn round_for_currency(
 		&mut self,
 		currency: &String,
 		resolution: u32,
 	) -> Result<(), Error> {
 		for detail in &mut self.details {
 			if &detail.currency == currency {
-				detail.amount.set_resolution(resolution)
+				detail.amount.round(resolution)
 			}
 		}
 
@@ -509,12 +509,11 @@ mod tests {
 		)
 		.unwrap();
 
-		let result = entry
-			.set_resolution_for_currency(&"USD".to_string(), 2);
+		let result = entry.round_for_currency(&"USD".to_string(), 2);
 		assert!(result.is_ok());
 
 		let detail = &entry.get_details()[0];
-		assert_eq!(detail.amount.amount(), 12345); // truncation check
+		assert_eq!(detail.amount.amount(), 12346); // rounding check
 		assert_eq!(detail.amount.resolution(), 2);
 	}
 
@@ -536,12 +535,11 @@ mod tests {
 		)
 		.unwrap();
 
-		let result = entry
-			.set_resolution_for_currency(&"USD".to_string(), 2);
+		let result = entry.round_for_currency(&"USD".to_string(), 2);
 		assert!(result.is_ok());
 
 		let usd_detail = &entry.get_details()[0];
-		assert_eq!(usd_detail.amount.amount(), 12345);
+		assert_eq!(usd_detail.amount.amount(), 12346);
 		assert_eq!(usd_detail.amount.resolution(), 2);
 
 		let eur_detail = &entry.get_details()[1];
