@@ -15,10 +15,11 @@
  */
 
 use crate::parsing::parser::{parse, ParseResult};
+use crate::reports::ordered_entry::OrderedEntry;
 use crate::reports::ordered_total::OrderedTotal;
 use crate::tabulation::total::Total;
 use crate::util::date::Date;
-use anyhow::Error;
+use anyhow::{bail, Error};
 use clap::{Parser, ValueEnum};
 use tabulation::ledger::Ledger;
 
@@ -38,6 +39,10 @@ struct Cli {
 	/// The command to execute
 	command: Directive,
 
+	/// The search term for the AS command
+	#[arg(required = false)]
+	term: Option<String>,
+
 	// -----------
 	// -- FLAGS --
 	// -----------
@@ -47,7 +52,7 @@ struct Cli {
 
 	/// Only show balances in the given currency, converting when possible
 	#[arg(short, long)]
-	collapse: Option<String>,
+	currency: Option<String>,
 
 	/// Hides equity accounts from reports
 	#[arg(short = 'E', long)]
@@ -72,9 +77,12 @@ struct Cli {
 
 #[derive(ValueEnum, Clone)]
 enum Directive {
-	BS,
-	IS,
-	TB,
+	BS, // balance sheet
+	IS, // income statement
+	TB, // trial balance
+
+	AS, // account summary
+
 	OpenLots, // TODO: Need other lot reports.
 }
 
@@ -86,10 +94,11 @@ fn main() -> Result<(), Error> {
 
 	match args.command {
 		Directive::BS => {
-			let mut totals = financial_statement(
-				&args,
+			finalize_ledger(&args, &mut ledger, parse_result)?;
+			let mut totals = ledger_to_totals(
 				ledger,
-				parse_result,
+				args.currency,
+				args.invert,
 			)?;
 
 			let mut top_levels = vec!["Assets", "Liabilities"];
@@ -104,10 +113,11 @@ fn main() -> Result<(), Error> {
 			ordered_totals.print_ledger_format(args.depth);
 		},
 		Directive::IS => {
-			let mut totals = financial_statement(
-				&args,
+			finalize_ledger(&args, &mut ledger, parse_result)?;
+			let mut totals = ledger_to_totals(
 				ledger,
-				parse_result,
+				args.currency,
+				args.invert,
 			)?;
 
 			totals.filter_top_level(vec!["Income", "Expenses"]);
@@ -118,16 +128,39 @@ fn main() -> Result<(), Error> {
 			ordered_totals.print_ledger_format(args.depth);
 		},
 		Directive::TB => {
-			let totals = financial_statement(
-				&args,
+			finalize_ledger(&args, &mut ledger, parse_result)?;
+			let totals = ledger_to_totals(
 				ledger,
-				parse_result,
+				args.currency,
+				args.invert,
 			)?;
+
 			let mut ordered_totals =
 				OrderedTotal::from_total(totals);
 
 			ordered_totals.sort_canonical();
 			ordered_totals.print_ledger_format(args.depth);
+		},
+		Directive::AS => {
+			// Ensure the search term is provided for the AS command
+			if let Some(account) = &args.term {
+				let currency = match &args.currency {
+					Some(c) => c,
+					None => bail!("Currency required (-c)"),
+				};
+
+				finalize_ledger(
+					&args,
+					&mut ledger,
+					parse_result,
+				)?;
+				let entries = OrderedEntry::new(
+					ledger.take_entries(),
+				);
+				entries.account_summary(account, currency)
+			} else {
+				bail!("No account specified");
+			}
 		},
 		Directive::OpenLots => {
 			// TODO: Add customization for this directive.
@@ -141,25 +174,30 @@ fn main() -> Result<(), Error> {
 	Ok(())
 }
 
-fn financial_statement(
+fn finalize_ledger(
 	args: &Cli,
-	mut ledger: Ledger,
+	ledger: &mut Ledger,
 	parse_result: ParseResult,
-) -> Result<Total, Error> {
-	if let Some(collapse) = &args.collapse {
+) -> Result<(), Error> {
+	if let Some(collapse) = &args.currency {
 		ledger.collapse_to(collapse.clone());
 	}
 
-	let mut totals = ledger.finalize(
-		parse_result.max_precision_by_currency,
-		args.precision,
-	)?;
+	ledger.finalize(parse_result.max_precision_by_currency, args.precision)
+}
 
-	if let Some(collapse) = &args.collapse {
+fn ledger_to_totals(
+	ledger: Ledger,
+	collapse: Option<String>,
+	invert: bool,
+) -> Result<Total, Error> {
+	let mut totals = Total::from_ledger(ledger);
+
+	if let Some(collapse) = &collapse {
 		totals.ignore_currencies_except(collapse);
 	}
 
-	if args.invert {
+	if invert {
 		totals.invert();
 	}
 

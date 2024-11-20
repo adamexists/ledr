@@ -17,5 +17,5 @@
 pub mod entry;
 pub mod exchange_rate;
 pub mod ledger;
-mod lot;
+pub mod lot;
 pub mod total;

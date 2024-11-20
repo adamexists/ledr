@@ -14,11 +14,10 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::tabulation::entry::{CostBasis, Detail, Entry};
+use crate::tabulation::entry::{CostBasis, Entry};
 use crate::tabulation::exchange_rate::ExchangeRates;
 use crate::tabulation::ledger::CostBasisAmountType::TotalCost;
 use crate::tabulation::lot::Lots;
-use crate::tabulation::total::Total;
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
 use anyhow::{bail, Error};
@@ -333,13 +332,11 @@ impl Ledger {
 	/// Finalizes the entire ledger by standardizing the visible precision
 	/// of each currency, marking the ledger as finalized, and reporting
 	/// totals from it.
-	///
-	/// Consumes the ledger.
 	pub fn finalize(
-		mut self,
+		&mut self,
 		max_reso_by_currency: HashMap<String, u32>,
 		overall_max_reso: Option<u32>,
-	) -> Result<Total, Error> {
+	) -> Result<(), Error> {
 		let max_reso = overall_max_reso.unwrap_or(99);
 
 		for entry in &mut self.entries {
@@ -351,17 +348,11 @@ impl Ledger {
 			}
 		}
 
-		// Transform this into a Total, and return that
-		let mut total = Total::new();
+		Ok(())
+	}
 
-		let all_details: Vec<Detail> = self
-			.entries
-			.into_iter()
-			.flat_map(|e| e.take_details())
-			.collect();
-
-		total.ingest_details(&all_details);
-		Ok(total)
+	pub fn take_entries(self) -> Vec<Entry> {
+		self.entries
 	}
 }
 

@@ -1,14 +1,17 @@
-.PHONY: all build test clean install
+.PHONY: all build test fmt clean install
 
-all: build test
+all: build
 
 build:
 	cargo build --release
 
-test:
+test: fmt
 	cargo test -- --test-threads=1
 
-clean:
+fmt:
+	cargo fmt
+
+clean: fmt
 	cargo clean
 
 install:

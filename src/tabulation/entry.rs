@@ -13,12 +13,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-
 use crate::tabulation::exchange_rate::ExchangeRates;
 use crate::util::date::Date;
 use crate::util::scalar;
 use crate::util::scalar::Scalar;
 use anyhow::{bail, Error};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::string::ToString;
 
@@ -106,6 +106,10 @@ impl Entry {
 		}
 	}
 
+	pub fn get_desc(&self) -> &String {
+		&self.desc
+	}
+
 	pub fn get_date(&self) -> &Date {
 		&self.date
 	}
@@ -116,6 +120,25 @@ impl Entry {
 
 	pub fn take_details(self) -> Vec<Detail> {
 		self.details
+	}
+
+	/// Returns the net amount from this entry on the given account, i.e.
+	/// the sum of all detail lines related to the account, for a given
+	/// currency. Currency match must be exact. Account argument can be
+	/// any substring.
+	pub fn net_for_account(
+		&self,
+		account: &String,
+		currency: &String,
+	) -> Scalar {
+		self.details.iter().fold(scalar::ZERO, |mut acc, x| {
+			if x.account.contains(account)
+				&& &x.currency == currency
+			{
+				acc += x.amount
+			}
+			acc
+		})
 	}
 
 	/// Rounds all Details for a certain currency to a certain resolution.
@@ -286,6 +309,30 @@ impl Entry {
 				}
 			})
 			.collect()
+	}
+}
+
+impl PartialEq for Entry {
+	fn eq(&self, other: &Self) -> bool {
+		self.date == other.date && self.desc == other.desc
+	}
+}
+
+impl Eq for Entry {}
+
+impl PartialOrd for Entry {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for Entry {
+	// Sort by date, then desc, both ascending
+	fn cmp(&self, other: &Self) -> Ordering {
+		match self.date.cmp(&other.date) {
+			Ordering::Equal => self.desc.cmp(&other.desc),
+			other => other,
+		}
 	}
 }
 

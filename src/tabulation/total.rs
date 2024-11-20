@@ -15,6 +15,7 @@
  */
 
 use crate::tabulation::entry::Detail;
+use crate::tabulation::ledger::Ledger;
 use crate::util::scalar;
 use crate::util::scalar::Scalar;
 use std::collections::HashMap;
@@ -46,6 +47,19 @@ pub struct Total {
 impl Total {
 	pub fn new() -> Self {
 		Default::default()
+	}
+
+	pub fn from_ledger(ledger: Ledger) -> Self {
+		let mut total = Self::new();
+
+		let all_details: Vec<Detail> = ledger
+			.take_entries()
+			.into_iter()
+			.flat_map(|e| e.take_details())
+			.collect();
+
+		total.ingest_details(&all_details);
+		total
 	}
 
 	pub fn ingest_details(&mut self, details: &Vec<Detail>) {

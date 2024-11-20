@@ -20,6 +20,7 @@ use crate::util::scalar::Scalar;
 
 /// When using this to display something, you should instantiate it, then sort
 /// it, then display it. Filters should be handled in the Total struct.
+/// TODO: Adapt this to use the new Table struct to build itself.
 pub struct OrderedTotal {
 	account: String,
 	amounts: Vec<(String, Scalar)>, // currency -> balance held
