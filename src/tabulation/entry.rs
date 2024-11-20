@@ -156,37 +156,24 @@ impl Entry {
 
 		let infer_rates = cost_basis_details.is_empty();
 
-		if let Some(vd) = &self.virtual_detail.clone() {
-			for mut d in cost_basis_details {
-				let cbd = d.cost_basis.take().unwrap();
+		for mut d in cost_basis_details {
+			let cbd = d.cost_basis.take().unwrap();
 
-				// Move cost basis (after @ sign) component to
-				// virtual detail account, offsetting with the
-				// conversion account. Effectively, we are
-				// manually creating an imbalance, but in the
-				// cost basis currency. The virtual account will
-				// then absorb it in the correct currency,
-				// alongside any other imbalances.
-				self.add_detail(
-					vd.clone(),
-					-cbd.unit_price * cbd.associated_amount,
-					cbd.currency.clone(),
-					None,
-				)?;
-				self.add_detail(
-					VIRTUAL_CONVERSION_ACCOUNT.to_string(),
-					cbd.unit_price * cbd.associated_amount,
-					cbd.currency.clone(),
-					None,
-				)?;
-				// then net out the currency with the cost basis
-				self.add_detail(
-					VIRTUAL_CONVERSION_ACCOUNT.to_string(),
-					-d.amount,
-					d.currency.clone(),
-					None,
-				)?;
-			}
+			// The cost basis syntax implies a conversion, so add
+			// the conversion, effectively moving the imbalance to
+			// the cost basis currency
+			self.add_detail(
+				VIRTUAL_CONVERSION_ACCOUNT.to_string(),
+				cbd.unit_price * cbd.associated_amount,
+				cbd.currency.clone(),
+				None,
+			)?;
+			self.add_detail(
+				VIRTUAL_CONVERSION_ACCOUNT.to_string(),
+				-d.amount,
+				d.currency.clone(),
+				None,
+			)?;
 		}
 
 		let mut imbalances = self.get_imbalances();
@@ -202,6 +189,8 @@ impl Entry {
 			return Ok(());
 		}
 
+		// If a virtual detail exists, it can absorb all imbalances.
+		// Otherwise, if any remain, we fail the entry as unbalanced.
 		while let Some((currency, amount)) = imbalances.pop() {
 			if let Some(vd) = &self.virtual_detail {
 				self.details.push(Detail::new(

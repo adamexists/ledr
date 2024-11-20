@@ -169,6 +169,11 @@ fn second_pass(file: &File, ledger: &mut Ledger) -> Result<(), Error> {
 			}
 		}
 
+		// Make sure the line is not a date by itself
+		if Date::from_str(l).is_ok() {
+			bail!("Orphaned date (line {}): {}", i, l);
+		}
+
 		// Handle entry detail lines
 		let parts: Vec<&str> = l.split_whitespace().collect();
 

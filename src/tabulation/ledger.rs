@@ -139,6 +139,10 @@ impl Ledger {
 		currency: String,
 		cost_basis: Option<CostBasisInput>,
 	) -> Result<(), Error> {
+		if self.pending_entry.is_none() {
+			bail!("Orphaned entry detail")
+		}
+
 		if !self.lenient_mode {
 			self.check_account(&account)?;
 			self.check_currency(&currency)?;
@@ -147,10 +151,6 @@ impl Ledger {
 					&cost_basis_currency.currency,
 				)?;
 			}
-		}
-
-		if self.pending_entry.is_none() {
-			bail!("Orphaned entry detail")
 		}
 
 		if account.is_empty() {

@@ -31,6 +31,7 @@ fn test_integration_no_arguments() {
 		("9_in.txt", "9_out.txt"),
 		("10_in.txt", "10_out.txt"),
 		("11_in.txt", "11_out.txt"),
+		("12_in.txt", "12_out.txt"),
 	];
 
 	execute("standard", test_cases, "tb", vec![])
