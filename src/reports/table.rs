@@ -86,8 +86,10 @@ impl Table {
 			println!();
 		}
 
-		for i in 0..total_column_index {
-			print!("{:width$}  ", "", width = max_widths[i]);
+		for (_, width) in
+			max_widths.iter().enumerate().take(total_column_index)
+		{
+			print!("{:width$}  ", "", width = width);
 		}
 
 		let separator_width = max_widths[total_column_index]
@@ -99,29 +101,27 @@ impl Table {
 			separator_width = separator_width
 		);
 
-		for i in 0..self.column_count {
+		for (i, width) in
+			max_widths.iter().enumerate().take(self.column_count)
+		{
 			if i == total_column_index {
 				if self.right_align[i] {
 					print!(
 						"{:>width$}",
 						total,
-						width = max_widths[i]
+						width = width
 					);
 				} else {
 					print!(
 						"{:<width$}",
 						total,
-						width = max_widths[i]
+						width = width
 					);
 				}
 			} else if i == currency_index {
-				print!(
-					"{:<width$}",
-					currency,
-					width = max_widths[i]
-				);
+				print!("{:<width$}", currency, width = width);
 			} else {
-				print!("{:width$}", "", width = max_widths[i]);
+				print!("{:width$}", "", width = width);
 			}
 
 			if i < self.column_count - 1 {
