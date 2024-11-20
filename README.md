@@ -40,7 +40,6 @@ someone is in.
 ## Roadmap
 
 The current targeted features are:
-- Adding support for associating arbitrary text notes to entries
 - Completing functionality related to lot management and capital gains/losses
 - Thereafter, expanding the set of reports available, including at least:
   - Lots, capital gains / losses, assignment strategies, holdings, & net worth

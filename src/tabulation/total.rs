@@ -109,6 +109,17 @@ impl Total {
 		self.amounts = currency_totals.into_iter().collect();
 	}
 
+	/// Designed for use with collapsed reports, we drop totals not in the
+	/// target currency. This is so the collapsed report only shows the
+	/// currency requested and not anything that could not be converted to
+	/// it.
+	pub fn ignore_currencies_except(&mut self, currency: &String) {
+		self.amounts.retain(|c, _| c == currency);
+		for subtotal in self.subtotals.values_mut() {
+			subtotal.ignore_currencies_except(currency);
+		}
+	}
+
 	/// Invert the signs of every Scalar in the hierarchy
 	pub fn invert(&mut self) {
 		for scalar in self.amounts.values_mut() {

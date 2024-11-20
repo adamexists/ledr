@@ -45,7 +45,7 @@ struct Cli {
 	#[arg(short)]
 	file: String,
 
-	/// Convert all possible currencies in the output to the given currency
+	/// Only show balances in the given currency, converting when possible
 	#[arg(short, long)]
 	collapse: Option<String>,
 
@@ -154,6 +154,10 @@ fn financial_statement(
 		parse_result.max_precision_by_currency,
 		args.precision,
 	)?;
+
+	if let Some(collapse) = &args.collapse {
+		totals.ignore_currencies_except(collapse);
+	}
 
 	if args.invert {
 		totals.invert();

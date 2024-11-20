@@ -40,8 +40,12 @@ impl ExchangeRates {
 		if base == quote {
 			bail!("Cannot exchange a currency for itself")
 		}
-		if rate <= 0 {
-			bail!("Exchange rate must be positive")
+
+		// Rates of 0 or Inf are conceptually permissible, but we can't
+		// work with it. Instead, avoid putting in such a rate so we
+		// never try to convert to or from something worthless.
+		if rate == 0 {
+			return Ok(());
 		}
 
 		// to standardize lookups, put base alphabetically before quote
@@ -81,8 +85,12 @@ impl ExchangeRates {
 		if base == quote {
 			bail!("Cannot exchange a currency for itself")
 		}
-		if rate <= 0 {
-			bail!("Exchange rate must be positive");
+
+		// Rates of 0 or Inf are conceptually permissible, but we can't
+		// work with it. Instead, avoid putting in such a rate so we
+		// never try to convert to or from something worthless.
+		if rate == 0 {
+			return Ok(());
 		}
 
 		// to standardize lookups, put base alphabetically before quote
@@ -290,10 +298,10 @@ mod tests {
 				quote.clone(),
 				Scalar::new(0, 0)
 			)
-			.is_err());
+			.is_ok());
 		assert!(exchange_rates
 			.declare(date, base, quote, Scalar::new(-1, 1))
-			.is_err());
+			.is_ok());
 	}
 
 	#[test]
