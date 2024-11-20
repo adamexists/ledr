@@ -230,7 +230,10 @@ impl Ledger {
 		reference: String,
 	) -> Result<(), Error> {
 		match &mut self.pending_entry {
-			Some(e) => Ok(e.add_reference(reference)),
+			Some(e) => {
+				e.add_reference(reference);
+				Ok(())
+			},
 			None => bail!("Orphaned reference"),
 		}
 	}

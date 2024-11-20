@@ -97,7 +97,7 @@ impl Entry {
 		match &mut self.reference {
 			Some(existing_note) => {
 				existing_note.push('\n');
-				existing_note.push_str(&reference.trim());
+				existing_note.push_str(reference.trim());
 			},
 			None => {
 				self.reference =
@@ -112,10 +112,6 @@ impl Entry {
 
 	pub fn details(&mut self) -> &mut Vec<Detail> {
 		&mut self.details
-	}
-
-	pub fn get_details(&self) -> &Vec<Detail> {
-		&self.details
 	}
 
 	pub fn take_details(self) -> Vec<Detail> {
@@ -359,7 +355,7 @@ mod tests {
 	fn test_entry_creation() {
 		let entry = create_entry(0);
 		assert_eq!(entry.get_date(), &sample_date(0));
-		assert!(entry.get_details().is_empty());
+		assert!(entry.details.is_empty());
 	}
 
 	#[test]
@@ -373,9 +369,9 @@ mod tests {
 		);
 
 		assert!(result.is_ok());
-		assert_eq!(entry.get_details().len(), 1);
+		assert_eq!(entry.details.len(), 1);
 
-		let detail = &entry.get_details()[0];
+		let detail = &entry.details[0];
 		assert_eq!(detail.account, "Assets:Cash");
 		assert_eq!(detail.amount, Scalar::new(1000, 1));
 		assert_eq!(detail.currency, "USD");
@@ -512,7 +508,7 @@ mod tests {
 		let result = entry.round_for_currency(&"USD".to_string(), 2);
 		assert!(result.is_ok());
 
-		let detail = &entry.get_details()[0];
+		let detail = &entry.details[0];
 		assert_eq!(detail.amount.amount(), 12346); // rounding check
 		assert_eq!(detail.amount.resolution(), 2);
 	}
@@ -538,11 +534,11 @@ mod tests {
 		let result = entry.round_for_currency(&"USD".to_string(), 2);
 		assert!(result.is_ok());
 
-		let usd_detail = &entry.get_details()[0];
+		let usd_detail = &entry.details[0];
 		assert_eq!(usd_detail.amount.amount(), 12346);
 		assert_eq!(usd_detail.amount.resolution(), 2);
 
-		let eur_detail = &entry.get_details()[1];
+		let eur_detail = &entry.details[1];
 		assert_eq!(eur_detail.amount.amount(), 9876543);
 		assert_eq!(eur_detail.amount.resolution(), 4);
 	}
@@ -593,7 +589,7 @@ mod tests {
 		);
 
 		assert!(result.is_ok());
-		assert_eq!(entry.get_details().len(), 4);
+		assert_eq!(entry.details.len(), 4);
 	}
 
 	#[test]

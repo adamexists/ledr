@@ -128,23 +128,18 @@ impl Scalar {
 			let halfway = scale / 2;
 			self.amount /= scale;
 
-			if remainder.abs() > halfway {
+			self.resolution = resolution;
+			if remainder.abs() < halfway {
+				return;
+			}
+
+			if remainder.abs() > halfway || self.amount % 2 != 0 {
 				if self.amount >= 0 {
 					self.amount += 1;
 				} else {
 					self.amount -= 1;
 				}
-			} else if remainder.abs() == halfway {
-				if self.amount % 2 != 0 {
-					if self.amount >= 0 {
-						self.amount += 1;
-					} else {
-						self.amount -= 1;
-					}
-				}
 			}
-
-			self.resolution = resolution;
 		}
 	}
 

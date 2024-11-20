@@ -207,7 +207,7 @@ fn second_pass(
 		}
 
 		let account = parts[0].to_string();
-		let amount = Scalar::from_str(&parts[1])?;
+		let amount = Scalar::from_str(parts[1])?;
 		let currency = parts[2].to_string();
 
 		// if exactly three parts, no cost basis
@@ -281,7 +281,7 @@ fn second_pass(
 pub fn parse(path: &str, ledger: &mut Ledger) -> Result<ParseResult, Error> {
 	let mut file = file_from_path(path)?;
 
-	first_pass(&path, &file, ledger)?;
+	first_pass(path, &file, ledger)?;
 	file.rewind()?;
 
 	// Second pass is responsible for assembling the ParseResult object,
