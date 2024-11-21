@@ -32,7 +32,7 @@ pub struct Entry {
 
 	virtual_detail: Option<String>,
 	totals: HashMap<String, Scalar>, // Currency -> Amount
-	reference: Option<String>,       // optional string, not inspected
+	reference: Option<String>, // optional string, not inspected TODO add to summary report
 }
 
 impl Entry {
@@ -156,11 +156,6 @@ impl Entry {
 	/// Completes an entry. We have to pass the exchange rate set in here,
 	/// because this is where exchange rates are inferred in some cases,
 	/// i.e. if exactly two currencies are imbalanced.
-	///
-	/// This method also handles the resolution of cost bases and their
-	/// related syntactical magic, particularly decomposing it such that it
-	/// has the appropriate effect on balances for the currency it was
-	/// exchanged with.
 	pub fn finalize(
 		&mut self,
 		rates: &mut ExchangeRates,
@@ -242,7 +237,6 @@ impl Entry {
 
 	/// Find all currencies that don't sum to zero, with amounts
 	fn get_imbalances(&self) -> Vec<(String, Scalar)> {
-		// Collect the retained elements into a Vec
 		self.totals
 			.iter()
 			.filter_map(|(k, &v)| {
@@ -271,7 +265,7 @@ impl PartialOrd for Entry {
 }
 
 impl Ord for Entry {
-	// Sort by date, then desc, both ascending
+	// Sort by date, then description, both ascending
 	fn cmp(&self, other: &Self) -> Ordering {
 		match self.date.cmp(&other.date) {
 			Ordering::Equal => self.desc.cmp(&other.desc),
@@ -295,6 +289,7 @@ impl Detail {
 		&self.account
 	}
 
+	// TDOO: This is a bit redundant, maybe.
 	pub fn currency(&self) -> String {
 		self.amount.currency.clone()
 	}
@@ -315,12 +310,10 @@ mod tests {
 	use crate::util::date::Date;
 	use crate::util::scalar::Scalar;
 
-	// Helper function to create a sample Date for testing
 	fn sample_date(offset: u8) -> Date {
 		Date::new(2024, 1, 1 + offset)
 	}
 
-	// Helper function to set up an Entry with a date and description
 	fn create_entry(offset: u8) -> Entry {
 		Entry::new(sample_date(offset), "Sample Entry".to_string())
 	}

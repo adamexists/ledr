@@ -14,18 +14,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::util::scalar::Scalar;
-use std::fmt;
 
-/// A scalar value with a currency, and potentially with a cost basis.
+/// A scalar value with a currency.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Amount {
 	pub value: Scalar,
-	pub currency: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct CostBasis {
-	pub unit_cost: Scalar,
 	pub currency: String,
 }
 
@@ -37,11 +30,5 @@ impl Amount {
 	pub fn convert_to(&mut self, currency: &str, rate: Scalar) {
 		self.currency = currency.to_owned();
 		self.value *= rate;
-	}
-}
-
-impl fmt::Display for CostBasis {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{} {}", self.unit_cost, self.currency)
 	}
 }

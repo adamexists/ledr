@@ -23,13 +23,14 @@ use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct ExchangeRates {
-	/// Store rates with a tuple of (base, quote) as the key
+	/// Stores rates with a tuple of (base, quote) as the key
 	rates: HashMap<(String, String), Vec<ExchangeRate>>,
 }
 
 impl ExchangeRates {
-	/// Add a new exchange rate declared via directive. Might fail if there
-	/// is an existing declared rate on the same date.
+	/// Adds a new exchange rate declared via directive. Might fail if there
+	/// is an existing declared rate on the same date, or if the input is
+	/// incoherent.
 	pub fn declare(
 		&mut self,
 		date: Date,
@@ -62,7 +63,7 @@ impl ExchangeRates {
 		let new_rate = ExchangeRate::new(date, Declared, rate);
 
 		// We do not need to check for existing inferred rates, because
-		// all directives are calculated first, so one cannot exist.
+		// all directives are handled first, so one cannot exist.
 
 		self.rates.entry(key.clone()).or_default().push(new_rate);
 		self.rates
@@ -71,7 +72,7 @@ impl ExchangeRates {
 		Ok(())
 	}
 
-	/// Add a new exchange rate inferred from an entry. Might fail if there
+	/// Adds a new exchange rate inferred from an entry. Might fail if there
 	/// is an existing declared rate that is outside tolerance from this new
 	/// rate. If there is an existing declared rate at all, this one will
 	/// definitely be ignored.
@@ -93,7 +94,7 @@ impl ExchangeRates {
 			return Ok(());
 		}
 
-		// to standardize lookups, put base alphabetically before quote
+		// To standardize lookups, put base alphabetically before quote
 		let key = if base < quote {
 			(base.clone(), quote.clone())
 		} else {
@@ -128,7 +129,7 @@ impl ExchangeRates {
 		Ok(())
 	}
 
-	/// Retrieve the most recent rate before a given date, if any
+	/// Retrieves the most recent rate before a given date, if any
 	pub fn get_effective_rate_on(
 		&self,
 		date: Date,
@@ -160,7 +161,7 @@ impl ExchangeRates {
 			)
 	}
 
-	/// Retrieve the most recent rate available, if any
+	/// Retrieves the most recent rate available, if any
 	pub fn get_latest_rate(
 		&self,
 		base: String,
@@ -210,9 +211,9 @@ impl ExchangeRates {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum RateType {
-	/// the user said this is true
+	/// i.e. The user said this is true
 	Declared,
-	/// we inferred this rate from an entry
+	/// i.e. We inferred this rate from an entry or detail
 	Inferred,
 }
 
@@ -234,7 +235,8 @@ impl ExchangeRate {
 	}
 }
 
-/// returns true iff a and b are within the given tolerance of each other.
+/// Returns true iff a and b are within the given tolerance of each other.
+/// The given tolerance should be in the form of a percent, i.e. 1% == 0.01.
 fn within_tolerance_of(tolerance: Scalar, a: Scalar, b: Scalar) -> bool {
 	(a - b).abs() <= tolerance * a.abs().max(b.abs())
 }

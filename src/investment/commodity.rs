@@ -13,7 +13,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-use crate::util::amount::CostBasis;
+use crate::util::cost_basis::CostBasis;
+use crate::util::scalar::Scalar;
 
 // TODO: Resolve problems with these derivations, if any.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd)]
@@ -33,5 +34,9 @@ impl Commodity {
 
 	pub fn cost_basis(&self) -> &CostBasis {
 		&self.cost_basis
+	}
+
+	pub fn unit_cost(&self) -> Scalar {
+		self.cost_basis.unit_cost
 	}
 }

@@ -14,7 +14,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::gl::ledger::Ledger;
-use crate::util::amount::{Amount, CostBasis};
+use crate::util::amount::Amount;
+use crate::util::cost_basis::CostBasis;
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
 use anyhow::{anyhow, bail, Error};

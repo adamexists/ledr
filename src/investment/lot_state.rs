@@ -57,7 +57,7 @@ impl LotState {
 	//  we process a sell, all the buys are in, in chronological
 	//  order.
 	pub fn sell_lot(&mut self, action: &Action) -> Result<(), Error> {
-		let lots = self.state.get_mut(&action.commodity.clone());
+		let lots = self.state.get_mut(&action.commodity);
 		if let Some(lots) = lots {
 			let mut remaining_quantity = action.quantity;
 
@@ -72,11 +72,8 @@ impl LotState {
 					continue;
 				}
 
-				if lot.commodity.cost_basis().unit_cost
-					!= action
-						.commodity
-						.cost_basis()
-						.unit_cost
+				if lot.commodity.unit_cost()
+					!= action.commodity.unit_cost()
 				{
 					// Not an applicable lot if cost basis differs
 					continue;
@@ -96,10 +93,7 @@ impl LotState {
 				lot.sales.push(Sale {
 					date: action.date,
 					quantity: sell_quantity,
-					unit_cost: action
-						.commodity
-						.cost_basis()
-						.unit_cost,
+					unit_cost: action.commodity.unit_cost(),
 				});
 
 				// If the lot is fully sold, mark it as closed

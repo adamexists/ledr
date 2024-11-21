@@ -16,7 +16,8 @@
 
 use crate::investment::commodity::Commodity;
 use crate::investment::lot_state::LotState;
-use crate::util::amount::{Amount, CostBasis};
+use crate::util::amount::Amount;
+use crate::util::cost_basis::CostBasis;
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
 use anyhow::{bail, Error};
@@ -30,7 +31,7 @@ pub struct LotBuffer {
 }
 
 impl LotBuffer {
-	/// Adds an action to the lot manager. Should only be called if
+	/// Adds an action to the lot buffer. Should only be called if
 	/// cost_basis on the passed Amount is Some, or this will panic.
 	pub fn add_action(
 		&mut self,
@@ -125,7 +126,7 @@ impl PartialOrd for Action {
 						Some(Ordering::Greater)
 					},
 					_ => {
-						// If actions are the same, compare by commodity string
+						// Lastly, use commodity string
 						self.commodity.partial_cmp(
 							&other.commodity,
 						)

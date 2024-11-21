@@ -17,7 +17,8 @@
 use crate::gl::entry::{Entry, VIRTUAL_CONVERSION_ACCOUNT};
 use crate::gl::exchange_rate::ExchangeRates;
 use crate::investment::lot_buffer::LotBuffer;
-use crate::util::amount::{Amount, CostBasis};
+use crate::util::amount::Amount;
+use crate::util::cost_basis::CostBasis;
 use crate::util::date::Date;
 use anyhow::{bail, Error};
 use std::cmp::min;
@@ -334,8 +335,7 @@ impl Ledger {
 	}
 
 	/// Finalizes the entire ledger by standardizing the visible precision
-	/// of each currency, marking the ledger as finalized, and reporting
-	/// totals from it.
+	/// of each currency.
 	pub fn finalize(
 		&mut self,
 		max_reso_by_currency: HashMap<String, u32>,
