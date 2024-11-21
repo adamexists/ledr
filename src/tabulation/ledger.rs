@@ -14,12 +14,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::tabulation::entry::{CostBasis, Entry};
+use crate::tabulation::amount::Amount;
+use crate::tabulation::entry::Entry;
 use crate::tabulation::exchange_rate::ExchangeRates;
-use crate::tabulation::ledger::CostBasisAmountType::TotalCost;
 use crate::tabulation::lot::Lots;
 use crate::util::date::Date;
-use crate::util::scalar::Scalar;
 use anyhow::{bail, Error};
 use std::cmp::min;
 use std::collections::{HashMap, HashSet};
@@ -134,9 +133,7 @@ impl Ledger {
 	pub fn add_detail(
 		&mut self,
 		account: String,
-		amount: Scalar,
-		currency: String,
-		cost_basis: Option<CostBasisInput>,
+		amount: Amount,
 	) -> Result<(), Error> {
 		if self.pending_entry.is_none() {
 			bail!("Orphaned entry detail")
@@ -144,8 +141,8 @@ impl Ledger {
 
 		if !self.lenient_mode {
 			self.check_account(&account)?;
-			self.check_currency(&currency)?;
-			if let Some(cost_basis_currency) = &cost_basis {
+			self.check_currency(&amount.currency)?;
+			if let Some(cost_basis_currency) = amount.cost_basis() {
 				self.check_currency(
 					&cost_basis_currency.currency,
 				)?;
@@ -163,13 +160,7 @@ impl Ledger {
 			bail!("Invalid account prefix: {}", account)
 		}
 
-		let mut cost_basis_input = None;
-
-		if let Some(mut cb) = cost_basis {
-			if cb.amount_type == TotalCost {
-				cb.amount /= amount;
-			}
-
+		if let Some(cb) = amount.cost_basis() {
 			// A cost basis has the authority of a declaration in
 			// many ways, but in case there are multiple intraday
 			// transactions that differ from each other (as day
@@ -177,33 +168,25 @@ impl Ledger {
 			// them as inferred rates here.
 			self.exchange_rates.infer(
 				self.pending_entry_date(),
-				currency.clone(),
+				amount.currency.clone(),
 				cb.currency.clone(),
-				cb.amount,
+				cb.unit_price,
 			)?;
 
 			self.lots.add_movement(
 				self.pending_entry_date(),
 				account.clone(),
-				currency.clone(),
-				amount,
-				cb.amount,
+				amount.currency.clone(),
+				amount.value,
+				cb.unit_price,
 				cb.currency.clone(),
 			)?;
-
-			cost_basis_input = Some(CostBasis {
-				unit_price: cb.amount,
-				currency: cb.currency,
-				associated_amount: amount,
-			});
 		}
 
-		self.pending_entry.as_mut().unwrap().add_detail(
-			account,
-			amount,
-			currency,
-			cost_basis_input,
-		)
+		self.pending_entry
+			.as_mut()
+			.unwrap()
+			.add_detail(account, amount)
 	}
 
 	pub fn set_virtual_detail(
@@ -356,24 +339,11 @@ impl Ledger {
 	}
 }
 
-#[derive(Debug, PartialEq)]
-pub enum CostBasisAmountType {
-	UnitCost,
-	TotalCost,
-}
-
-#[derive(Debug)]
-pub struct CostBasisInput {
-	pub amount: Scalar,
-	pub amount_type: CostBasisAmountType,
-
-	pub currency: String,
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use crate::util::date::Date;
+	use crate::util::scalar::Scalar;
 
 	#[test]
 	fn test_ledger_initialization() {
@@ -449,9 +419,10 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				Scalar::new(1000, 1),
-				"USD".to_string(),
-				None
+				Amount::new(
+					Scalar::new(1000, 1),
+					"USD".to_string(),
+				)
 			)
 			.is_ok());
 	}
@@ -468,9 +439,10 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				Scalar::new(1000, 1),
-				"EUR".to_string(),
-				None
+				Amount::new(
+					Scalar::new(1000, 1),
+					"EUR".to_string(),
+				)
 			)
 			.is_err());
 	}
@@ -486,9 +458,10 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Liabilities:Loan".to_string(),
-				Scalar::new(1000, 1),
-				"USD".to_string(),
-				None
+				Amount::new(
+					Scalar::new(1000, 1),
+					"USD".to_string(),
+				)
 			)
 			.is_err());
 	}
@@ -500,9 +473,10 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				Scalar::new(1000, 1),
-				"USD".to_string(),
-				None
+				Amount::new(
+					Scalar::new(1000, 1),
+					"USD".to_string(),
+				)
 			)
 			.is_err());
 	}
@@ -560,9 +534,10 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				Scalar::new(500, 1),
-				"EUR".to_string(),
-				None
+				Amount::new(
+					Scalar::new(500, 1),
+					"EUR".to_string(),
+				)
 			)
 			.is_ok());
 	}
@@ -578,9 +553,10 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Liabilities:Loan".to_string(),
-				Scalar::new(1000, 1),
-				"USD".to_string(),
-				None
+				Amount::new(
+					Scalar::new(1000, 1),
+					"USD".to_string(),
+				)
 			)
 			.is_ok());
 	}

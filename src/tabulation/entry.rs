@@ -13,6 +13,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
+use crate::tabulation::amount::{Amount, CostBasis};
 use crate::tabulation::exchange_rate::ExchangeRates;
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
@@ -49,24 +50,17 @@ impl Entry {
 	pub fn add_detail(
 		&mut self,
 		account: String,
-		amount: Scalar,
-		currency: String,
-		cost_basis: Option<CostBasis>,
+		amount: Amount,
 	) -> Result<(), Error> {
 		if account.is_empty() {
 			bail!("Account is empty")
 		}
 
 		*self.totals
-			.entry(currency.clone())
-			.or_insert(Scalar::zero()) += amount;
+			.entry(amount.currency.clone())
+			.or_insert(Scalar::zero()) += amount.value;
 
-		let mut detail = Detail::new(account, currency, amount);
-		if let Some(cb) = cost_basis {
-			detail.add_cost_basis(cb)
-		}
-
-		self.details.push(detail);
+		self.details.push(Detail::new(account, amount));
 
 		Ok(())
 	}
@@ -133,9 +127,9 @@ impl Entry {
 	) -> Scalar {
 		self.details.iter().fold(Scalar::zero(), |mut acc, x| {
 			if x.account.contains(account)
-				&& &x.currency == currency
+				&& &x.amount.currency == currency
 			{
-				acc += x.amount
+				acc += x.amount.value
 			}
 			acc
 		})
@@ -151,8 +145,8 @@ impl Entry {
 		resolution: u32,
 	) -> Result<(), Error> {
 		for detail in &mut self.details {
-			if &detail.currency == currency {
-				detail.amount.round(resolution)
+			if &detail.amount.currency == currency {
+				detail.amount.value.round(resolution)
 			}
 		}
 
@@ -176,22 +170,24 @@ impl Entry {
 		let infer_rates = cost_basis_details.is_empty();
 
 		for mut d in cost_basis_details {
-			let cbd = d.cost_basis.take().unwrap();
+			let cbd = d.amount.cost_basis().unwrap();
 
 			// The cost basis syntax implies a conversion, so add
 			// the conversion, effectively moving the imbalance to
 			// the cost basis currency
 			self.add_detail(
 				VIRTUAL_CONVERSION_ACCOUNT.to_string(),
-				cbd.unit_price * cbd.associated_amount,
-				cbd.currency.clone(),
-				None,
+				Amount::new(
+					cbd.unit_price * d.amount.value,
+					cbd.currency.clone(),
+				),
 			)?;
 			self.add_detail(
 				VIRTUAL_CONVERSION_ACCOUNT.to_string(),
-				-d.amount,
-				d.currency.clone(),
-				None,
+				Amount::new(
+					-d.amount.value,
+					d.amount.currency.clone(),
+				),
 			)?;
 		}
 
@@ -210,12 +206,11 @@ impl Entry {
 
 		// If a virtual detail exists, it can absorb all imbalances.
 		// Otherwise, if any remain, we fail the entry as unbalanced.
-		while let Some((currency, amount)) = imbalances.pop() {
+		while let Some((currency, value)) = imbalances.pop() {
 			if let Some(vd) = &self.virtual_detail {
 				self.details.push(Detail::new(
 					vd.clone(),
-					currency,
-					-amount,
+					Amount::new(-value, currency),
 				));
 			} else {
 				bail!("Unbalanced entry")
@@ -244,13 +239,11 @@ impl Entry {
 
 		self.details.push(Detail::new(
 			VIRTUAL_CONVERSION_ACCOUNT.to_string(),
-			currency1.clone(),
-			-amount1,
+			Amount::new(-amount1, currency1.clone()),
 		));
 		self.details.push(Detail::new(
 			VIRTUAL_CONVERSION_ACCOUNT.to_string(),
-			currency2.clone(),
-			-amount2,
+			Amount::new(-amount2, currency2.clone()),
 		));
 
 		// This implies an exchange rate between the currencies, except
@@ -302,7 +295,7 @@ impl Entry {
 		self.details
 			.iter()
 			.filter_map(|d| {
-				if d.cost_basis.is_some() {
+				if d.amount.has_cost_basis() {
 					Some(d.clone())
 				} else {
 					None
@@ -339,46 +332,30 @@ impl Ord for Entry {
 #[derive(Clone, Debug)]
 pub struct Detail {
 	pub account: String,
-	pub amount: Scalar,
-	currency: String,
-
-	cost_basis: Option<CostBasis>,
+	pub amount: Amount,
 }
 
 impl Detail {
-	pub fn new(account: String, currency: String, amount: Scalar) -> Self {
-		Self {
-			account,
-			currency,
-			amount,
-			cost_basis: None,
-		}
+	pub fn new(account: String, amount: Amount) -> Self {
+		Self { account, amount }
 	}
 
 	pub fn add_cost_basis(&mut self, cb: CostBasis) {
-		self.cost_basis = Some(cb);
+		self.amount.add_cost_basis(cb)
 	}
 
 	pub fn currency(&self) -> String {
-		self.currency.clone()
+		self.amount.currency.clone()
 	}
 
 	pub fn convert_to(&mut self, currency: &String, rate: Scalar) {
-		if &self.currency == currency {
+		if &self.amount.currency == currency {
 			return;
 		}
 
-		self.currency = currency.clone();
-		self.amount *= rate;
+		self.amount.currency = currency.clone();
+		self.amount.value *= rate;
 	}
-}
-
-#[derive(Clone, Debug)]
-pub struct CostBasis {
-	pub unit_price: Scalar,
-	pub currency: String,
-
-	pub associated_amount: Scalar,
 }
 
 #[cfg(test)]
@@ -410,9 +387,7 @@ mod tests {
 		let mut entry = create_entry(0);
 		let result = entry.add_detail(
 			"Assets:Cash".to_string(),
-			Scalar::new(1000, 1),
-			"USD".to_string(),
-			None,
+			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		);
 
 		assert!(result.is_ok());
@@ -420,8 +395,8 @@ mod tests {
 
 		let detail = &entry.details[0];
 		assert_eq!(detail.account, "Assets:Cash");
-		assert_eq!(detail.amount, Scalar::new(1000, 1));
-		assert_eq!(detail.currency, "USD");
+		assert_eq!(detail.amount.value, Scalar::new(1000, 1));
+		assert_eq!(detail.amount.currency, "USD");
 	}
 
 	#[test]
@@ -429,9 +404,7 @@ mod tests {
 		let mut entry = create_entry(0);
 		let result = entry.add_detail(
 			"".to_string(),
-			Scalar::new(1000, 1),
-			"USD".to_string(),
-			None,
+			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		);
 
 		assert!(result.is_err());
@@ -442,16 +415,12 @@ mod tests {
 		let mut entry = create_entry(0);
 		entry.add_detail(
 			"Assets:Cash".to_string(),
-			Scalar::new(1000, 1),
-			"USD".to_string(),
-			None,
+			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
 			"Assets:Savings".to_string(),
-			Scalar::new(500, 1),
-			"USD".to_string(),
-			None,
+			Amount::new(Scalar::new(500, 1), "USD".to_string()),
 		)
 		.unwrap();
 
@@ -466,16 +435,12 @@ mod tests {
 		let mut entry = create_entry(0);
 		entry.add_detail(
 			"Assets:Cash".to_string(),
-			Scalar::new(1000, 1),
-			"USD".to_string(),
-			None,
+			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
 			"Expenses:Food".to_string(),
-			Scalar::new(-500, 1),
-			"USD".to_string(),
-			None,
+			Amount::new(Scalar::new(-500, 1), "USD".to_string()),
 		)
 		.unwrap();
 
@@ -491,16 +456,12 @@ mod tests {
 		let mut entry = create_entry(0);
 		entry.add_detail(
 			"Assets:Cash".to_string(),
-			Scalar::new(1000, 1),
-			"USD".to_string(),
-			None,
+			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
 			"Expenses:Food".to_string(),
-			Scalar::new(-1000, 1),
-			"USD".to_string(),
-			None,
+			Amount::new(Scalar::new(-1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 
@@ -546,9 +507,7 @@ mod tests {
 		let mut entry = create_entry(0);
 		entry.add_detail(
 			"Assets:Cash".to_string(),
-			Scalar::new(1234567, 4),
-			"USD".to_string(),
-			None,
+			Amount::new(Scalar::new(1234567, 4), "USD".to_string()),
 		)
 		.unwrap();
 
@@ -556,8 +515,8 @@ mod tests {
 		assert!(result.is_ok());
 
 		let detail = &entry.details[0];
-		assert_eq!(detail.amount.amount(), 12346); // rounding check
-		assert_eq!(detail.amount.resolution(), 2);
+		assert_eq!(detail.amount.value.amount(), 12346); // rounding check
+		assert_eq!(detail.amount.value.resolution(), 2);
 	}
 
 	#[test]
@@ -565,16 +524,12 @@ mod tests {
 		let mut entry = create_entry(0);
 		entry.add_detail(
 			"Assets:Cash".to_string(),
-			Scalar::new(1234567, 4),
-			"USD".to_string(),
-			None,
+			Amount::new(Scalar::new(1234567, 4), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
 			"Assets:Cash".to_string(),
-			Scalar::new(9876543, 4),
-			"EUR".to_string(),
-			None,
+			Amount::new(Scalar::new(9876543, 4), "EUR".to_string()),
 		)
 		.unwrap();
 
@@ -582,28 +537,25 @@ mod tests {
 		assert!(result.is_ok());
 
 		let usd_detail = &entry.details[0];
-		assert_eq!(usd_detail.amount.amount(), 12346);
-		assert_eq!(usd_detail.amount.resolution(), 2);
+		assert_eq!(usd_detail.amount.value.amount(), 12346);
+		assert_eq!(usd_detail.amount.value.resolution(), 2);
 
 		let eur_detail = &entry.details[1];
-		assert_eq!(eur_detail.amount.amount(), 9876543);
-		assert_eq!(eur_detail.amount.resolution(), 4);
+		assert_eq!(eur_detail.amount.value.amount(), 9876543);
+		assert_eq!(eur_detail.amount.value.resolution(), 4);
 	}
 
 	#[test]
 	fn test_get_cost_basis_details() {
 		let mut entry = create_entry(0);
-		entry.add_detail(
-			"Assets:Cash".to_string(),
-			Scalar::new(1000, 1),
-			"USD".to_string(),
-			Some(CostBasis {
-				unit_price: Scalar::new(10, 1),
-				currency: "EUR".to_string(),
-				associated_amount: Scalar::new(100, 1),
-			}),
-		)
-		.unwrap();
+		let mut a =
+			Amount::new(Scalar::new(1000, 1), "USD".to_string());
+		a.add_cost_basis(CostBasis {
+			unit_price: Scalar::new(10, 1),
+			currency: "EUR".to_string(),
+		});
+
+		entry.add_detail("Assets:Cash".to_string(), a).unwrap();
 
 		let cost_basis_details = entry.get_cost_basis_details();
 		assert_eq!(cost_basis_details.len(), 1);
@@ -614,16 +566,12 @@ mod tests {
 		let mut entry = create_entry(0);
 		entry.add_detail(
 			"Assets:Cash".to_string(),
-			Scalar::new(1000, 1),
-			"USD".to_string(),
-			None,
+			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
 			"Assets:Bank".to_string(),
-			Scalar::new(-2000, 1),
-			"EUR".to_string(),
-			None,
+			Amount::new(Scalar::new(-2000, 1), "EUR".to_string()),
 		)
 		.unwrap();
 
@@ -644,16 +592,12 @@ mod tests {
 		let mut entry = create_entry(0);
 		entry.add_detail(
 			"Assets:Cash".to_string(),
-			Scalar::new(1000, 1),
-			"USD".to_string(),
-			None,
+			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
 			"Assets:Bank".to_string(),
-			Scalar::new(2000, 1),
-			"EUR".to_string(),
-			None,
+			Amount::new(Scalar::new(2000, 1), "EUR".to_string()),
 		)
 		.unwrap(); // Both amounts are positive
 

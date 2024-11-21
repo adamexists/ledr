@@ -73,7 +73,7 @@ impl Total {
 				// Update each total along the hierarchy
 				*current.amounts
 					.entry(detail.currency())
-					.or_insert_with(Scalar::zero) += detail.amount;
+					.or_insert_with(Scalar::zero) += detail.amount.value;
 
 				current = current
 					.subtotals
@@ -89,7 +89,7 @@ impl Total {
 			// Update the leaf node with the final amount
 			*current.amounts
 				.entry(detail.currency())
-				.or_insert_with(Scalar::zero) += detail.amount;
+				.or_insert_with(Scalar::zero) += detail.amount.value;
 		}
 	}
 
@@ -148,6 +148,7 @@ impl Total {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::tabulation::amount::Amount;
 	use crate::tabulation::entry::Detail;
 	use crate::util::scalar::Scalar;
 
@@ -165,8 +166,7 @@ mod tests {
 		let mut total = Total::new();
 		let detail = Detail::new(
 			"Assets:Cash".to_string(),
-			"USD".to_string(),
-			Scalar::new(1000, 1),
+			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		);
 		total.ingest_details(&vec![detail]);
 
@@ -190,13 +190,17 @@ mod tests {
 		let details = vec![
 			Detail::new(
 				"Assets:Cash".to_string(),
-				"USD".to_string(),
-				Scalar::new(1000, 1),
+				Amount::new(
+					Scalar::new(1000, 1),
+					"USD".to_string(),
+				),
 			),
 			Detail::new(
 				"Assets:AR".to_string(),
-				"USD".to_string(),
-				Scalar::new(2000, 1),
+				Amount::new(
+					Scalar::new(2000, 1),
+					"USD".to_string(),
+				),
 			),
 		];
 		total.ingest_details(&details);
@@ -226,8 +230,7 @@ mod tests {
 		let mut total = Total::new();
 		let detail = Detail::new(
 			"Liabilities:Short-Term:CreditCard".to_string(),
-			"EUR".to_string(),
-			Scalar::new(500, 1),
+			Amount::new(Scalar::new(500, 1), "EUR".to_string()),
 		);
 		total.ingest_details(&vec![detail]);
 
@@ -255,13 +258,17 @@ mod tests {
 		total.ingest_details(&vec![
 			Detail::new(
 				"Assets:Cash".to_string(),
-				"USD".to_string(),
-				Scalar::new(1000, 1),
+				Amount::new(
+					Scalar::new(1000, 1),
+					"USD".to_string(),
+				),
 			),
 			Detail::new(
 				"Liabilities:CreditCard".to_string(),
-				"USD".to_string(),
-				Scalar::new(500, 1),
+				Amount::new(
+					Scalar::new(500, 1),
+					"USD".to_string(),
+				),
 			),
 		]);
 
@@ -283,13 +290,17 @@ mod tests {
 		total.ingest_details(&vec![
 			Detail::new(
 				"Income:Sales".to_string(),
-				"USD".to_string(),
-				Scalar::new(3000, 1),
+				Amount::new(
+					Scalar::new(3000, 1),
+					"USD".to_string(),
+				),
 			),
 			Detail::new(
 				"Expenses:Rent".to_string(),
-				"USD".to_string(),
-				Scalar::new(1000, 1),
+				Amount::new(
+					Scalar::new(1000, 1),
+					"USD".to_string(),
+				),
 			),
 		]);
 
@@ -320,13 +331,17 @@ mod tests {
 		total.ingest_details(&vec![
 			Detail::new(
 				"Assets:Cash".to_string(),
-				"USD".to_string(),
-				Scalar::new(1000, 1),
+				Amount::new(
+					Scalar::new(1000, 1),
+					"USD".to_string(),
+				),
 			),
 			Detail::new(
 				"Liabilities:CreditCard".to_string(),
-				"USD".to_string(),
-				Scalar::new(500, 1),
+				Amount::new(
+					Scalar::new(500, 1),
+					"USD".to_string(),
+				),
 			),
 		]);
 

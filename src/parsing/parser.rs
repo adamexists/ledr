@@ -13,7 +13,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-use crate::tabulation::ledger::{CostBasisAmountType, CostBasisInput, Ledger};
+use crate::tabulation::amount::{Amount, CostBasis};
+use crate::tabulation::ledger::Ledger;
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
 use anyhow::{anyhow, bail, Error};
@@ -203,16 +204,18 @@ fn second_pass(
 		}
 
 		let account = parts[0].to_string();
-		let amount = Scalar::from_str(parts[1])?;
-		let currency = parts[2].to_string();
+		let mut amount = Amount::new(
+			Scalar::from_str(parts[1])?,
+			parts[2].to_string(),
+		);
 
 		// if exactly three parts, no cost basis
 		if parts.len() == 3 {
 			parse_result.note_precision(
-				currency.clone(),
-				amount.resolution(),
+				amount.currency.clone(),
+				amount.value.resolution(),
 			);
-			ledger.add_detail(account, amount, currency, None)
+			ledger.add_detail(account, amount)
 				.map_err(|e| anyhow!("{} (line {})", e, i))?;
 			continue;
 		}
@@ -232,15 +235,20 @@ fn second_pass(
 			bail!("Invalid cost basis (line {}): {}", i, l);
 		}
 
-		let amount_type = match operator {
-			"@" => CostBasisAmountType::UnitCost,
-			"@@" => CostBasisAmountType::TotalCost,
+		let is_total_cost = match operator {
+			"@" => false,
+			"@@" => true,
 			_ => bail!("Invalid cost basis (line {}): {}", i, l),
 		};
 
-		let cb_amount = Scalar::from_str(b_parts[0]).map_err(|_| {
-			anyhow!("Invalid scalar value (line {}): {}", i, l)
-		})?;
+		let mut cb_amount =
+			Scalar::from_str(b_parts[0]).map_err(|_| {
+				anyhow!(
+					"Invalid scalar value (line {}): {}",
+					i,
+					l
+				)
+			})?;
 		let cb_currency = b_parts[1].to_string();
 
 		parse_result.note_precision(
@@ -248,17 +256,17 @@ fn second_pass(
 			cb_amount.resolution(),
 		);
 
-		ledger.add_detail(
-			account,
-			amount,
-			currency,
-			Some(CostBasisInput {
-				amount: cb_amount,
-				amount_type,
-				currency: cb_currency,
-			}),
-		)
-		.map_err(|e| anyhow!("{} (line {})", e, i))?;
+		if is_total_cost {
+			cb_amount /= amount.value
+		}
+
+		amount.add_cost_basis(CostBasis {
+			unit_price: cb_amount,
+			currency: cb_currency,
+		});
+
+		ledger.add_detail(account, amount)
+			.map_err(|e| anyhow!("{} (line {})", e, i))?;
 	}
 
 	// Make sure to finish the last entry if the file ends without an empty line
