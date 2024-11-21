@@ -15,7 +15,6 @@
  */
 use crate::tabulation::exchange_rate::ExchangeRates;
 use crate::util::date::Date;
-use crate::util::scalar;
 use crate::util::scalar::Scalar;
 use anyhow::{bail, Error};
 use std::cmp::Ordering;
@@ -58,8 +57,9 @@ impl Entry {
 			bail!("Account is empty")
 		}
 
-		*self.totals.entry(currency.clone()).or_insert(scalar::ZERO) +=
-			amount;
+		*self.totals
+			.entry(currency.clone())
+			.or_insert(Scalar::zero()) += amount;
 
 		let mut detail = Detail::new(account, currency, amount);
 		if let Some(cb) = cost_basis {
@@ -131,7 +131,7 @@ impl Entry {
 		account: &String,
 		currency: &String,
 	) -> Scalar {
-		self.details.iter().fold(scalar::ZERO, |mut acc, x| {
+		self.details.iter().fold(Scalar::zero(), |mut acc, x| {
 			if x.account.contains(account)
 				&& &x.currency == currency
 			{

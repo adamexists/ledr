@@ -16,7 +16,7 @@
 
 use crate::reports::table::Table;
 use crate::tabulation::entry::Entry;
-use crate::util::scalar;
+use crate::util::scalar::Scalar;
 
 // TODO: Build a collection of test cases for this one.
 pub struct OrderedEntry {
@@ -34,7 +34,7 @@ impl OrderedEntry {
 		let mut table = Table::new(4);
 		table.right_align(2);
 
-		let mut total = scalar::ZERO; // TODO move away from this syntax
+		let mut total = Scalar::zero();
 		for entry in &self.entries {
 			let net = entry.net_for_account(account, currency);
 			total += net;

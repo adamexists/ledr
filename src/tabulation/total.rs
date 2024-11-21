@@ -16,7 +16,6 @@
 
 use crate::tabulation::entry::Detail;
 use crate::tabulation::ledger::Ledger;
-use crate::util::scalar;
 use crate::util::scalar::Scalar;
 use std::collections::HashMap;
 
@@ -74,7 +73,7 @@ impl Total {
 				// Update each total along the hierarchy
 				*current.amounts
 					.entry(detail.currency())
-					.or_insert_with(|| scalar::ZERO) += detail.amount;
+					.or_insert_with(Scalar::zero) += detail.amount;
 
 				current = current
 					.subtotals
@@ -90,7 +89,7 @@ impl Total {
 			// Update the leaf node with the final amount
 			*current.amounts
 				.entry(detail.currency())
-				.or_insert_with(|| scalar::ZERO) += detail.amount;
+				.or_insert_with(Scalar::zero) += detail.amount;
 		}
 	}
 

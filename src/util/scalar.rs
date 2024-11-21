@@ -31,12 +31,14 @@ pub struct Scalar {
 	resolution: u32,
 }
 
-pub const ZERO: Scalar = Scalar {
-	amount: 0,
-	resolution: 0,
-};
-
 impl Scalar {
+	pub fn zero() -> Self {
+		Self {
+			amount: 0,
+			resolution: 0,
+		}
+	}
+
 	pub fn new(amount: i128, resolution: u32) -> Self {
 		Self { amount, resolution }
 	}
@@ -552,7 +554,7 @@ mod tests {
 		#[test]
 		fn test_mul_with_zero() {
 			let money = Scalar::from_str("123.45").unwrap();
-			let zero = ZERO;
+			let zero = Scalar::zero();
 			let result = money * zero;
 			assert_eq!(result.amount, 0);
 			assert_eq!(result.resolution, 2);
