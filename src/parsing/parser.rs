@@ -59,10 +59,6 @@ fn first_pass(
 		}
 
 		// Handle includes, which recursively first_passes when seen
-		// TODO: Document how includes work. They are not directives
-		//  because they do not include a date. The file path is
-		//  relative to the working directory, so the best practice is
-		//  to use fully qualified paths for include directives.
 		if l.starts_with("include") {
 			let include: Vec<&str> = l.split_whitespace().collect();
 			if include.len() != 2 {
@@ -277,7 +273,7 @@ fn second_pass(
 /// processes everything else. This means we are agnostic to the order of any
 /// contents of the file. The only exception is that when multiple implicit
 /// currency conversions occur in the same day between the same currencies, all
-/// reporting will use the latest one processed in the file. TODO: Manpage this.
+/// reporting will use the latest one processed in the file.
 pub fn parse(path: &str, ledger: &mut Ledger) -> Result<ParseResult, Error> {
 	let mut file = file_from_path(path)?;
 

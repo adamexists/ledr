@@ -206,7 +206,7 @@ impl PartialOrd for Movement {
 		// Compare by date first
 		match self.date.partial_cmp(&other.date) {
 			Some(Ordering::Equal) => {
-				// If dates are equal, sort buys before sells TODO: manpage this
+				// If dates are equal, sort buys before sells
 				match (&self.action, &other.action) {
 					(LotAction::Buy, LotAction::Sell) => {
 						Some(Ordering::Less)

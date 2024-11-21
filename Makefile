@@ -1,18 +1,32 @@
-.PHONY: all build test fmt clean install
+VERSION=0.1
+PREFIX?=/usr/local
+BINDIR?=$(PREFIX)/bin
+MANDIR?=$(PREFIX)/share/man
 
-all: build
+.PHONY: all build fmt test clean doc install uninstall
+
+all: build doc
 
 build:
 	cargo build --release
 
-test: fmt
-	cargo test -- --test-threads=1
-
 fmt:
 	cargo fmt
+
+test: fmt
+	cargo test -- --test-threads=1
 
 clean: fmt
 	cargo clean
 
+doc:
+	mkdir -p target
+	scdoc < doc/ledr.1.scd > target/ledr.1
+
 install:
-	install -m 755 target/release/ledr /usr/local/bin/ledr
+	install -m 755 target/release/ledr $(DESTDIR)$(BINDIR)/ledr
+	install -m 644 target/ledr.1 $(DESTDIR)$(MANDIR)/man1/ledr.1
+
+uninstall:
+	rm -f $(DESTDIR)$(BINDIR)/ledr
+	rm -f $(DESTDIR)$(MANDIR)/man1/ledr.1

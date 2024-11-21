@@ -1,9 +1,13 @@
 image: archlinux
 packages:
   - rust
+  - scdoc
 sources:
   - https://git.sr.ht/~house/ledr
 tasks:
+  - man: |
+      cd ledr
+      scdoc < doc/ledr.1.scd > ledr.1
   - format: |
       cd ledr
       cargo fmt --check

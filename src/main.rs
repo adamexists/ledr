@@ -28,8 +28,6 @@ mod reports;
 mod tabulation;
 mod util;
 
-// TODO: scdoc and man page!
-
 #[derive(Parser)]
 #[command(name = "ledr", version = "1.0", about = "Plain text accounting tool")]
 struct Cli {

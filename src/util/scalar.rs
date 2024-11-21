@@ -21,7 +21,7 @@ use std::ops::{
 	Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign,
 };
 
-const MAX_RESOLUTION: u32 = 32; // TODO: Document.
+const MAX_RESOLUTION: u32 = 32;
 
 /// A general-purpose number, capable of holding an exact decimal value, backed
 /// by integer arithmetic and not float arithmetic.
@@ -119,7 +119,6 @@ impl Scalar {
 
 	/// Sets resolution of the Scalar to the given value, rounding it if
 	/// necessary using Banker's rounding (round to nearest, ties to even).
-	/// TODO: Document about Banker's rounding.
 	pub fn round(&mut self, resolution: u32) {
 		if resolution >= self.resolution {
 			self.set_resolution(resolution)
