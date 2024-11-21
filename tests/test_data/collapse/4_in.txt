@@ -1,6 +1,6 @@
-# If there's an entry with a cost basis, then that should create an inferred
-# rate, and nothing else should. The general vibe of this test is "nah I'm not
-# getting involved"
+# If there's an entry with an inline rate, then that should create an inferred
+# rate, and nothing without a rate should be printed in the report. A rate would
+# be inferred here, but the directions of the values are not cardinally opposite.
 
 ! 2024-11-10 currency USD
 ! 2024-11-10 currency BTC
@@ -13,14 +13,10 @@
 ! 2024-11-10 account Assets:Investments:Neutral
 ! 2024-11-10 account Equity:OpeningBalances
 
-# To clarify, the cost bases are their own self-contained rates, but we
-# assume that the situation is still too ambiguous to infer a rate
-# between ETH and USD here.
-
 # DOGE and BTC should collapse into USD at their respective rates, and
 # ETH should not be shown in the report.
 
-2024-11-10 Cost Bases Take Precedence
+2024-11-10 Test Case
     Assets:Investments:Cool     10,000 DOGE @ 0.01 USD
     Assets:Investments:Boring        1 BTC  @ 50000 USD
     Assets:Investments:Neutral      20 ETH

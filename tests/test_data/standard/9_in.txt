@@ -2,7 +2,7 @@
 ! 2024-11-10 currency USD
 
 # Nobody should have an entry like this, but it's *basically* fine.
-# The cost basis should act as though the cash account doesn't exist
+# The inline rate should act as though the cash account doesn't exist
 # and that one should just net normally with the virtual detail at
 # the bottom. All USD should be contained in the equity account,
 # between opening balances and conversions.

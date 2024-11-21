@@ -33,9 +33,6 @@ pub struct Entry {
 	virtual_detail: Option<String>,
 	totals: HashMap<String, Scalar>, // Currency -> Amount
 	reference: Option<String>,       // optional string, not inspected
-
-	/// True iff any detail has inline conversion or cost basis input
-	has_inline_conversion: bool,
 }
 
 impl Entry {
@@ -47,7 +44,6 @@ impl Entry {
 			virtual_detail: None,
 			totals: HashMap::new(),
 			reference: None,
-			has_inline_conversion: false,
 		}
 	}
 
@@ -222,29 +218,23 @@ impl Entry {
 			Amount::new(-amount2, currency2.clone()),
 		));
 
-		// This implies an exchange rate between the currencies, except
-		// in some cases related to cost basis processing where we've
-		// entered reconciling details manually and should not make
-		// assumptions here.
-		//
+		// This implies an exchange rate between the currencies.
 		// We use a lame method here to make the underlying integer
 		// division nicer.
-		if !self.has_inline_conversion {
-			if amount1.abs() > amount2.abs() {
-				rates.infer(
-					self.date,
-					&currency2,
-					&currency1,
-					(amount1 / amount2).abs(),
-				)?;
-			} else {
-				rates.infer(
-					self.date,
-					&currency1,
-					&currency2,
-					(amount2 / amount1).abs(),
-				)?;
-			}
+		if amount1.abs() > amount2.abs() {
+			rates.infer(
+				self.date,
+				&currency2,
+				&currency1,
+				(amount1 / amount2).abs(),
+			)?;
+		} else {
+			rates.infer(
+				self.date,
+				&currency1,
+				&currency2,
+				(amount2 / amount1).abs(),
+			)?;
 		}
 
 		Ok(())

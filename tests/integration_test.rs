@@ -67,6 +67,7 @@ fn test_integration_should_fail() {
 		("2_in.txt", ""),
 		("3_in.txt", ""),
 		("4_in.txt", ""),
+		("5_in.txt", ""),
 	];
 
 	execute("failures", test_cases, false, "tb", vec![])
