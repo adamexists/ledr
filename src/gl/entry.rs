@@ -13,8 +13,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-use crate::tabulation::amount::{Amount, CostBasis};
-use crate::tabulation::exchange_rate::ExchangeRates;
+use crate::gl::exchange_rate::ExchangeRates;
+use crate::util::amount::Amount;
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
 use anyhow::{bail, Error};
@@ -22,7 +22,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::string::ToString;
 
-const VIRTUAL_CONVERSION_ACCOUNT: &str = "Equity:Conversions";
+pub(crate) const VIRTUAL_CONVERSION_ACCOUNT: &str = "Equity:Conversions";
 
 #[derive(Debug)]
 pub struct Entry {
@@ -33,6 +33,9 @@ pub struct Entry {
 	virtual_detail: Option<String>,
 	totals: HashMap<String, Scalar>, // Currency -> Amount
 	reference: Option<String>,       // optional string, not inspected
+
+	/// True iff any detail has inline conversion or cost basis input
+	has_inline_conversion: bool,
 }
 
 impl Entry {
@@ -44,12 +47,13 @@ impl Entry {
 			virtual_detail: None,
 			totals: HashMap::new(),
 			reference: None,
+			has_inline_conversion: false,
 		}
 	}
 
 	pub fn add_detail(
 		&mut self,
-		account: String,
+		account: &str,
 		amount: Amount,
 	) -> Result<(), Error> {
 		if account.is_empty() {
@@ -60,7 +64,7 @@ impl Entry {
 			.entry(amount.currency.clone())
 			.or_insert(Scalar::zero()) += amount.value;
 
-		self.details.push(Detail::new(account, amount));
+		self.details.push(Detail::new(account.to_owned(), amount));
 
 		Ok(())
 	}
@@ -104,8 +108,8 @@ impl Entry {
 		&self.desc
 	}
 
-	pub fn get_date(&self) -> &Date {
-		&self.date
+	pub fn get_date(&self) -> Date {
+		self.date
 	}
 
 	pub fn details(&mut self) -> &mut Vec<Detail> {
@@ -127,7 +131,7 @@ impl Entry {
 	) -> Scalar {
 		self.details.iter().fold(Scalar::zero(), |mut acc, x| {
 			if x.account.contains(account)
-				&& &x.amount.currency == currency
+				&& x.amount.currency == *currency
 			{
 				acc += x.amount.value
 			}
@@ -145,7 +149,7 @@ impl Entry {
 		resolution: u32,
 	) -> Result<(), Error> {
 		for detail in &mut self.details {
-			if &detail.amount.currency == currency {
+			if detail.amount.currency == *currency {
 				detail.amount.value.round(resolution)
 			}
 		}
@@ -165,32 +169,6 @@ impl Entry {
 		&mut self,
 		rates: &mut ExchangeRates,
 	) -> Result<(), Error> {
-		let cost_basis_details = self.get_cost_basis_details();
-
-		let infer_rates = cost_basis_details.is_empty();
-
-		for mut d in cost_basis_details {
-			let cbd = d.amount.cost_basis().unwrap();
-
-			// The cost basis syntax implies a conversion, so add
-			// the conversion, effectively moving the imbalance to
-			// the cost basis currency
-			self.add_detail(
-				VIRTUAL_CONVERSION_ACCOUNT.to_string(),
-				Amount::new(
-					cbd.unit_price * d.amount.value,
-					cbd.currency.clone(),
-				),
-			)?;
-			self.add_detail(
-				VIRTUAL_CONVERSION_ACCOUNT.to_string(),
-				Amount::new(
-					-d.amount.value,
-					d.amount.currency.clone(),
-				),
-			)?;
-		}
-
 		let mut imbalances = self.get_imbalances();
 
 		// Special case if exactly two currencies are unbalanced with no
@@ -199,7 +177,6 @@ impl Entry {
 			self.multiline_implicit_currency_conversion(
 				&mut imbalances,
 				rates,
-				infer_rates,
 			)?;
 			return Ok(());
 		}
@@ -227,7 +204,6 @@ impl Entry {
 		&mut self,
 		imbalances: &mut Vec<(String, Scalar)>,
 		rates: &mut ExchangeRates,
-		can_infer_rates: bool,
 	) -> Result<(), Error> {
 		let (currency1, amount1) = imbalances.remove(0);
 		let (currency2, amount2) = imbalances.remove(0);
@@ -253,19 +229,19 @@ impl Entry {
 		//
 		// We use a lame method here to make the underlying integer
 		// division nicer.
-		if can_infer_rates {
+		if !self.has_inline_conversion {
 			if amount1.abs() > amount2.abs() {
 				rates.infer(
 					self.date,
-					currency2,
-					currency1,
+					&currency2,
+					&currency1,
 					(amount1 / amount2).abs(),
 				)?;
 			} else {
 				rates.infer(
 					self.date,
-					currency1,
-					currency2,
+					&currency1,
+					&currency2,
 					(amount2 / amount1).abs(),
 				)?;
 			}
@@ -282,21 +258,6 @@ impl Entry {
 			.filter_map(|(k, &v)| {
 				if v != 0 {
 					Some((k.clone(), v))
-				} else {
-					None
-				}
-			})
-			.collect()
-	}
-
-	/// Find all Details with cost bases in the entry.
-	fn get_cost_basis_details(&self) -> Vec<Detail> {
-		// Collect the retained elements into a Vec
-		self.details
-			.iter()
-			.filter_map(|d| {
-				if d.amount.has_cost_basis() {
-					Some(d.clone())
 				} else {
 					None
 				}
@@ -331,8 +292,8 @@ impl Ord for Entry {
 
 #[derive(Clone, Debug)]
 pub struct Detail {
-	pub account: String,
-	pub amount: Amount,
+	account: String,
+	amount: Amount,
 }
 
 impl Detail {
@@ -340,28 +301,27 @@ impl Detail {
 		Self { account, amount }
 	}
 
-	pub fn add_cost_basis(&mut self, cb: CostBasis) {
-		self.amount.add_cost_basis(cb)
+	pub fn account(&self) -> &String {
+		&self.account
 	}
 
 	pub fn currency(&self) -> String {
 		self.amount.currency.clone()
 	}
 
-	pub fn convert_to(&mut self, currency: &String, rate: Scalar) {
-		if &self.amount.currency == currency {
-			return;
-		}
+	pub fn amount(&self) -> &Amount {
+		&self.amount
+	}
 
-		self.amount.currency = currency.clone();
-		self.amount.value *= rate;
+	pub fn convert_to(&mut self, currency: &str, rate: Scalar) {
+		self.amount.convert_to(currency, rate);
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::tabulation::exchange_rate::ExchangeRates;
+	use crate::gl::exchange_rate::ExchangeRates;
 	use crate::util::date::Date;
 	use crate::util::scalar::Scalar;
 
@@ -378,7 +338,7 @@ mod tests {
 	#[test]
 	fn test_entry_creation() {
 		let entry = create_entry(0);
-		assert_eq!(entry.get_date(), &sample_date(0));
+		assert_eq!(entry.get_date(), sample_date(0));
 		assert!(entry.details.is_empty());
 	}
 
@@ -386,7 +346,7 @@ mod tests {
 	fn test_add_detail() {
 		let mut entry = create_entry(0);
 		let result = entry.add_detail(
-			"Assets:Cash".to_string(),
+			&"Assets:Cash".to_string(),
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		);
 
@@ -403,7 +363,7 @@ mod tests {
 	fn test_add_detail_empty_account() {
 		let mut entry = create_entry(0);
 		let result = entry.add_detail(
-			"".to_string(),
+			&"".to_string(),
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		);
 
@@ -414,12 +374,12 @@ mod tests {
 	fn test_add_detail_multiple_same_currency() {
 		let mut entry = create_entry(0);
 		entry.add_detail(
-			"Assets:Cash".to_string(),
+			&"Assets:Cash".to_string(),
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
-			"Assets:Savings".to_string(),
+			&"Assets:Savings".to_string(),
 			Amount::new(Scalar::new(500, 1), "USD".to_string()),
 		)
 		.unwrap();
@@ -434,12 +394,12 @@ mod tests {
 	fn test_finalize_unbalanced_entry() {
 		let mut entry = create_entry(0);
 		entry.add_detail(
-			"Assets:Cash".to_string(),
+			&"Assets:Cash".to_string(),
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
-			"Expenses:Food".to_string(),
+			&"Expenses:Food".to_string(),
 			Amount::new(Scalar::new(-500, 1), "USD".to_string()),
 		)
 		.unwrap();
@@ -455,12 +415,12 @@ mod tests {
 	fn test_finalize_balanced_entry() {
 		let mut entry = create_entry(0);
 		entry.add_detail(
-			"Assets:Cash".to_string(),
+			&"Assets:Cash".to_string(),
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
-			"Expenses:Food".to_string(),
+			&"Expenses:Food".to_string(),
 			Amount::new(Scalar::new(-1000, 1), "USD".to_string()),
 		)
 		.unwrap();
@@ -506,7 +466,7 @@ mod tests {
 	fn test_set_resolution_for_currency() {
 		let mut entry = create_entry(0);
 		entry.add_detail(
-			"Assets:Cash".to_string(),
+			&"Assets:Cash".to_string(),
 			Amount::new(Scalar::new(1234567, 4), "USD".to_string()),
 		)
 		.unwrap();
@@ -523,12 +483,12 @@ mod tests {
 	fn test_set_resolution_for_currency_different_currency() {
 		let mut entry = create_entry(0);
 		entry.add_detail(
-			"Assets:Cash".to_string(),
+			&"Assets:Cash".to_string(),
 			Amount::new(Scalar::new(1234567, 4), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
-			"Assets:Cash".to_string(),
+			&"Assets:Cash".to_string(),
 			Amount::new(Scalar::new(9876543, 4), "EUR".to_string()),
 		)
 		.unwrap();
@@ -546,31 +506,15 @@ mod tests {
 	}
 
 	#[test]
-	fn test_get_cost_basis_details() {
-		let mut entry = create_entry(0);
-		let mut a =
-			Amount::new(Scalar::new(1000, 1), "USD".to_string());
-		a.add_cost_basis(CostBasis {
-			unit_price: Scalar::new(10, 1),
-			currency: "EUR".to_string(),
-		});
-
-		entry.add_detail("Assets:Cash".to_string(), a).unwrap();
-
-		let cost_basis_details = entry.get_cost_basis_details();
-		assert_eq!(cost_basis_details.len(), 1);
-	}
-
-	#[test]
 	fn test_multiline_implicit_currency_conversion() {
 		let mut entry = create_entry(0);
 		entry.add_detail(
-			"Assets:Cash".to_string(),
+			&"Assets:Cash".to_string(),
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
-			"Assets:Bank".to_string(),
+			&"Assets:Bank".to_string(),
 			Amount::new(Scalar::new(-2000, 1), "EUR".to_string()),
 		)
 		.unwrap();
@@ -580,7 +524,6 @@ mod tests {
 		let result = entry.multiline_implicit_currency_conversion(
 			&mut imbalances,
 			&mut rates,
-			true,
 		);
 
 		assert!(result.is_ok());
@@ -591,12 +534,12 @@ mod tests {
 	fn test_multiline_implicit_currency_conversion_error() {
 		let mut entry = create_entry(0);
 		entry.add_detail(
-			"Assets:Cash".to_string(),
+			&"Assets:Cash".to_string(),
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
-			"Assets:Bank".to_string(),
+			&"Assets:Bank".to_string(),
 			Amount::new(Scalar::new(2000, 1), "EUR".to_string()),
 		)
 		.unwrap(); // Both amounts are positive
@@ -606,7 +549,6 @@ mod tests {
 		let result = entry.multiline_implicit_currency_conversion(
 			&mut imbalances,
 			&mut rates,
-			true,
 		);
 
 		// Both imbalances are in the same direction, which is bad

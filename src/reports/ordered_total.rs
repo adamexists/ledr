@@ -14,8 +14,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::tabulation::ledger::VALID_PREFIXES;
-use crate::tabulation::total::Total;
+use crate::gl::ledger::VALID_PREFIXES;
+use crate::gl::total::Total;
 use crate::util::scalar::Scalar;
 
 /// When using this to display something, you should instantiate it, then sort

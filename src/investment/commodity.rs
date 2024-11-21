@@ -13,7 +13,25 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
+use crate::util::amount::CostBasis;
 
-pub mod amount;
-pub mod date;
-pub mod scalar;
+// TODO: Resolve problems with these derivations, if any.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd)]
+pub struct Commodity {
+	symbol: String,
+	cost_basis: CostBasis,
+}
+
+impl Commodity {
+	pub fn new(symbol: String, cost_basis: CostBasis) -> Self {
+		Self { symbol, cost_basis }
+	}
+
+	pub fn symbol(&self) -> &str {
+		&self.symbol
+	}
+
+	pub fn cost_basis(&self) -> &CostBasis {
+		&self.cost_basis
+	}
+}

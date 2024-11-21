@@ -18,7 +18,7 @@ use std::fs;
 use std::process::Command;
 
 #[test]
-fn test_integration_no_arguments() {
+fn test_integration_standard() {
 	let test_cases = vec![
 		("1_in.txt", "1_out.txt"),
 		("2_in.txt", "2_out.txt"),
@@ -36,7 +36,7 @@ fn test_integration_no_arguments() {
 		("14_in.txt", "14_out.txt"),
 	];
 
-	execute("standard", test_cases, "tb", vec![])
+	execute("standard", test_cases, true, "tb", vec![])
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn test_integration_collapse_currency() {
 		("5_in.txt", "5_out.txt"),
 	];
 
-	execute("collapse", test_cases, "tb", vec!["-c", "USD"])
+	execute("collapse", test_cases, true, "tb", vec!["-c", "USD"])
 }
 
 #[test]
@@ -57,12 +57,25 @@ fn test_integration_max_depth() {
 	let test_cases =
 		vec![("1_in.txt", "1_out.txt"), ("2_in.txt", "2_out.txt")];
 
-	execute("maxdepth", test_cases, "bs", vec!["-d", "2"])
+	execute("maxdepth", test_cases, true, "bs", vec!["-d", "2"])
+}
+
+#[test]
+fn test_integration_should_fail() {
+	let test_cases = vec![
+		("1_in.txt", ""),
+		("2_in.txt", ""),
+		("3_in.txt", ""),
+		("4_in.txt", ""),
+	];
+
+	execute("failures", test_cases, false, "tb", vec![])
 }
 
 fn execute(
 	subfolder: &str,
 	test_cases: Vec<(&str, &str)>,
+	should_succeed: bool,
 	cmd: &str,
 	args: Vec<&str>,
 ) {
@@ -84,6 +97,15 @@ fn execute(
 			.args(all_args)
 			.output()
 			.expect("Failed to execute process");
+
+		if !should_succeed {
+			assert!(
+				!output.status.success(),
+				"{} unexpectedly succeeded!",
+				input_file
+			);
+			continue;
+		}
 
 		assert!(
 			output.status.success(),

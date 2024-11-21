@@ -14,7 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::tabulation::exchange_rate::RateType::{Declared, Inferred};
+use crate::gl::exchange_rate::RateType::{Declared, Inferred};
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
 use anyhow::{bail, Error};
@@ -78,8 +78,8 @@ impl ExchangeRates {
 	pub fn infer(
 		&mut self,
 		date: Date,
-		base: String,
-		quote: String,
+		base: &String,
+		quote: &String,
 		mut rate: Scalar,
 	) -> Result<(), Error> {
 		if base == quote {
@@ -95,10 +95,10 @@ impl ExchangeRates {
 
 		// to standardize lookups, put base alphabetically before quote
 		let key = if base < quote {
-			(base, quote)
+			(base.clone(), quote.clone())
 		} else {
 			rate = 1 / rate;
-			(quote, base)
+			(quote.clone(), base.clone())
 		};
 
 		if let Some(declared) =
@@ -323,12 +323,12 @@ mod tests {
 
 		let inferred_rate = Scalar::new(1099, 3);
 		assert!(exchange_rates
-			.infer(date, base.clone(), quote.clone(), inferred_rate)
+			.infer(date, &base, &quote, inferred_rate)
 			.is_ok());
 
 		let date2 = Date::new(2024, 11, 2);
 		assert!(exchange_rates
-			.infer(date2, base, quote, Scalar::new(111, 2))
+			.infer(date2, &base, &quote, Scalar::new(111, 2))
 			.is_ok());
 	}
 
@@ -351,11 +351,11 @@ mod tests {
 
 		let inferred_rate = Scalar::new(112, 2);
 		assert!(exchange_rates
-			.infer(date, base.clone(), quote.clone(), inferred_rate)
+			.infer(date, &base, &quote, inferred_rate)
 			.is_err());
 
 		assert!(exchange_rates
-			.infer(date, base, quote, Scalar::new(97, 2))
+			.infer(date, &base, &quote, Scalar::new(97, 2))
 			.is_err());
 	}
 

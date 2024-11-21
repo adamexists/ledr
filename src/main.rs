@@ -14,18 +14,18 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+use crate::gl::total::Total;
 use crate::parsing::parser::{parse, ParseResult};
 use crate::reports::ordered_entry::OrderedEntry;
 use crate::reports::ordered_total::OrderedTotal;
-use crate::tabulation::total::Total;
-use crate::util::date::Date;
 use anyhow::{bail, Error};
 use clap::{Parser, ValueEnum};
-use tabulation::ledger::Ledger;
+use gl::ledger::Ledger;
 
+mod gl;
+mod investment;
 mod parsing;
 mod reports;
-mod tabulation;
 mod util;
 
 #[derive(Parser)]
@@ -92,6 +92,7 @@ fn main() -> Result<(), Error> {
 
 	match args.command {
 		Directive::BS => {
+			ledger.lots.tabulate(&parse_result.latest_date)?;
 			finalize_ledger(&args, &mut ledger, parse_result)?;
 			let mut totals = ledger_to_totals(
 				ledger,
@@ -111,6 +112,7 @@ fn main() -> Result<(), Error> {
 			ordered_totals.print_ledger_format(args.depth);
 		},
 		Directive::IS => {
+			ledger.lots.tabulate(&parse_result.latest_date)?;
 			finalize_ledger(&args, &mut ledger, parse_result)?;
 			let mut totals = ledger_to_totals(
 				ledger,
@@ -126,6 +128,7 @@ fn main() -> Result<(), Error> {
 			ordered_totals.print_ledger_format(args.depth);
 		},
 		Directive::TB => {
+			ledger.lots.tabulate(&parse_result.latest_date)?;
 			finalize_ledger(&args, &mut ledger, parse_result)?;
 			let totals = ledger_to_totals(
 				ledger,
@@ -147,6 +150,8 @@ fn main() -> Result<(), Error> {
 					None => bail!("Currency required (-c)"),
 				};
 
+				ledger.lots
+					.tabulate(&parse_result.latest_date)?;
 				finalize_ledger(
 					&args,
 					&mut ledger,
@@ -165,7 +170,7 @@ fn main() -> Result<(), Error> {
 			// TODO: Need to implement pretty-printing for this.
 			//  Right now, I've tested it but it has no output
 			//  anymore.
-			ledger.lots.tabulate(&Date::today())?
+			ledger.lots.tabulate(&parse_result.latest_date)?;
 		},
 	}
 

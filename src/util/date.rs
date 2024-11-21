@@ -17,14 +17,6 @@
 use anyhow::{bail, Error};
 use std::cmp::Ordering;
 use std::fmt;
-use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
-
-static TODAY: Mutex<Date> = Mutex::new(Date {
-	year: 0,
-	month: 0,
-	day: 0,
-});
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Date {
@@ -168,50 +160,6 @@ impl Date {
 			return false;
 		}
 		true
-	}
-
-	/// Today gets the current date, which I insisted upon doing this way
-	/// just to avoid importing another dependency! In my defense, it only
-	/// executes once per run of the program, and only for specific reports.
-	pub fn today() -> Date {
-		let d = TODAY.lock().unwrap();
-		if d.year > 0 {
-			return *d;
-		}
-
-		let now = SystemTime::now()
-			.duration_since(UNIX_EPOCH)
-			.expect("Time went backwards");
-		let seconds = now.as_secs();
-
-		let days_since_epoch = seconds / 86400;
-		let mut year = 1970;
-		let mut month = 1;
-		let mut day = 1;
-
-		let mut days = days_since_epoch as u32;
-		while days >= if Date::is_leap_year(year) { 366 } else { 365 } {
-			days -= if Date::is_leap_year(year) {
-				366
-			} else {
-				365
-			};
-			year += 1;
-		}
-
-		while days >= Date::days_in_month(year, month) as u32 {
-			days -= Date::days_in_month(year, month) as u32;
-			month += 1;
-		}
-
-		day += days as u8;
-
-		let mut d = TODAY.lock().unwrap();
-		d.year = year;
-		d.month = month;
-		d.day = day;
-
-		Date { year, month, day }
 	}
 }
 

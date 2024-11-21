@@ -14,8 +14,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::tabulation::entry::Detail;
-use crate::tabulation::ledger::Ledger;
+use crate::gl::entry::Detail;
+use crate::gl::ledger::Ledger;
 use crate::util::scalar::Scalar;
 use std::collections::HashMap;
 
@@ -65,15 +65,15 @@ impl Total {
 		for detail in details {
 			let mut current = &mut *self;
 
-			for segment in &detail
-				.account
+			for segment in detail
+				.account()
 				.split(":")
 				.collect::<Vec<&str>>()
 			{
 				// Update each total along the hierarchy
 				*current.amounts
 					.entry(detail.currency())
-					.or_insert_with(Scalar::zero) += detail.amount.value;
+					.or_insert_with(Scalar::zero) += detail.amount().value;
 
 				current = current
 					.subtotals
@@ -89,7 +89,7 @@ impl Total {
 			// Update the leaf node with the final amount
 			*current.amounts
 				.entry(detail.currency())
-				.or_insert_with(Scalar::zero) += detail.amount.value;
+				.or_insert_with(Scalar::zero) += detail.amount().value;
 		}
 	}
 
@@ -148,8 +148,8 @@ impl Total {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::tabulation::amount::Amount;
-	use crate::tabulation::entry::Detail;
+	use crate::gl::entry::Detail;
+	use crate::util::amount::Amount;
 	use crate::util::scalar::Scalar;
 
 	#[test]

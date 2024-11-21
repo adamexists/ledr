@@ -16,6 +16,7 @@
 
 use anyhow::{bail, Error};
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::iter::Sum;
 use std::ops::{
 	Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign,
@@ -402,6 +403,16 @@ impl PartialOrd<i128> for Scalar {
 	fn partial_cmp(&self, other: &i128) -> Option<std::cmp::Ordering> {
 		let other = Scalar::from_i128(*other);
 		self.partial_cmp(&other)
+	}
+}
+
+impl Hash for Scalar {
+	fn hash<H: Hasher>(&self, state: &mut H) {
+		// Hash the `amount` field
+		self.amount.hash(state);
+
+		// Hash the `resolution` field
+		self.resolution.hash(state);
 	}
 }
 

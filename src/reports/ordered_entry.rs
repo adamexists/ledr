@@ -14,8 +14,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+use crate::gl::entry::Entry;
 use crate::reports::table::Table;
-use crate::tabulation::entry::Entry;
 use crate::util::scalar::Scalar;
 
 // TODO: Build a collection of test cases for this one.

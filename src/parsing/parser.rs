@@ -13,8 +13,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-use crate::tabulation::amount::{Amount, CostBasis};
-use crate::tabulation::ledger::Ledger;
+use crate::gl::ledger::Ledger;
+use crate::util::amount::{Amount, CostBasis};
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
 use anyhow::{anyhow, bail, Error};
@@ -27,15 +27,22 @@ use std::path::Path;
 #[derive(Debug, Default)]
 pub struct ParseResult {
 	pub max_precision_by_currency: HashMap<String, u32>, // currency > precision
+	pub latest_date: Date, // latest date across entries (not directives)
 }
 
 impl ParseResult {
-	fn note_precision(&mut self, currency: String, precision: u32) {
+	fn note_precision(&mut self, currency: &str, precision: u32) {
 		let entry = self
 			.max_precision_by_currency
-			.entry(currency)
+			.entry(currency.to_owned())
 			.or_insert(0);
 		*entry = (*entry).max(precision);
+	}
+
+	fn note_date(&mut self, date: Date) {
+		if self.latest_date < date {
+			self.latest_date = date;
+		}
 	}
 }
 
@@ -181,6 +188,8 @@ fn second_pass(
 					.map_err(|e| {
 						anyhow!("{} (line {})", e, i)
 					})?;
+
+				parse_result.note_date(date);
 				continue;
 			}
 		}
@@ -193,14 +202,13 @@ fn second_pass(
 		// Handle entry detail lines
 		let parts: Vec<&str> = l.split_whitespace().collect();
 
-		// Handle virtual entry detail lines (account name only)
+		// The rest of the things this line can be all have different
+		// numbers of terms
 		if parts.len() == 1 {
 			let account = parts[0].to_string();
 			ledger.set_virtual_detail(account)
 				.map_err(|e| anyhow!("{} (line {})", e, i))?;
 			continue;
-		} else if parts.len() < 3 {
-			bail!("Invalid line format (line {}): {}", i, l);
 		}
 
 		let account = parts[0].to_string();
@@ -208,65 +216,86 @@ fn second_pass(
 			Scalar::from_str(parts[1])?,
 			parts[2].to_string(),
 		);
-
-		// if exactly three parts, no cost basis
-		if parts.len() == 3 {
-			parse_result.note_precision(
-				amount.currency.clone(),
-				amount.value.resolution(),
-			);
-			ledger.add_detail(account, amount)
-				.map_err(|e| anyhow!("{} (line {})", e, i))?;
-			continue;
-		}
-
-		// If we get here, we know we have a cost basis
-		let basis_str = parts[3..].join(" ");
-		let basis_parts = basis_str.split_once(' ');
-
-		if basis_parts.is_none() {
-			bail!("Invalid cost basis (line {}): {}", i, l);
-		}
-
-		let (operator, basis) = basis_parts.unwrap();
-
-		let b_parts: Vec<&str> = basis.split_whitespace().collect();
-		if b_parts.len() != 2 {
-			bail!("Invalid cost basis (line {}): {}", i, l);
-		}
-
-		let is_total_cost = match operator {
-			"@" => false,
-			"@@" => true,
-			_ => bail!("Invalid cost basis (line {}): {}", i, l),
-		};
-
-		let mut cb_amount =
-			Scalar::from_str(b_parts[0]).map_err(|_| {
-				anyhow!(
-					"Invalid scalar value (line {}): {}",
-					i,
-					l
-				)
-			})?;
-		let cb_currency = b_parts[1].to_string();
-
 		parse_result.note_precision(
-			cb_currency.clone(),
-			cb_amount.resolution(),
+			&amount.currency,
+			amount.value.resolution(),
 		);
 
-		if is_total_cost {
-			cb_amount /= amount.value
+		match parts.len() {
+			// no inline conversion
+			3 => ledger
+				.add_detail(account, amount, None, None)
+				.map_err(|e| anyhow!("{} (line {})", e, i))?,
+			6 => {
+				// inline conversion, i.e. `@ 20.00 USD`
+				let is_total_cost = match parts[3] {
+					"@" => false,
+					"@@" => true,
+					_ => bail!(
+						"Invalid format (line {})",
+						i
+					),
+				};
+
+				let mut ic_amount = Scalar::from_str(parts[4])
+					.map_err(|_| {
+						anyhow!("Invalid value (line {})", i)
+					})?;
+				let ic_currency = parts[5].to_string();
+
+				parse_result.note_precision(
+					&ic_currency,
+					ic_amount.resolution(),
+				);
+
+				if is_total_cost {
+					ic_amount /= amount.value
+				};
+
+				ledger.add_detail(
+					account,
+					amount,
+					Some(Amount::new(
+						ic_amount,
+						ic_currency,
+					)),
+					None,
+				)
+				.map_err(|e| anyhow!("{} (line {})", e, i))?
+			},
+			7 => {
+				// lot declaration, i.e. `{ 20.00 USD }`
+				if parts[3] != "{" || parts[6] != "}" {
+					bail!("Invalid format (line {})", i);
+				}
+
+				let cb_amount = Scalar::from_str(parts[4])
+					.map_err(|_| {
+						anyhow!("Invalid value (line {})", i)
+					})?;
+				let cb_currency = parts[5].to_string();
+
+				parse_result.note_precision(
+					&cb_currency,
+					cb_amount.resolution(),
+				);
+
+				ledger.add_detail(
+					account,
+					amount,
+					Some(Amount::new(
+						cb_amount,
+						cb_currency.clone(),
+					)),
+					Some(CostBasis {
+						unit_cost: cb_amount,
+						currency: cb_currency,
+					}),
+				)
+				.map_err(|e| anyhow!("{} (line {})", e, i))?
+			},
+			_ => bail!("Invalid format (line {})", i),
 		}
-
-		amount.add_cost_basis(CostBasis {
-			unit_price: cb_amount,
-			currency: cb_currency,
-		});
-
-		ledger.add_detail(account, amount)
-			.map_err(|e| anyhow!("{} (line {})", e, i))?;
 	}
 
 	// Make sure to finish the last entry if the file ends without an empty line

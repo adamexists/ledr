@@ -14,10 +14,10 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::tabulation::amount::Amount;
-use crate::tabulation::entry::Entry;
-use crate::tabulation::exchange_rate::ExchangeRates;
-use crate::tabulation::lot::Lots;
+use crate::gl::entry::{Entry, VIRTUAL_CONVERSION_ACCOUNT};
+use crate::gl::exchange_rate::ExchangeRates;
+use crate::investment::lot_buffer::LotBuffer;
+use crate::util::amount::{Amount, CostBasis};
 use crate::util::date::Date;
 use anyhow::{bail, Error};
 use std::cmp::min;
@@ -52,7 +52,7 @@ pub struct Ledger {
 
 	// other modules the ledger must populate or access
 	pub exchange_rates: ExchangeRates,
-	pub lots: Lots,
+	pub lots: LotBuffer,
 }
 
 impl Ledger {
@@ -134,6 +134,8 @@ impl Ledger {
 		&mut self,
 		account: String,
 		amount: Amount,
+		inline_conversion: Option<Amount>,
+		cost_basis: Option<CostBasis>,
 	) -> Result<(), Error> {
 		if self.pending_entry.is_none() {
 			bail!("Orphaned entry detail")
@@ -142,10 +144,11 @@ impl Ledger {
 		if !self.lenient_mode {
 			self.check_account(&account)?;
 			self.check_currency(&amount.currency)?;
-			if let Some(cost_basis_currency) = amount.cost_basis() {
-				self.check_currency(
-					&cost_basis_currency.currency,
-				)?;
+			if let Some(cb) = &cost_basis {
+				self.check_currency(&cb.currency)?;
+			}
+			if let Some(ica) = &inline_conversion {
+				self.check_currency(&ica.currency)?;
 			}
 		}
 
@@ -160,33 +163,51 @@ impl Ledger {
 			bail!("Invalid account prefix: {}", account)
 		}
 
-		if let Some(cb) = amount.cost_basis() {
-			// A cost basis has the authority of a declaration in
-			// many ways, but in case there are multiple intraday
-			// transactions that differ from each other (as day
-			// traders etc. experience all the time), we must treat
-			// them as inferred rates here.
+		let pending_entry = self.pending_entry.as_mut().unwrap();
+		pending_entry.add_detail(&account, amount.clone())?;
+
+		if let Some(ica) = inline_conversion {
+			// An inline conversion has the authority of a
+			// declaration in many ways, but in case there are
+			// multiple intraday transactions that differ from each
+			// other (as day traders etc. experience all the time),
+			// we must treat them as inferred rates here.
 			self.exchange_rates.infer(
-				self.pending_entry_date(),
-				amount.currency.clone(),
-				cb.currency.clone(),
-				cb.unit_price,
+				pending_entry.get_date(),
+				&amount.currency.clone(),
+				&ica.currency.clone(),
+				ica.value,
 			)?;
 
-			self.lots.add_movement(
-				self.pending_entry_date(),
-				account.clone(),
-				amount.currency.clone(),
-				amount.value,
-				cb.unit_price,
-				cb.currency.clone(),
+			// Move the imbalance to the cost basis currency via
+			// the virtual conversion account
+			let conversion = VIRTUAL_CONVERSION_ACCOUNT.to_string();
+			pending_entry.add_detail(
+				&conversion,
+				Amount::new(
+					ica.value * amount.value,
+					ica.currency,
+				),
+			)?;
+			pending_entry.add_detail(
+				&conversion,
+				Amount::new(
+					-amount.value,
+					amount.currency.clone(),
+				),
 			)?;
 		}
 
-		self.pending_entry
-			.as_mut()
-			.unwrap()
-			.add_detail(account, amount)
+		if let Some(cb) = cost_basis {
+			self.lots.add_action(
+				self.pending_entry_date(),
+				account.clone(),
+				amount,
+				cb,
+			)?;
+		}
+
+		Ok(())
 	}
 
 	pub fn set_virtual_detail(
@@ -233,7 +254,7 @@ impl Ledger {
 
 	fn pending_entry_date(&self) -> Date {
 		match &self.pending_entry {
-			Some(e) => *e.get_date(),
+			Some(e) => e.get_date(),
 			None => panic!("pending_entry_date has no entry"),
 		}
 	}
@@ -252,7 +273,7 @@ impl Ledger {
 			};
 
 		if self.pending_entry.as_ref().unwrap().get_date()
-			< declaration_date
+			< *declaration_date
 		{
 			bail!(
 				"Currency {} used prior to declaration on {}",
@@ -278,7 +299,7 @@ impl Ledger {
 		};
 
 		if self.pending_entry.as_ref().unwrap().get_date()
-			< declaration_date
+			< *declaration_date
 		{
 			bail!(
 				"Account {} used prior to declaration on {}",
@@ -422,7 +443,9 @@ mod tests {
 				Amount::new(
 					Scalar::new(1000, 1),
 					"USD".to_string(),
-				)
+				),
+				None,
+				None,
 			)
 			.is_ok());
 	}
@@ -442,7 +465,9 @@ mod tests {
 				Amount::new(
 					Scalar::new(1000, 1),
 					"EUR".to_string(),
-				)
+				),
+				None,
+				None
 			)
 			.is_err());
 	}
@@ -461,7 +486,9 @@ mod tests {
 				Amount::new(
 					Scalar::new(1000, 1),
 					"USD".to_string(),
-				)
+				),
+				None,
+				None
 			)
 			.is_err());
 	}
@@ -476,7 +503,9 @@ mod tests {
 				Amount::new(
 					Scalar::new(1000, 1),
 					"USD".to_string(),
-				)
+				),
+				None,
+				None
 			)
 			.is_err());
 	}
@@ -537,7 +566,9 @@ mod tests {
 				Amount::new(
 					Scalar::new(500, 1),
 					"EUR".to_string(),
-				)
+				),
+				None,
+				None
 			)
 			.is_ok());
 	}
@@ -556,7 +587,9 @@ mod tests {
 				Amount::new(
 					Scalar::new(1000, 1),
 					"USD".to_string(),
-				)
+				),
+				None,
+				None
 			)
 			.is_ok());
 	}
