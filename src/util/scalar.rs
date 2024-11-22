@@ -163,6 +163,11 @@ impl Scalar {
 			self.resolution -= 1;
 		}
 	}
+
+	// TODO: Document this is not in the critical path.
+	pub fn to_f64(&self) -> f64 {
+		self.amount as f64 / 10f64.powf(self.resolution as f64)
+	}
 }
 
 impl fmt::Display for Scalar {

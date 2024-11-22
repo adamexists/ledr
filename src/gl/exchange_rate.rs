@@ -28,9 +28,9 @@ pub struct ExchangeRates {
 }
 
 impl ExchangeRates {
-	/// Adds a new exchange rate declared via directive. Might fail if there
-	/// is an existing declared rate on the same date, or if the input is
-	/// incoherent.
+	/// Adds a new exchange rate declared via directive. Might fail if
+	/// there's already a declared rate on the same date, or if the input
+	/// is incoherent.
 	pub fn declare(
 		&mut self,
 		date: Date,
