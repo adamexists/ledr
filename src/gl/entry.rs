@@ -32,7 +32,7 @@ pub struct Entry {
 
 	virtual_detail: Option<String>,
 	totals: HashMap<String, Scalar>, // Currency -> Amount
-	reference: Option<String>, // optional string, not inspected TODO add to summary report
+	reference: Option<String>, // optional string, not inspected
 }
 
 impl Entry {

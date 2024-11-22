@@ -1,6 +1,4 @@
 # Checks that you cannot sell a lot you do not have
-# TODO: Consider whether to optionally allow this for e.g. shorting?
-#  Maybe a new type of directive for "allow shorting" or "allow lenience" etc.
 
 ! 2024-11-19 currency AAPL
 ! 2024-11-19 currency USD

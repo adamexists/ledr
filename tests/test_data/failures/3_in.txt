@@ -1,5 +1,5 @@
 # Checks that you cannot sell more than the quantity
-# of a lot that you do have # TODO again maybe not always restrict this?
+# of a lot that you do have
 
 ! 2024-11-19 currency AAPL
 ! 2024-11-19 currency USD

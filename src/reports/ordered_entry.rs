@@ -18,7 +18,6 @@ use crate::gl::entry::Entry;
 use crate::reports::table::Table;
 use crate::util::scalar::Scalar;
 
-// TODO: Build a collection of test cases for this one.
 pub struct OrderedEntry {
 	entries: Vec<Entry>,
 }

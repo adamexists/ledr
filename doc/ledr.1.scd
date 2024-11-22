@@ -28,3 +28,4 @@ Here's what this doc should contain in the future:
   any entry in the ledger for that given currency. You can reduce the visible
   precision using the -p command line flag. Internal math is never rounded;
   just the visible results. Rounding is done using banker's rounding.
+- If you want to short something, then that's a lot with a negative cost basis
