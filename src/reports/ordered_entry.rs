@@ -31,7 +31,7 @@ impl OrderedEntry {
 	}
 
 	pub fn account_summary(&self, account: &String, currency: &String) {
-		let mut table = Table::new(4);
+		let mut table = Table::new(5);
 		table.right_align(2);
 
 		let mut total = Scalar::zero();
@@ -44,6 +44,7 @@ impl OrderedEntry {
 					entry.get_desc().clone(),
 					net.to_string(),
 					currency.to_string(),
+					entry.get_reference(),
 				]);
 			}
 		}

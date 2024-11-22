@@ -180,6 +180,7 @@ fn second_pass(
 			if !content.is_empty() {
 				ledger.add_reference(content.to_string())?;
 			}
+			continue;
 		}
 
 		// Handle entry declaration lines with a date and description

@@ -73,6 +73,19 @@ fn test_integration_should_fail() {
 	execute("failures", test_cases, false, "tb", vec![])
 }
 
+#[test]
+fn test_integration_account_summary() {
+	let test_cases = vec![("1_in.txt", "1_out.txt")];
+
+	execute(
+		"acctsummary",
+		test_cases,
+		true,
+		"as",
+		vec!["Assets:A", "-c", "USD"],
+	)
+}
+
 fn execute(
 	subfolder: &str,
 	test_cases: Vec<(&str, &str)>,

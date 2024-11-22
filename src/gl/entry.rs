@@ -108,6 +108,14 @@ impl Entry {
 		self.date
 	}
 
+	pub fn get_reference(&self) -> String {
+		if let Some(reference) = &self.reference {
+			reference.clone()
+		} else {
+			"".to_string()
+		}
+	}
+
 	pub fn details(&mut self) -> &mut Vec<Detail> {
 		&mut self.details
 	}
