@@ -214,7 +214,7 @@ fn second_pass(
 		}
 
 		let account = parts[0].to_string();
-		let mut amount = Amount::new(
+		let amount = Amount::new(
 			Scalar::from_str(parts[1])?,
 			parts[2].to_string(),
 		);

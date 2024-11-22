@@ -73,35 +73,17 @@ impl Graph {
 		rate_product: f64,
 		start: &str, // Track the original starting node
 	) -> bool {
-		println!(
-                "Visiting: {}, rate_product: {}, start: {}, visited: {:?}, rec_stack: {:?}",
-                current, rate_product, start, visited, rec_stack
-        );
-
 		if rec_stack.contains(current) {
 			// Cycle detected, but only check consistency if we're back at the starting node
 			if current == start {
-				println!(
-                                "Cycle completed back to start: {}, accumulated rate_product: {}",
-                                start, rate_product
-                        );
 				return rate_product < 0.95
 					|| rate_product > 1.05;
 			} else {
-				println!(
-                                "Cycle detected involving node: {}, but not back to start. Skipping...",
-                                current
-                        );
 				return false;
 			}
 		}
 
 		if visited.contains(current) {
-			// Already visited and not in the current recursion path
-			println!(
-				"Already visited node: {}. Skipping...",
-				current
-			);
 			return false;
 		}
 
@@ -113,10 +95,6 @@ impl Graph {
 			for (neighbor, rate) in &node.edges {
 				let new_rate_product =
 					rate_product * rate.to_f64();
-				println!(
-                                "Traversing edge: {} -> {}, rate: {}, new_rate_product: {}",
-                                current, neighbor, rate, new_rate_product
-                        );
 
 				// Recursive call for the neighbor
 				if self.detect_inconsistent_cycle(
@@ -133,7 +111,6 @@ impl Graph {
 
 		// Backtrack: Remove from recursion stack
 		rec_stack.remove(current);
-		println!("Backtracking from: {}", current);
 
 		false
 	}
@@ -335,57 +312,48 @@ mod tests {
 		// Add GBP <-> USD rate that creates an inconsistent cycle
 		let e = Amount::new(Scalar::new(1, 0), "GBP".to_string());
 		let f = Amount::new(Scalar::new(1, 0), "USD".to_string());
-		let result = graph.add_rate(&e, &f);
+		let _result = graph.add_rate(&e, &f);
 
 		// Assert that the inconsistent cycle is detected
 		assert!(graph.has_inconsistent_cycle());
 	}
 
-	// TODO: Address this test.
-	// #[test]
-	// fn test_large_connected_graph_no_cycles() {
-	// 	let mut graph = Graph::new();
-	//
-	// 	Construct a large graph with consistent rates
-	// let currencies = vec![
-	// 	"USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "CNY",
-	// 	"INR", "SGD", "ZAR", "KRW", "BRL", "MXN", "RUB", "HKD",
-	// ];
-	//
-	// Add consistent bidirectional rates
-	// for i in 0..currencies.len() {
-	// 	for j in i + 1..currencies.len() {
-	// 		let rate1 = Scalar::from_i128((i + 1) as i128);
-	// 		let rate2 = Scalar::from_i128((j + 1) as i128);
-	// 		let a = Amount::new(
-	// 			rate1,
-	// 			currencies[i].to_string(),
-	// 		);
-	// 		let b = Amount::new(
-	// 			rate2,
-	// 			currencies[j].to_string(),
-	// 		);
-	// 		graph.add_rate(&a, &b)
-	// 			.expect("Could not add rate");
-	// 	}
-	// }
-	//
-	// Test for inconsistent cycles
-	// assert!(
-	// 	!graph.has_inconsistent_cycle(),
-	// 	"No inconsistent cycles expected"
-	// );
-	// }
+	#[test]
+	fn test_large_connected_graph_no_cycles() {
+		let mut graph = Graph::new();
+
+		// Generate many currencies
+		let currencies: Vec<String> =
+			(1..=200).map(|i| format!("C{i:03}")).collect();
+
+		// Add consistent bidirectional rates
+		for i in 0..currencies.len() {
+			for j in i + 1..currencies.len() {
+				let rate1 = Scalar::from_i128((i + 1) as i128);
+				let rate2 = Scalar::from_i128((j + 1) as i128);
+				let a = Amount::new(
+					rate1,
+					currencies[i].to_string(),
+				);
+				let b = Amount::new(
+					rate2,
+					currencies[j].to_string(),
+				);
+				graph.add_rate(&a, &b)
+					.expect("Could not add rate");
+			}
+		}
+
+		// Test for inconsistent cycles
+		assert!(
+			!graph.has_inconsistent_cycle(),
+			"No inconsistent cycles expected"
+		);
+	}
 
 	#[test]
 	fn test_large_connected_graph_with_contextual_inconsistencies() {
 		let mut graph = Graph::new();
-
-		// Define currencies
-		let currencies = vec![
-			"USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "CNY",
-			"INR", "SGD", "ZAR", "KRW", "BRL", "MXN", "RUB", "HKD",
-		];
 
 		// Add bidirectional rates between some currencies
 		let pairs = vec![
