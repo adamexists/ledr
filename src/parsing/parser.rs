@@ -15,7 +15,6 @@
  */
 use crate::gl::ledger::Ledger;
 use crate::util::amount::Amount;
-use crate::util::cost_basis::CostBasis;
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
 use anyhow::{anyhow, bail, Error};
@@ -293,6 +292,7 @@ fn second_pass(
 					bail!("Invalid format (line {})", i);
 				}
 
+				// Grab cost basis
 				let cb_amount = Scalar::from_str(parts[4])
 					.map_err(|_| {
 						anyhow!("Invalid value (line {})", i)
@@ -311,8 +311,8 @@ fn second_pass(
 						cb_amount,
 						cb_currency.clone(),
 					)),
-					Some(CostBasis {
-						unit_cost: cb_amount,
+					Some(Amount {
+						value: cb_amount,
 						currency: cb_currency,
 					}),
 				)

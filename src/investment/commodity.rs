@@ -13,18 +13,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-use crate::util::cost_basis::CostBasis;
+use crate::util::amount::Amount;
 use std::fmt::Formatter;
 
-// TODO: Resolve problems with these derivations, if any.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct Commodity {
 	symbol: String,
-	cost_basis: CostBasis,
+
+	/// Always in unit terms
+	cost_basis: Amount,
 }
 
 impl Commodity {
-	pub fn new(symbol: String, cost_basis: CostBasis) -> Self {
+	pub fn new(symbol: String, cost_basis: Amount) -> Self {
 		Self { symbol, cost_basis }
 	}
 
@@ -32,7 +33,7 @@ impl Commodity {
 		&self.symbol
 	}
 
-	pub fn cost_basis(&self) -> &CostBasis {
+	pub fn cost_basis(&self) -> &Amount {
 		&self.cost_basis
 	}
 }

@@ -17,7 +17,6 @@
 use crate::investment::commodity::Commodity;
 use crate::investment::lot_state::LotState;
 use crate::util::amount::Amount;
-use crate::util::cost_basis::CostBasis;
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
 use anyhow::{bail, Error};
@@ -38,7 +37,7 @@ impl LotBuffer {
 		date: Date,
 		account: String,
 		amount: Amount,
-		cost_basis: CostBasis,
+		cost_basis: Amount,
 	) -> Result<(), Error> {
 		if amount.value == 0 {
 			bail!("Lot cannot have zero quantity")

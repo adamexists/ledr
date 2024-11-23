@@ -14,12 +14,13 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::util::scalar::Scalar;
+use std::fmt;
 
 /// A scalar value with a currency.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct Amount {
-	pub value: Scalar,
 	pub currency: String,
+	pub value: Scalar,
 }
 
 impl Amount {
@@ -30,5 +31,11 @@ impl Amount {
 	pub fn convert_to(&mut self, currency: &str, rate: Scalar) {
 		self.currency = currency.to_owned();
 		self.value *= rate;
+	}
+}
+
+impl fmt::Display for Amount {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{} {}", self.value, self.currency)
 	}
 }

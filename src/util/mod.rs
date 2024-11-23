@@ -15,7 +15,6 @@
  */
 
 pub mod amount;
-pub mod cost_basis;
 pub mod date;
 pub mod graph;
 pub mod scalar;

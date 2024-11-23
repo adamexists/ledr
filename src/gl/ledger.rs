@@ -18,7 +18,6 @@ use crate::gl::entry::{Entry, VIRTUAL_CONVERSION_ACCOUNT};
 use crate::gl::exchange_rate::ExchangeRates;
 use crate::investment::lot_buffer::LotBuffer;
 use crate::util::amount::Amount;
-use crate::util::cost_basis::CostBasis;
 use crate::util::date::Date;
 use anyhow::{bail, Error};
 use std::cmp::min;
@@ -136,7 +135,7 @@ impl Ledger {
 		account: String,
 		amount: Amount,
 		inline_conversion: Option<Amount>,
-		cost_basis: Option<CostBasis>,
+		cost_basis: Option<Amount>,
 	) -> Result<(), Error> {
 		if self.pending_entry.is_none() {
 			bail!("Orphaned entry detail")
