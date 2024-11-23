@@ -21,8 +21,13 @@
 /// and spacing.
 pub struct Table {
 	column_count: usize,
-	rows: Vec<Vec<String>>,
+	rows: Vec<Row>,
 	right_align: Vec<bool>,
+}
+
+pub enum Row {
+	Data(Vec<String>),
+	Separator,
 }
 
 impl Table {
@@ -34,12 +39,18 @@ impl Table {
 		}
 	}
 
-	pub fn add_row(&mut self, row: Vec<String>) {
+	pub fn add_row(&mut self, row: Vec<&str>) {
 		if row.len() != self.column_count {
 			panic!("Inconsistent column count");
 		}
 
-		self.rows.push(row);
+		self.rows.push(Row::Data(
+			row.into_iter().map(|s| s.to_string()).collect(),
+		));
+	}
+
+	pub fn add_separator(&mut self) {
+		self.rows.push(Row::Separator);
 	}
 
 	pub fn right_align(&mut self, col: usize) {
@@ -50,51 +61,73 @@ impl Table {
 		&self,
 		total_column_index: usize,
 		total: &String,
-		currency_index: usize,
+		currency_index: Option<usize>, // TODO: Refactor.
 		currency: &String,
 	) {
 		let mut max_widths = vec![0; self.column_count];
 
+		// Determine maximum widths for each column
 		for row in &self.rows {
-			for (i, value) in row.iter().enumerate() {
-				let width = value.len();
-				if width > max_widths[i] {
-					max_widths[i] = width;
+			if let Row::Data(data_row) = row {
+				for (i, value) in data_row.iter().enumerate() {
+					let width = value.len();
+					if width > max_widths[i] {
+						max_widths[i] = width;
+					}
 				}
 			}
 		}
 
+		// Print each row
 		for row in &self.rows {
-			for (i, value) in row.iter().enumerate() {
-				if self.right_align[i] {
-					print!(
-						"{:>width$}",
-						value,
-						width = max_widths[i]
+			match row {
+				Row::Data(data_row) => {
+					for (i, value) in
+						data_row.iter().enumerate()
+					{
+						if self.right_align[i] {
+							print!("{:>width$}", value, width = max_widths[i]);
+						} else {
+							print!("{:<width$}", value, width = max_widths[i]);
+						}
+						if i < data_row.len() - 1 {
+							print!("  ");
+						}
+					}
+					println!();
+				},
+				Row::Separator => {
+					let total_width: usize = max_widths
+						.iter()
+						.sum::<usize>()
+						+ (2 * (self.column_count - 1));
+					println!(
+						"{:-<total_width$}",
+						"",
+						total_width = total_width
 					);
-				} else {
-					print!(
-						"{:<width$}",
-						value,
-						width = max_widths[i]
-					);
-				}
-				if i < row.len() - 1 {
-					print!("  ");
-				}
+				},
 			}
-			println!();
 		}
 
+		// Print the footer
 		for (_, width) in
 			max_widths.iter().enumerate().take(total_column_index)
 		{
 			print!("{:width$}  ", "", width = width);
 		}
 
-		let separator_width = max_widths[total_column_index]
-			+ max_widths[currency_index]
-			+ 2; // +1 for space between columns
+		let mut separator_width = match currency_index {
+			Some(index) => {
+				max_widths[total_column_index]
+					+ max_widths[index] + 2
+			},
+			None => max_widths[total_column_index] + 2,
+		};
+		if total_column_index + 1 == self.column_count {
+			separator_width -= 2;
+		}
+
 		println!(
 			"{:->separator_width$}",
 			"",
@@ -118,7 +151,9 @@ impl Table {
 						width = width
 					);
 				}
-			} else if i == currency_index {
+			} else if currency_index.is_some()
+				&& i == currency_index.unwrap()
+			{
 				print!("{:<width$}", currency, width = width);
 			} else {
 				print!("{:width$}", "", width = width);

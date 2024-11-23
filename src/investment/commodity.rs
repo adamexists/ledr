@@ -15,9 +15,10 @@
  */
 use crate::util::cost_basis::CostBasis;
 use crate::util::scalar::Scalar;
+use std::fmt::Formatter;
 
 // TODO: Resolve problems with these derivations, if any.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct Commodity {
 	symbol: String,
 	cost_basis: CostBasis,
@@ -38,5 +39,11 @@ impl Commodity {
 
 	pub fn unit_cost(&self) -> Scalar {
 		self.cost_basis.unit_cost
+	}
+}
+
+impl std::fmt::Display for Commodity {
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{} {{ {} }}", self.symbol, self.cost_basis)
 	}
 }

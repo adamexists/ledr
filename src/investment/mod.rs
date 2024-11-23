@@ -14,5 +14,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 pub mod commodity;
+pub mod lot;
 pub mod lot_buffer;
 pub mod lot_state;

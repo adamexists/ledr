@@ -18,8 +18,8 @@ use std::fmt;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct CostBasis {
-	pub unit_cost: Scalar,
 	pub currency: String,
+	pub unit_cost: Scalar,
 }
 
 impl fmt::Display for CostBasis {

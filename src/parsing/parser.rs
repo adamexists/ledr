@@ -18,6 +18,7 @@ use crate::util::amount::Amount;
 use crate::util::cost_basis::CostBasis;
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
+use crate::Cli;
 use anyhow::{anyhow, bail, Error};
 use std::collections::{HashMap, VecDeque};
 use std::fs::File;
@@ -54,6 +55,8 @@ fn first_pass(
 	path: &str,
 	file: &File,
 	ledger: &mut Ledger,
+	begin: &Date,
+	end: &Date,
 ) -> Result<(), Error> {
 	ledger.declare_file(path)?;
 
@@ -75,7 +78,7 @@ fn first_pass(
 			}
 
 			let file = file_from_path(include[1])?;
-			first_pass(include[1], &file, ledger)?;
+			first_pass(include[1], &file, ledger, begin, end)?;
 			continue;
 		}
 
@@ -91,6 +94,11 @@ fn first_pass(
 		let date_str = directive.pop_front().unwrap();
 		let date = Date::from_str(date_str.trim())
 			.map_err(|e| anyhow!("{} (line {})", e, i))?;
+
+		// Ignore entries from outside the date bounds
+		if &date < begin || &date > end {
+			continue;
+		}
 
 		match directive[0] {
 			"account" if directive.len() == 2 => {
@@ -139,11 +147,15 @@ fn second_pass(
 	file: &File,
 	ledger: &mut Ledger,
 	parse_result: &mut ParseResult,
+	begin: &Date,
+	end: &Date,
 ) -> Result<(), Error> {
 	let reader = io::BufReader::new(file);
 
 	let mut lines = reader.lines();
 	let mut i = 0;
+
+	let mut ignore_until_next_entry = false;
 
 	while let Some(Ok(line)) = lines.next() {
 		i += 1;
@@ -164,7 +176,7 @@ fn second_pass(
 				line.split_whitespace().collect();
 
 			let file = file_from_path(include[1])?;
-			second_pass(&file, ledger, parse_result)?;
+			second_pass(&file, ledger, parse_result, begin, end)?;
 			continue;
 		}
 
@@ -186,6 +198,13 @@ fn second_pass(
 		// Handle entry declaration lines with a date and description
 		if let Some((date_str, desc)) = l.split_once(' ') {
 			if let Ok(date) = Date::from_str(date_str.trim()) {
+				if &date < begin || &date > end {
+					ignore_until_next_entry = true;
+					continue;
+				}
+
+				ignore_until_next_entry = false;
+
 				ledger.new_entry(date, desc.trim().to_string())
 					.map_err(|e| {
 						anyhow!("{} (line {})", e, i)
@@ -199,6 +218,10 @@ fn second_pass(
 		// Make sure the line is not a date by itself
 		if Date::from_str(l).is_ok() {
 			bail!("Orphaned date (line {}): {}", i, l);
+		}
+
+		if ignore_until_next_entry {
+			continue;
 		}
 
 		// Handle entry detail lines
@@ -313,16 +336,22 @@ fn second_pass(
 /// contents of the file. The only exception is that when multiple implicit
 /// currency conversions occur in the same day between the same currencies, all
 /// reporting will use the latest one processed in the file.
-pub fn parse(path: &str, ledger: &mut Ledger) -> Result<ParseResult, Error> {
-	let mut file = file_from_path(path)?;
+///
+/// TODO: Create test case to test for begin and end directives working.
+pub fn parse(args: &Cli, ledger: &mut Ledger) -> Result<ParseResult, Error> {
+	let mut file = file_from_path(&args.file)?;
 
-	first_pass(path, &file, ledger)?;
+	let begin =
+		Date::from_str(args.begin.as_ref().unwrap_or(&open_begin()))?;
+	let end = Date::from_str(args.end.as_ref().unwrap_or(&open_end()))?;
+
+	first_pass(&args.file, &file, ledger, &begin, &end)?;
 	file.rewind()?;
 
 	// Second pass is responsible for assembling the ParseResult object,
 	// which we pass in this way so it can be passed recursively within.
 	let mut output: ParseResult = Default::default();
-	second_pass(&file, ledger, &mut output)?;
+	second_pass(&file, ledger, &mut output, &begin, &end)?;
 
 	Ok(output)
 }
@@ -331,4 +360,12 @@ fn file_from_path(file_path: &str) -> Result<File, Error> {
 	let path = Path::new(file_path);
 	let file = File::open(path)?;
 	Ok(file)
+}
+
+fn open_begin() -> String {
+	"0001-01-01".to_string()
+}
+
+fn open_end() -> String {
+	"99999-12-31".to_string()
 }

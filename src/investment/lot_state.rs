@@ -14,9 +14,9 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::investment::commodity::Commodity;
+use crate::investment::lot::{Lot, LotStatus, Sale};
 use crate::investment::lot_buffer::Action;
-use crate::util::date::{Date, Duration};
-use crate::util::scalar::Scalar;
+use crate::util::date::Date;
 use anyhow::{bail, Error};
 use std::collections::HashMap;
 
@@ -107,50 +107,21 @@ impl LotState {
 			);
 		}
 	}
-}
 
-#[derive(Debug)]
-pub struct Lot {
-	status: LotStatus,
-	account: String,
-
-	commodity: Commodity,
-	quantity: Scalar, // always in positive terms; can't go negative
-
-	acquisition_date: Date,
-
-	closed_date: Option<Date>,
-	sales: Vec<Sale>,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum LotStatus {
-	Open,
-	Closed,
-}
-
-#[derive(Debug)]
-struct Sale {
-	date: Date,
-	quantity: Scalar,
-}
-
-impl Lot {
-	pub fn cost_basis(&self) -> Scalar {
-		self.commodity.cost_basis().unit_cost * self.quantity
-	}
-
-	pub fn time_held(&self, as_of: &Date) -> Duration {
-		let end = match self.closed_date {
-			Some(date) => {
-				if as_of < &date {
-					as_of
-				} else {
-					&date.clone()
-				}
-			},
-			None => as_of,
-		};
-		self.acquisition_date.until(end)
+	/// Flattens the set of lots into one Vec, and returns it.
+	/// Consumes this.
+	pub fn take_lots(
+		self,
+		ignore_after: Option<Date>,
+		only_open: bool,
+	) -> Vec<Lot> {
+		let lots_iter = self.state.into_values().flatten();
+		if only_open {
+			lots_iter
+				.filter(|lot| lot.status == LotStatus::Open)
+				.collect()
+		} else {
+			lots_iter.collect()
+		}
 	}
 }

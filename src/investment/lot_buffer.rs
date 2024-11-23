@@ -104,6 +104,12 @@ pub struct Action {
 	pub quantity: Scalar,
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Direction {
+	Buy,
+	Sell,
+}
+
 impl PartialEq for Action {
 	fn eq(&self, other: &Self) -> bool {
 		self.date == other.date
@@ -136,10 +142,4 @@ impl PartialOrd for Action {
 			non_equal => non_equal,
 		}
 	}
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Direction {
-	Buy,
-	Sell,
 }

@@ -30,6 +30,11 @@ impl OrderedEntry {
 	}
 
 	pub fn account_summary(&self, account: &String, currency: &String) {
+		if self.entries.is_empty() {
+			println!("No data");
+			return;
+		}
+
 		let mut table = Table::new(5);
 		table.right_align(2);
 
@@ -39,15 +44,15 @@ impl OrderedEntry {
 			total += net;
 			if net != 0 {
 				table.add_row(vec![
-					entry.get_date().to_string(),
-					entry.get_desc().clone(),
-					net.to_string(),
-					currency.to_string(),
-					entry.get_reference(),
+					&entry.get_date().to_string(),
+					entry.get_desc(),
+					&net.to_string(),
+					&currency.to_string(),
+					&entry.get_reference(),
 				]);
 			}
 		}
 
-		table.print(2, &total.to_string(), 3, currency)
+		table.print(2, &total.to_string(), Some(3), currency)
 	}
 }

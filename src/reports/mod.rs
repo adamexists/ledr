@@ -15,5 +15,6 @@
  */
 
 pub mod ordered_entry;
+pub mod ordered_lots;
 pub mod ordered_total;
 pub mod table;

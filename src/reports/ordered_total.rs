@@ -230,6 +230,11 @@ impl OrderedTotal {
 	/// Prints the contents of the ordered_totals like the classic Ledger does.
 	/// We only expand the subtotals up to the max_depth, if present.
 	pub fn print_ledger_format(&self, max_depth: Option<usize>) {
+		if self.amounts.is_empty() {
+			println!("No data");
+			return;
+		}
+
 		let column_width = self.calculate_column_width();
 
 		// Display all entries

@@ -15,8 +15,10 @@
  */
 
 use crate::gl::total::Total;
+use crate::investment::lot_state::LotState;
 use crate::parsing::parser::{parse, ParseResult};
 use crate::reports::ordered_entry::OrderedEntry;
+use crate::reports::ordered_lots::OrderedLots;
 use crate::reports::ordered_total::OrderedTotal;
 use anyhow::{bail, Error};
 use clap::{Parser, ValueEnum};
@@ -44,6 +46,16 @@ struct Cli {
 	// -----------
 	// -- FLAGS --
 	// -----------
+	/// Ignore entries prior to this date (YYYY-MM-DD)
+	/// TODO: Add test data examples to validate this one.
+	#[arg(short, long, required = false)]
+	begin: Option<String>,
+
+	/// Ignore entries after this date (YYYY-MM-DD)
+	/// TODO: Add test data examples to validate this one.
+	#[arg(short, long, required = false)]
+	end: Option<String>,
+
 	/// Specifies the input file
 	#[arg(short)]
 	file: String,
@@ -53,6 +65,7 @@ struct Cli {
 	currency: Option<String>,
 
 	/// Hides equity accounts from reports
+	/// TODO: Add test data examples to validate this one.
 	#[arg(short = 'E', long)]
 	ignore_equity: bool,
 
@@ -61,14 +74,17 @@ struct Cli {
 	depth: Option<usize>,
 
 	/// Negates all currency values
+	/// TODO: Add test data examples to validate this one.
 	#[arg(short, long)]
 	invert: bool,
 
 	/// Ignore directives designed to catch and correct bad input data
+	/// TODO: Add test data examples to validate this one.
 	#[arg(long)]
 	lenient: bool,
 
 	/// Maximum amount of decimal places to show for any amounts
+	/// TODO: Add test data examples to validate this one.
 	#[arg(short, long)]
 	precision: Option<u32>,
 }
@@ -88,60 +104,27 @@ fn main() -> Result<(), Error> {
 	let args = Cli::parse();
 
 	let mut ledger = Ledger::new(args.lenient);
-	let parse_result = parse(&args.file, &mut ledger)?;
+	let parse_result = parse(&args, &mut ledger)?;
+
+	// TODO: Not a huge fan aesthetically of lot_state being the only output from here.
+	let lot_state = finalize_ledger(&args, &mut ledger, parse_result)?;
 
 	match args.command {
-		Directive::BS => {
-			ledger.lots.tabulate(&parse_result.latest_date)?;
-			finalize_ledger(&args, &mut ledger, parse_result)?;
-			let mut totals = ledger_to_totals(
-				ledger,
-				args.currency,
-				args.invert,
-			)?;
-
-			let mut top_levels = vec!["Assets", "Liabilities"];
-			if !args.ignore_equity {
-				top_levels.push("Equity");
-			}
-			totals.filter_top_level(top_levels);
-			let mut ordered_totals =
-				OrderedTotal::from_total(totals);
-
-			ordered_totals.sort_canonical();
-			ordered_totals.print_ledger_format(args.depth);
-		},
-		Directive::IS => {
-			ledger.lots.tabulate(&parse_result.latest_date)?;
-			finalize_ledger(&args, &mut ledger, parse_result)?;
-			let mut totals = ledger_to_totals(
-				ledger,
-				args.currency,
-				args.invert,
-			)?;
-
-			totals.filter_top_level(vec!["Income", "Expenses"]);
-			let mut ordered_totals =
-				OrderedTotal::from_total(totals);
-
-			ordered_totals.sort_canonical();
-			ordered_totals.print_ledger_format(args.depth);
-		},
-		Directive::TB => {
-			ledger.lots.tabulate(&parse_result.latest_date)?;
-			finalize_ledger(&args, &mut ledger, parse_result)?;
-			let totals = ledger_to_totals(
-				ledger,
-				args.currency,
-				args.invert,
-			)?;
-
-			let mut ordered_totals =
-				OrderedTotal::from_total(totals);
-
-			ordered_totals.sort_canonical();
-			ordered_totals.print_ledger_format(args.depth);
-		},
+		Directive::BS => financial_statement(
+			ledger,
+			args,
+			vec!["Assets", "Liabilities"],
+		)?,
+		Directive::IS => financial_statement(
+			ledger,
+			args,
+			vec!["Income, Expenses"],
+		)?,
+		Directive::TB => financial_statement(
+			ledger,
+			args,
+			vec!["Assets", "Liabilities", "Income", "Expenses"],
+		)?,
 		Directive::AS => {
 			// Ensure the search term is provided for the AS command
 			if let Some(account) = &args.term {
@@ -150,13 +133,6 @@ fn main() -> Result<(), Error> {
 					None => bail!("Currency required (-c)"),
 				};
 
-				ledger.lots
-					.tabulate(&parse_result.latest_date)?;
-				finalize_ledger(
-					&args,
-					&mut ledger,
-					parse_result,
-				)?;
 				let entries = OrderedEntry::new(
 					ledger.take_entries(),
 				);
@@ -167,28 +143,54 @@ fn main() -> Result<(), Error> {
 		},
 		Directive::OpenLots => {
 			// TODO: Add customization for this directive.
-			// TODO: Need to implement pretty-printing for this.
-			//  Right now, I've tested it but it has no output
-			//  anymore.
-			ledger.lots.tabulate(&parse_result.latest_date)?;
+
+			let ordered_lots = OrderedLots::new(
+				lot_state.take_lots(None, true),
+			);
+			ordered_lots.print_open_lots()
 		},
 	}
 
 	Ok(())
 }
 
+/// Performs validation of the ledger, and returns the final state of lots.
 fn finalize_ledger(
 	args: &Cli,
 	ledger: &mut Ledger,
 	parse_result: ParseResult,
-) -> Result<(), Error> {
+) -> Result<LotState, Error> {
 	ledger.exchange_rates.finalize()?;
+	let lot_state = ledger.lots.tabulate(&parse_result.latest_date)?;
 
 	if let Some(collapse) = &args.currency {
 		ledger.collapse_to(collapse.clone());
 	}
 
-	ledger.finalize(parse_result.max_precision_by_currency, args.precision)
+	ledger.finalize(
+		parse_result.max_precision_by_currency,
+		args.precision,
+	)?;
+	Ok(lot_state)
+}
+
+fn financial_statement(
+	ledger: Ledger,
+	args: Cli,
+	top_level_accounts_to_show: Vec<&str>,
+) -> Result<(), Error> {
+	let mut totals = ledger_to_totals(ledger, args.currency, args.invert)?;
+
+	let mut top_levels = top_level_accounts_to_show;
+	if !args.ignore_equity {
+		top_levels.push("Equity");
+	}
+	totals.filter_top_level(top_levels);
+	let mut ordered_totals = OrderedTotal::from_total(totals);
+
+	ordered_totals.sort_canonical();
+	ordered_totals.print_ledger_format(args.depth);
+	Ok(())
 }
 
 fn ledger_to_totals(
