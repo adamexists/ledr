@@ -144,7 +144,7 @@ impl Graph {
 		if let Some(node) = self.nodes.get(current) {
 			for (neighbor, rate) in &node.edges {
 				let new_rate_product =
-					rate_product * rate.ratio.to_f64();
+					rate_product * rate.ratio.as_f64();
 
 				// Recursive call for the neighbor
 				if self.detect_inconsistent_cycle(
@@ -184,7 +184,7 @@ impl Graph {
 				for (neighbor, rate) in &node.edges {
 					if !visited.contains_key(neighbor) {
 						let new_rate = current_rate
-							* rate.ratio.to_f64();
+							* rate.ratio.as_f64();
 
 						if neighbor == quote {
 							return Some(Scalar::from_f64(new_rate));
@@ -556,7 +556,7 @@ mod tests {
 		let mut graph = Graph::new();
 
 		// Segment 1
-		let seg1 = vec!["USD", "EUR", "GBP"];
+		let seg1 = ["USD", "EUR", "GBP"];
 		for i in 0..seg1.len() {
 			for j in i + 1..seg1.len() {
 				let a = Amount::new(
@@ -573,7 +573,7 @@ mod tests {
 		}
 
 		// Segment 2
-		let seg2 = vec!["JPY", "AUD", "CAD"];
+		let seg2 = ["JPY", "AUD", "CAD"];
 		for i in 0..seg2.len() {
 			for j in i + 1..seg2.len() {
 				let a = Amount::new(
@@ -590,7 +590,7 @@ mod tests {
 		}
 
 		// Segment 3
-		let seg3 = vec!["CHF", "CNY", "INR"];
+		let seg3 = ["CHF", "CNY", "INR"];
 		for i in 0..seg3.len() {
 			for j in i + 1..seg3.len() {
 				let a = Amount::new(

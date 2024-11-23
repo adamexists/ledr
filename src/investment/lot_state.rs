@@ -16,7 +16,6 @@
 use crate::investment::commodity::Commodity;
 use crate::investment::lot::{Lot, LotStatus, Sale};
 use crate::investment::lot_buffer::Action;
-use crate::util::date::Date;
 use anyhow::{bail, Error};
 use std::collections::HashMap;
 
@@ -110,11 +109,7 @@ impl LotState {
 
 	/// Flattens the set of lots into one Vec, and returns it.
 	/// Consumes this.
-	pub fn take_lots(
-		self,
-		ignore_after: Option<Date>,
-		only_open: bool,
-	) -> Vec<Lot> {
+	pub fn take_lots(self, only_open: bool) -> Vec<Lot> {
 		let lots_iter = self.state.into_values().flatten();
 		if only_open {
 			lots_iter

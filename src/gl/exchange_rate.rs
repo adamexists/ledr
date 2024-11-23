@@ -154,20 +154,6 @@ impl ExchangeRates {
 		Ok(())
 	}
 
-	/// Retrieves the most recent rate before a given date, if any
-	pub fn get_effective_rate_on(
-		&self,
-		date: Date,
-		base: String,
-		quote: String,
-	) -> Option<Scalar> {
-		self.resolved_rates.get(&(base, quote)).and_then(|rates| {
-			rates.iter()
-				.find(|(d, _)| *d <= date)
-				.map(|(_, rate)| *rate)
-		})
-	}
-
 	/// Retrieves the most recent rate available, if any
 	pub fn get_latest_rate(
 		&self,
@@ -199,7 +185,7 @@ mod tests {
 	#[test]
 	fn test_declare_valid_rate() {
 		let mut exchange_rates = setup_exchange_rates();
-		let date = Date::new(2024, 11, 1);
+		let date = Date::from_str("2024-1-1").unwrap();
 		let base = "USD".to_string();
 		let quote = "EUR".to_string();
 		let rate = Scalar::new(11, 1);
@@ -208,7 +194,7 @@ mod tests {
 			.declare(date, base.clone(), quote.clone(), rate)
 			.is_ok());
 
-		let date2 = Date::new(2024, 11, 2);
+		let date2 = Date::from_str("2024-11-2").unwrap();
 		assert!(exchange_rates
 			.declare(date2, base, quote, Scalar::new(12, 1))
 			.is_ok());
@@ -217,7 +203,7 @@ mod tests {
 	#[test]
 	fn test_declare_self_exchange() {
 		let mut exchange_rates = setup_exchange_rates();
-		let date = Date::new(2024, 11, 1);
+		let date = Date::from_str("2024-1-1").unwrap();
 		let base = "USD".to_string();
 		let rate = Scalar::new(11, 1);
 
@@ -225,7 +211,7 @@ mod tests {
 			.declare(date, base.clone(), base.clone(), rate)
 			.is_err());
 
-		let date2 = Date::new(2024, 11, 2);
+		let date2 = Date::from_str("2024-11-2").unwrap();
 		assert!(exchange_rates
 			.declare(date2, base.clone(), base, Scalar::new(9, 1))
 			.is_err());
@@ -234,7 +220,7 @@ mod tests {
 	#[test]
 	fn test_declare_non_positive_rate() {
 		let mut exchange_rates = setup_exchange_rates();
-		let date = Date::new(2024, 11, 1);
+		let date = Date::from_str("2024-11-01").unwrap();
 		let base = "USD".to_string();
 		let quote = "EUR".to_string();
 
@@ -254,7 +240,7 @@ mod tests {
 	#[test]
 	fn test_infer_rate_within_tolerance() {
 		let mut exchange_rates = setup_exchange_rates();
-		let date = Date::new(2024, 11, 1);
+		let date = Date::from_str("2024-11-01").unwrap();
 		let base = "USD".to_string();
 		let quote = "EUR".to_string();
 		let declared_rate = Scalar::new(11, 1);
@@ -273,7 +259,7 @@ mod tests {
 			.infer(date, &base, &quote, inferred_rate)
 			.is_ok());
 
-		let date2 = Date::new(2024, 11, 2);
+		let date2 = Date::from_str("2024-11-02").unwrap();
 		assert!(exchange_rates
 			.infer(date2, &base, &quote, Scalar::new(111, 2))
 			.is_ok());
@@ -282,7 +268,7 @@ mod tests {
 	#[test]
 	fn test_infer_rate_outside_tolerance() {
 		let mut exchange_rates = setup_exchange_rates();
-		let date = Date::new(2024, 11, 1);
+		let date = Date::from_str("2024-11-1").unwrap();
 		let base = "USD".to_string();
 		let quote = "EUR".to_string();
 		let declared_rate = Scalar::new(11, 1);
@@ -307,44 +293,10 @@ mod tests {
 	}
 
 	#[test]
-	fn test_get_effective_rate_on() {
-		let mut exchange_rates = setup_exchange_rates();
-		let date = Date::new(2024, 11, 1);
-		let base = "USD".to_string();
-		let quote = "EUR".to_string();
-		let rate = Scalar::new(11, 1);
-
-		exchange_rates
-			.declare(date, base.clone(), quote.clone(), rate)
-			.unwrap();
-
-		exchange_rates.finalize().expect("finalize failed");
-
-		assert_eq!(
-			exchange_rates.get_effective_rate_on(
-				date,
-				base.clone(),
-				quote.clone()
-			),
-			Some(rate)
-		);
-
-		let earlier_date = Date::new(2024, 10, 31);
-		assert_eq!(
-			exchange_rates.get_effective_rate_on(
-				earlier_date,
-				base,
-				quote
-			),
-			None
-		);
-	}
-
-	#[test]
 	fn test_get_latest_rate() {
 		let mut exchange_rates = setup_exchange_rates();
-		let date1 = Date::new(2024, 11, 1);
-		let date2 = Date::new(2024, 11, 2);
+		let date1 = Date::from_str("2024-11-01").unwrap();
+		let date2 = Date::from_str("2024-11-02").unwrap();
 		let base = "USD".to_string();
 		let quote = "EUR".to_string();
 		let rate1 = Scalar::new(11, 1);
@@ -365,7 +317,7 @@ mod tests {
 			Some(rate2)
 		);
 
-		let date3 = Date::new(2024, 11, 3);
+		let date3 = Date::from_str("2024-11-3").unwrap();
 		let rate3 = Scalar::new(115, 2);
 		exchange_rates
 			.declare(date3, base.clone(), quote.clone(), rate3)

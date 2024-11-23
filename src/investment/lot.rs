@@ -32,7 +32,7 @@ pub struct Lot {
 	pub sales: Vec<Sale>,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum LotStatus {
 	Open,
 	Closed,
@@ -42,6 +42,12 @@ pub enum LotStatus {
 pub struct Sale {
 	pub date: Date,
 	pub quantity: Scalar,
+}
+
+impl PartialOrd for LotStatus {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
 }
 
 impl Ord for LotStatus {
@@ -57,10 +63,6 @@ impl Ord for LotStatus {
 }
 
 impl Lot {
-	pub fn cost_basis(&self) -> Scalar {
-		self.commodity.cost_basis().unit_cost * self.quantity
-	}
-
 	pub fn time_held(&self, as_of: &Date) -> Duration {
 		let end = match self.closed_date {
 			Some(date) => {

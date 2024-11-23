@@ -1,5 +1,6 @@
 use crate::investment::lot::Lot;
 use crate::reports::table::Table;
+use crate::util::date::Date;
 
 /// Struct for handling and displaying an ordered list of lots, for reports
 pub struct OrderedLots {
@@ -13,29 +14,34 @@ impl OrderedLots {
 	}
 
 	/// Prints an abbreviated table format, meant to contain open lots only.
-	pub fn print_open_lots(&self) {
-		if self.lots.len() == 0 {
+	pub fn print_open_lots(&self, as_of: &Date) {
+		if self.lots.is_empty() {
 			println!("No open lots");
 			return;
 		}
 
-		let mut table = Table::new(6);
+		let mut table = Table::new(7);
 		table.right_align(0);
+		table.right_align(1);
 		table.right_align(3);
+		table.right_align(4);
 
 		table.add_row(vec![
-			"Purchased",
-			"Commodity",
-			"Open Qty",
-			"Cost Basis",
+			"Opened",
+			"Held",
+			"Asset",
+			"Qty",
+			"Basis",
 			"Account",
-			"Sales",
+			"Dispositions",
 		]);
+
 		table.add_separator();
 		for l in self.lots.iter() {
 			table.add_row(vec![
 				&l.acquisition_date.to_string(),
-				&l.commodity.symbol().to_string(),
+				&l.time_held(as_of).to_string(),
+				l.commodity.symbol(),
 				&l.quantity.to_string(),
 				&l.commodity.cost_basis().to_string(),
 				&l.account.to_string(),
@@ -49,11 +55,7 @@ impl OrderedLots {
 		// total just shows lot count
 		table.print(
 			5,
-			&format!(
-				"{} {}",
-				self.lots.len().to_string(),
-				bottom_line
-			),
+			&format!("{} {}", self.lots.len(), bottom_line),
 			None,
 			&"".to_string(),
 		)

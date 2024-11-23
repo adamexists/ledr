@@ -338,13 +338,13 @@ impl Ledger {
 	/// of each currency.
 	pub fn finalize(
 		&mut self,
-		max_reso_by_currency: HashMap<String, u32>,
+		max_reso_by_currency: &HashMap<String, u32>,
 		overall_max_reso: Option<u32>,
 	) -> Result<(), Error> {
 		let max_reso = overall_max_reso.unwrap_or(99);
 
 		for entry in &mut self.entries {
-			for (currency, &reso) in &max_reso_by_currency {
+			for (currency, &reso) in max_reso_by_currency {
 				entry.round_for_currency(
 					currency,
 					min(reso, max_reso),
@@ -388,7 +388,7 @@ mod tests {
 	#[test]
 	fn test_declare_currency() {
 		let mut ledger = Ledger::new(false);
-		let date = Date::new(2024, 1, 1);
+		let date = Date::from_str("2024-1-1").unwrap();
 
 		assert!(ledger
 			.declare_currency("USD".to_string(), date)
@@ -403,7 +403,7 @@ mod tests {
 	#[test]
 	fn test_declare_account() {
 		let mut ledger = Ledger::new(false);
-		let date = Date::new(2024, 1, 1);
+		let date = Date::from_str("2024-01-01").unwrap();
 
 		assert!(ledger
 			.declare_account("Assets:Cash".to_string(), date)
@@ -418,7 +418,7 @@ mod tests {
 	#[test]
 	fn test_new_entry() {
 		let mut ledger = Ledger::new(false);
-		let date = Date::new(2024, 1, 1);
+		let date = Date::from_str("2024-01-01").unwrap();
 
 		assert!(ledger
 			.new_entry(date, "Test Entry".to_string())
@@ -430,7 +430,7 @@ mod tests {
 	#[test]
 	fn test_add_detail_valid() {
 		let mut ledger = Ledger::new(false);
-		let date = Date::new(2024, 1, 1);
+		let date = Date::from_str("2024-01-01").unwrap();
 		ledger.declare_currency("USD".to_string(), date).unwrap();
 		ledger.declare_account("Assets:Cash".to_string(), date)
 			.unwrap();
@@ -453,7 +453,7 @@ mod tests {
 	#[test]
 	fn test_add_detail_invalid_currency() {
 		let mut ledger = Ledger::new(false);
-		let date = Date::new(2024, 1, 1);
+		let date = Date::from_str("2024-01-01").unwrap();
 		ledger.declare_account("Assets:Cash".to_string(), date)
 			.unwrap();
 
@@ -475,7 +475,7 @@ mod tests {
 	#[test]
 	fn test_add_detail_invalid_account() {
 		let mut ledger = Ledger::new(false);
-		let date = Date::new(2024, 1, 1);
+		let date = Date::from_str("2024-01-01").unwrap();
 		ledger.declare_currency("USD".to_string(), date).unwrap();
 
 		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
@@ -513,7 +513,7 @@ mod tests {
 	#[test]
 	fn test_finish_entry() {
 		let mut ledger = Ledger::new(false);
-		let date = Date::new(2024, 1, 1);
+		let date = Date::from_str("2024-01-01").unwrap();
 		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
 		assert!(ledger.finish_entry().is_ok());
 		assert!(ledger.pending_entry.is_none());
@@ -523,10 +523,10 @@ mod tests {
 	#[test]
 	fn test_check_currency_before_declaration() {
 		let mut ledger = Ledger::new(false);
-		let date = Date::new(2024, 1, 1);
+		let date = Date::from_str("2024-01-01").unwrap();
 		ledger.declare_currency(
 			"USD".to_string(),
-			Date::new(2024, 1, 2),
+			Date::from_str("2024-1-2").unwrap(),
 		)
 		.unwrap();
 
@@ -539,10 +539,10 @@ mod tests {
 	#[test]
 	fn test_check_account_before_declaration() {
 		let mut ledger = Ledger::new(false);
-		let date = Date::new(2024, 1, 1);
+		let date = Date::from_str("2024-01-01").unwrap();
 		ledger.declare_account(
 			"Assets:Cash".to_string(),
-			Date::new(2024, 1, 2),
+			Date::from_str("2024-01-02").unwrap(),
 		)
 		.unwrap();
 
@@ -555,7 +555,7 @@ mod tests {
 	#[test]
 	fn test_add_detail_without_currency_declaration_in_lenient_mode() {
 		let mut ledger = Ledger::new(true);
-		let date = Date::new(2024, 1, 1);
+		let date = Date::from_str("2024-01-01").unwrap();
 
 		ledger.new_entry(date, "Lenient Test Entry".to_string())
 			.unwrap();
@@ -576,7 +576,7 @@ mod tests {
 	#[test]
 	fn test_add_detail_without_account_declaration_in_lenient_mode() {
 		let mut ledger = Ledger::new(true);
-		let date = Date::new(2024, 1, 1);
+		let date = Date::from_str("2024-01-01").unwrap();
 
 		ledger.new_entry(date, "Lenient Test Entry".to_string())
 			.unwrap();
@@ -598,7 +598,7 @@ mod tests {
 	fn test_set_virtual_detail_without_account_declaration_in_lenient_mode()
 	{
 		let mut ledger = Ledger::new(true);
-		let date = Date::new(2024, 1, 1);
+		let date = Date::from_str("2024-01-01").unwrap();
 
 		ledger.new_entry(
 			date,

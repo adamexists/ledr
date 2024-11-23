@@ -20,6 +20,7 @@ use crate::parsing::parser::{parse, ParseResult};
 use crate::reports::ordered_entry::OrderedEntry;
 use crate::reports::ordered_lots::OrderedLots;
 use crate::reports::ordered_total::OrderedTotal;
+use crate::util::date::Date;
 use anyhow::{bail, Error};
 use clap::{Parser, ValueEnum};
 use gl::ledger::Ledger;
@@ -103,11 +104,13 @@ enum Directive {
 fn main() -> Result<(), Error> {
 	let args = Cli::parse();
 
+	let (beg, end) = get_range(&args)?;
+
 	let mut ledger = Ledger::new(args.lenient);
-	let parse_result = parse(&args, &mut ledger)?;
+	let parse_result = parse(&args.file, &beg, &end, &mut ledger)?;
 
 	// TODO: Not a huge fan aesthetically of lot_state being the only output from here.
-	let lot_state = finalize_ledger(&args, &mut ledger, parse_result)?;
+	let lot_state = finalize_ledger(&args, &mut ledger, &parse_result)?;
 
 	match args.command {
 		Directive::BS => financial_statement(
@@ -144,10 +147,11 @@ fn main() -> Result<(), Error> {
 		Directive::OpenLots => {
 			// TODO: Add customization for this directive.
 
-			let ordered_lots = OrderedLots::new(
-				lot_state.take_lots(None, true),
-			);
-			ordered_lots.print_open_lots()
+			let ordered_lots =
+				OrderedLots::new(lot_state.take_lots(true));
+			ordered_lots.print_open_lots(
+				&parse_result.latest_date.min(end),
+			)
 		},
 	}
 
@@ -158,7 +162,7 @@ fn main() -> Result<(), Error> {
 fn finalize_ledger(
 	args: &Cli,
 	ledger: &mut Ledger,
-	parse_result: ParseResult,
+	parse_result: &ParseResult,
 ) -> Result<LotState, Error> {
 	ledger.exchange_rates.finalize()?;
 	let lot_state = ledger.lots.tabulate(&parse_result.latest_date)?;
@@ -168,7 +172,7 @@ fn finalize_ledger(
 	}
 
 	ledger.finalize(
-		parse_result.max_precision_by_currency,
+		&parse_result.max_precision_by_currency,
 		args.precision,
 	)?;
 	Ok(lot_state)
@@ -209,4 +213,15 @@ fn ledger_to_totals(
 	}
 
 	Ok(totals)
+}
+
+fn get_range(args: &Cli) -> Result<(Date, Date), Error> {
+	let begin = Date::from_str(
+		args.begin.as_ref().unwrap_or(&"0001-01-01".to_string()),
+	)?;
+	let end = Date::from_str(
+		args.end.as_ref().unwrap_or(&"9999-12-31".to_string()),
+	)?;
+
+	Ok((begin, end))
 }

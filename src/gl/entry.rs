@@ -318,26 +318,28 @@ mod tests {
 	use crate::util::date::Date;
 	use crate::util::scalar::Scalar;
 
-	fn sample_date(offset: u8) -> Date {
-		Date::new(2024, 1, 1 + offset)
-	}
-
-	fn create_entry(offset: u8) -> Entry {
-		Entry::new(sample_date(offset), "Sample Entry".to_string())
+	fn create_entry() -> Entry {
+		Entry::new(
+			Date::from_str("2024-1-1").unwrap(),
+			"Sample Entry".to_string(),
+		)
 	}
 
 	#[test]
 	fn test_entry_creation() {
-		let entry = create_entry(0);
-		assert_eq!(entry.get_date(), sample_date(0));
+		let entry = create_entry();
+		assert_eq!(
+			entry.get_date(),
+			Date::from_str("2024-1-1").unwrap()
+		);
 		assert!(entry.details.is_empty());
 	}
 
 	#[test]
 	fn test_add_detail() {
-		let mut entry = create_entry(0);
+		let mut entry = create_entry();
 		let result = entry.add_detail(
-			&"Assets:Cash".to_string(),
+			"Assets:Cash",
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		);
 
@@ -352,9 +354,9 @@ mod tests {
 
 	#[test]
 	fn test_add_detail_empty_account() {
-		let mut entry = create_entry(0);
+		let mut entry = create_entry();
 		let result = entry.add_detail(
-			&"".to_string(),
+			"",
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		);
 
@@ -363,14 +365,14 @@ mod tests {
 
 	#[test]
 	fn test_add_detail_multiple_same_currency() {
-		let mut entry = create_entry(0);
+		let mut entry = create_entry();
 		entry.add_detail(
-			&"Assets:Cash".to_string(),
+			"Assets:Cash",
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
-			&"Assets:Savings".to_string(),
+			"Assets:Savings",
 			Amount::new(Scalar::new(500, 1), "USD".to_string()),
 		)
 		.unwrap();
@@ -383,14 +385,14 @@ mod tests {
 
 	#[test]
 	fn test_finalize_unbalanced_entry() {
-		let mut entry = create_entry(0);
+		let mut entry = create_entry();
 		entry.add_detail(
-			&"Assets:Cash".to_string(),
+			"Assets:Cash",
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
-			&"Expenses:Food".to_string(),
+			"Expenses:Food",
 			Amount::new(Scalar::new(-500, 1), "USD".to_string()),
 		)
 		.unwrap();
@@ -404,14 +406,14 @@ mod tests {
 
 	#[test]
 	fn test_finalize_balanced_entry() {
-		let mut entry = create_entry(0);
+		let mut entry = create_entry();
 		entry.add_detail(
-			&"Assets:Cash".to_string(),
+			"Assets:Cash",
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
-			&"Expenses:Food".to_string(),
+			"Expenses:Food",
 			Amount::new(Scalar::new(-1000, 1), "USD".to_string()),
 		)
 		.unwrap();
@@ -425,7 +427,7 @@ mod tests {
 
 	#[test]
 	fn test_set_virtual_detail() {
-		let mut entry = create_entry(0);
+		let mut entry = create_entry();
 		let result =
 			entry.set_virtual_detail("Assets:Virtual".to_string());
 
@@ -436,7 +438,7 @@ mod tests {
 
 	#[test]
 	fn test_set_virtual_detail_twice() {
-		let mut entry = create_entry(0);
+		let mut entry = create_entry();
 		entry.set_virtual_detail("Assets:Virtual".to_string())
 			.unwrap();
 		let result =
@@ -447,7 +449,7 @@ mod tests {
 
 	#[test]
 	fn test_set_virtual_detail_empty_account() {
-		let mut entry = create_entry(0);
+		let mut entry = create_entry();
 		let result = entry.set_virtual_detail("".to_string());
 
 		assert!(result.is_err());
@@ -455,9 +457,9 @@ mod tests {
 
 	#[test]
 	fn test_set_resolution_for_currency() {
-		let mut entry = create_entry(0);
+		let mut entry = create_entry();
 		entry.add_detail(
-			&"Assets:Cash".to_string(),
+			"Assets:Cash",
 			Amount::new(Scalar::new(1234567, 4), "USD".to_string()),
 		)
 		.unwrap();
@@ -472,14 +474,14 @@ mod tests {
 
 	#[test]
 	fn test_set_resolution_for_currency_different_currency() {
-		let mut entry = create_entry(0);
+		let mut entry = create_entry();
 		entry.add_detail(
-			&"Assets:Cash".to_string(),
+			"Assets:Cash",
 			Amount::new(Scalar::new(1234567, 4), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
-			&"Assets:Cash".to_string(),
+			"Assets:Cash",
 			Amount::new(Scalar::new(9876543, 4), "EUR".to_string()),
 		)
 		.unwrap();
@@ -498,14 +500,14 @@ mod tests {
 
 	#[test]
 	fn test_multiline_implicit_currency_conversion() {
-		let mut entry = create_entry(0);
+		let mut entry = create_entry();
 		entry.add_detail(
-			&"Assets:Cash".to_string(),
+			"Assets:Cash",
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
-			&"Assets:Bank".to_string(),
+			"Assets:Bank",
 			Amount::new(Scalar::new(-2000, 1), "EUR".to_string()),
 		)
 		.unwrap();
@@ -523,14 +525,14 @@ mod tests {
 
 	#[test]
 	fn test_multiline_implicit_currency_conversion_error() {
-		let mut entry = create_entry(0);
+		let mut entry = create_entry();
 		entry.add_detail(
-			&"Assets:Cash".to_string(),
+			"Assets:Cash",
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
 		)
 		.unwrap();
 		entry.add_detail(
-			&"Assets:Bank".to_string(),
+			"Assets:Bank",
 			Amount::new(Scalar::new(2000, 1), "EUR".to_string()),
 		)
 		.unwrap(); // Both amounts are positive

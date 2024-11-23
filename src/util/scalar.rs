@@ -165,7 +165,7 @@ impl Scalar {
 		}
 	}
 
-	pub fn to_f64(&self) -> f64 {
+	pub fn as_f64(&self) -> f64 {
 		self.amount as f64 / 10f64.powf(self.resolution as f64)
 	}
 
@@ -189,9 +189,7 @@ impl Scalar {
 		out.set_resolution(out.resolution.min(COMFORTABLE_RESOLUTION));
 
 		// failsafe to prevent representing nonzero number as zero after resolution setting
-		if amount > f64::EPSILON && out.amount == 0
-			|| amount < f64::EPSILON && out.amount == 0
-		{
+		if amount > f64::EPSILON && out.amount == 0 {
 			out.amount = 1;
 		} else if amount < f64::EPSILON && out.amount == 0 {
 			out.amount = -1;
@@ -665,7 +663,7 @@ mod tests {
 			let money1 = Scalar::from_str("0.0001").unwrap();
 			let money2 = Scalar::from_str("0.0002").unwrap();
 			let result = money1 * money2;
-			assert_eq!(result.amount, 1 * 2);
+			assert_eq!(result.amount, 2);
 			assert_eq!(result.resolution, 8);
 		}
 

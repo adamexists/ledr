@@ -14,7 +14,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::util::cost_basis::CostBasis;
-use crate::util::scalar::Scalar;
 use std::fmt::Formatter;
 
 // TODO: Resolve problems with these derivations, if any.
@@ -35,10 +34,6 @@ impl Commodity {
 
 	pub fn cost_basis(&self) -> &CostBasis {
 		&self.cost_basis
-	}
-
-	pub fn unit_cost(&self) -> Scalar {
-		self.cost_basis.unit_cost
 	}
 }
 

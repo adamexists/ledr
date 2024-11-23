@@ -18,7 +18,6 @@ use crate::util::amount::Amount;
 use crate::util::cost_basis::CostBasis;
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
-use crate::Cli;
 use anyhow::{anyhow, bail, Error};
 use std::collections::{HashMap, VecDeque};
 use std::fs::File;
@@ -338,20 +337,21 @@ fn second_pass(
 /// reporting will use the latest one processed in the file.
 ///
 /// TODO: Create test case to test for begin and end directives working.
-pub fn parse(args: &Cli, ledger: &mut Ledger) -> Result<ParseResult, Error> {
-	let mut file = file_from_path(&args.file)?;
+pub fn parse(
+	file_path: &str,
+	begin: &Date,
+	end: &Date,
+	ledger: &mut Ledger,
+) -> Result<ParseResult, Error> {
+	let mut file = file_from_path(file_path)?;
 
-	let begin =
-		Date::from_str(args.begin.as_ref().unwrap_or(&open_begin()))?;
-	let end = Date::from_str(args.end.as_ref().unwrap_or(&open_end()))?;
-
-	first_pass(&args.file, &file, ledger, &begin, &end)?;
+	first_pass(file_path, &file, ledger, begin, end)?;
 	file.rewind()?;
 
 	// Second pass is responsible for assembling the ParseResult object,
 	// which we pass in this way so it can be passed recursively within.
 	let mut output: ParseResult = Default::default();
-	second_pass(&file, ledger, &mut output, &begin, &end)?;
+	second_pass(&file, ledger, &mut output, begin, end)?;
 
 	Ok(output)
 }
@@ -360,12 +360,4 @@ fn file_from_path(file_path: &str) -> Result<File, Error> {
 	let path = Path::new(file_path);
 	let file = File::open(path)?;
 	Ok(file)
-}
-
-fn open_begin() -> String {
-	"0001-01-01".to_string()
-}
-
-fn open_end() -> String {
-	"99999-12-31".to_string()
 }

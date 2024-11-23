@@ -34,15 +34,31 @@ pub struct Duration {
 	total_days: u32,
 }
 
-impl Date {
-	pub fn new(y: u32, m: u8, d: u8) -> Date {
-		Date {
-			year: y,
-			month: m,
-			day: d,
+impl fmt::Display for Duration {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		if self.total_days == 0 {
+			write!(f, "0d")?;
 		}
-	}
 
+		let mut components = Vec::new();
+		if self.years > 0 {
+			components.push(format!("{}y", self.years));
+		}
+		if self.months > 0 {
+			components.push(format!("{}m", self.months));
+		}
+		if self.days > 0 {
+			components.push(format!("{}d", self.days));
+		}
+		if self.years > 0 || self.months > 0 {
+			components.push(format!("({}d)", self.total_days));
+		}
+
+		write!(f, "{}", components.join(" "))
+	}
+}
+
+impl Date {
 	/// Constructor to parse a string in the "YYYY-mm-dd" format
 	pub fn from_str(date_str: &str) -> Result<Date, Error> {
 		let parts: Vec<&str> = date_str.split('-').collect();
