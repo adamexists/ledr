@@ -220,14 +220,14 @@ impl Entry {
 			&& self.virtual_detail.is_some()
 		{
 			let actual_detail = actual_details.first().unwrap();
-			let action = actions.get(0).unwrap();
+			let action = actions.first().unwrap();
 
 			self.add_system_detail(
-				&VIRTUAL_CONVERSION_ACCOUNT,
+				VIRTUAL_CONVERSION_ACCOUNT,
 				-actual_detail.amount.clone(),
 			)?;
 			self.add_system_detail(
-				&VIRTUAL_CONVERSION_ACCOUNT,
+				VIRTUAL_CONVERSION_ACCOUNT,
 				Amount::new(
 					action.commodity.cost_basis().value
 						* actual_detail.value(),
@@ -391,7 +391,7 @@ impl Entry {
 	fn get_actual_details(&self) -> Vec<Detail> {
 		self.details
 			.iter()
-			.filter(|&d| d.account != VIRTUAL_CONVERSION_ACCOUNT)
+			.filter(|&d| !d.is_system)
 			.cloned()
 			.collect()
 	}

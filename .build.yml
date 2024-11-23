@@ -13,7 +13,7 @@ tasks:
       cargo fmt --check
   - lint: |
       cd ledr
-      cargo clippy
+      cargo clippy -- -D warnings
   - build: |
       cd ledr
       cargo build

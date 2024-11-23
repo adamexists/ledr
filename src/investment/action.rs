@@ -68,10 +68,6 @@ impl Action {
 
 		self.direction = Direction::Sell(Some(unit_proceeds));
 	}
-
-	pub fn symbol(&self) -> &str {
-		self.commodity.symbol()
-	}
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

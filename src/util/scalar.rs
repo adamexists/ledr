@@ -378,7 +378,7 @@ impl DivAssign for Scalar {
 		// First, perform Scalar division. If that yields 0, fall back to
 		// floating point division. TODO: Address further in the future.
 
-		let (initial_self, initial_rhs) = (self.clone(), rhs.clone());
+		let (initial_self, initial_rhs) = (*self, rhs);
 
 		let (mut aligned_self, aligned_rhs, mut resolution) =
 			self.align_resolution(&rhs);
