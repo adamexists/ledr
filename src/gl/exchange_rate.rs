@@ -19,7 +19,6 @@ use crate::util::date::Date;
 use crate::util::graph::Graph;
 use crate::util::scalar::Scalar;
 use anyhow::{bail, Error};
-use std::cmp::PartialEq;
 use std::collections::HashMap;
 
 #[derive(Debug, Default)]
@@ -102,7 +101,7 @@ impl ExchangeRates {
 		let entry = self.rates.entry(date).or_insert_with(Graph::new);
 
 		if let Some(existing_rate) =
-			entry.get_direct_rate(&base, &quote, true)
+			entry.get_direct_rate(base, quote, true)
 		{
 			// Check if the inferred rate is within 1% of the
 			// declared rate. If it is, ignore this inferred rate

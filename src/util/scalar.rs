@@ -180,6 +180,9 @@ impl Scalar {
 	/// certain cases related to selling some lots in a different currency than they bought the
 	/// asset in while also not having a direct exchange market between the two fiat currencies.
 	/// The practical odds of this are nil.
+	///
+	/// Still, for conceptual purity, the goal will be to introduce intermediate BigInt-based
+	/// Scalars rather than continue with this floating point intermediary. TODO: Address.
 	pub fn from_f64(amount: f64) -> Self {
 		let mut out =
 			Scalar::from_str(amount.to_string().as_str()).unwrap();

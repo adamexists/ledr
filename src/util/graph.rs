@@ -127,8 +127,7 @@ impl Graph {
 		if rec_stack.contains(current) {
 			// Cycle detected, but only check consistency if we're back at the starting node
 			if current == start {
-				return rate_product < 0.95
-					|| rate_product > 1.05;
+				return !(0.95..=1.05).contains(&rate_product);
 			} else {
 				return false;
 			}
