@@ -14,8 +14,9 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::gl::exchange_rate::RateType::{Declared, Inferred};
+use crate::util::amount::Amount;
 use crate::util::date::Date;
+use crate::util::graph::Graph;
 use crate::util::scalar::Scalar;
 use anyhow::{bail, Error};
 use std::cmp::PartialEq;
@@ -23,8 +24,12 @@ use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct ExchangeRates {
-	/// Stores rates with a tuple of (base, quote) as the key
-	rates: HashMap<(String, String), Vec<ExchangeRate>>,
+	/// Stores a set of Graphs, one per date
+	rates: HashMap<Date, Graph>,
+
+	/// Preprocessed data for constant-time lookups, only available after
+	/// finalize() has been called on this
+	resolved_rates: HashMap<(String, String), Vec<(Date, Scalar)>>,
 }
 
 impl ExchangeRates {
@@ -36,7 +41,7 @@ impl ExchangeRates {
 		date: Date,
 		base: String,
 		quote: String,
-		mut rate: Scalar,
+		rate: Scalar,
 	) -> Result<(), Error> {
 		if base == quote {
 			bail!("Cannot exchange a currency for itself")
@@ -49,26 +54,20 @@ impl ExchangeRates {
 			return Ok(());
 		}
 
-		// to standardize lookups, put base alphabetically before quote
-		let key = if base < quote {
-			(base, quote)
-		} else {
-			rate = 1 / rate;
-			(quote, base)
-		};
-
-		if self.get_exact_rate(&key, date, Declared).is_some() {
-			bail!("Cannot declare multiple rates on same date")
-		}
-		let new_rate = ExchangeRate::new(date, Declared, rate);
+		let b_amt = Amount::new(Scalar::from_i128(1), base.clone());
+		let q_amt = Amount::new(rate, quote.clone());
 
 		// We do not need to check for existing inferred rates, because
 		// all directives are handled first, so one cannot exist.
 
-		self.rates.entry(key.clone()).or_default().push(new_rate);
-		self.rates
-			.entry(key)
-			.and_modify(|e| e.sort_by(|a, b| b.date.cmp(&a.date)));
+		let entry = self.rates.entry(date).or_insert_with(Graph::new);
+
+		if entry.get_direct_rate(&base, &quote, true).is_some() {
+			bail!("Cannot declare multiple rates on same date")
+		}
+
+		entry.add_rate(&b_amt, &q_amt, false)?;
+
 		Ok(())
 	}
 
@@ -81,7 +80,7 @@ impl ExchangeRates {
 		date: Date,
 		base: &String,
 		quote: &String,
-		mut rate: Scalar,
+		rate: Scalar,
 	) -> Result<(), Error> {
 		if base == quote {
 			bail!("Cannot exchange a currency for itself")
@@ -94,16 +93,16 @@ impl ExchangeRates {
 			return Ok(());
 		}
 
-		// To standardize lookups, put base alphabetically before quote
-		let key = if base < quote {
-			(base.clone(), quote.clone())
-		} else {
-			rate = 1 / rate;
-			(quote.clone(), base.clone())
-		};
+		let b_amt = Amount::new(Scalar::from_i128(1), base.clone());
+		let q_amt = Amount::new(rate, quote.clone());
 
-		if let Some(declared) =
-			self.get_exact_rate(&key, date, Declared)
+		// We do not need to check for existing inferred rates, because
+		// all directives are handled first, so one cannot exist.
+
+		let entry = self.rates.entry(date).or_insert_with(Graph::new);
+
+		if let Some(existing_rate) =
+			entry.get_direct_rate(&base, &quote, true)
 		{
 			// Check if the inferred rate is within 1% of the
 			// declared rate. If it is, ignore this inferred rate
@@ -112,7 +111,7 @@ impl ExchangeRates {
 			// so we should error to stop tabulation here.
 			if !within_tolerance_of(
 				Scalar::new(1, 2),
-				declared,
+				existing_rate,
 				rate,
 			) {
 				bail!("Inferred exchange rate deviates >1% from declared rate")
@@ -121,11 +120,38 @@ impl ExchangeRates {
 			return Ok(());
 		}
 
-		let new_rate = ExchangeRate::new(date, Inferred, rate);
-		self.rates.entry(key.clone()).or_default().push(new_rate);
-		self.rates
-			.entry(key)
-			.and_modify(|e| e.sort_by(|a, b| b.date.cmp(&a.date)));
+		entry.add_rate(&b_amt, &q_amt, true)?;
+
+		Ok(())
+	}
+
+	/// Finalizes the rates into a resolved form for efficient lookups,
+	/// after which the methods to retrieve rates from here will work.
+	/// Prior to that, they will not work. Finalization can fail if any
+	/// of the underlying Graphs are incoherent. All are checked.
+	pub fn finalize(&mut self) -> Result<(), Error> {
+		let mut resolved = HashMap::new();
+
+		for (date, graph) in &self.rates {
+			if graph.has_inconsistent_cycle() {
+				bail!(
+					"Exchange rates on {} are incoherent",
+					date
+				)
+			}
+			for (base, quote, rate) in graph.get_all_rates() {
+				resolved.entry((base.clone(), quote.clone()))
+					.or_insert_with(Vec::new)
+					.push((*date, rate));
+			}
+		}
+
+		// Sort rates for each currency pair by date in descending order
+		for rates in resolved.values_mut() {
+			rates.sort_by(|a, b| b.0.cmp(&a.0));
+		}
+
+		self.resolved_rates = resolved;
 		Ok(())
 	}
 
@@ -136,29 +162,11 @@ impl ExchangeRates {
 		base: String,
 		quote: String,
 	) -> Option<Scalar> {
-		let mut invert_rate = false;
-		let key = if base < quote {
-			(base, quote)
-		} else {
-			invert_rate = true;
-			(quote, base)
-		};
-
-		self.rates
-			.get(&key)
-			.and_then(|rates| {
-				rates.iter().find(|rate| rate.date <= date)
-			})
-			.map(|r| r.rate)
-			.map(
-				|found| {
-					if invert_rate {
-						1 / found
-					} else {
-						found
-					}
-				},
-			)
+		self.resolved_rates.get(&(base, quote)).and_then(|rates| {
+			rates.iter()
+				.find(|(d, _)| *d <= date)
+				.map(|(_, rate)| *rate)
+		})
 	}
 
 	/// Retrieves the most recent rate available, if any
@@ -167,71 +175,9 @@ impl ExchangeRates {
 		base: String,
 		quote: String,
 	) -> Option<Scalar> {
-		let mut invert_rate = false;
-		let key = if base < quote {
-			(base, quote)
-		} else {
-			invert_rate = true;
-			(quote, base)
-		};
-
-		self.rates
-			.get(&key)
-			.and_then(|rates| rates.first())
-			.map(|r| r.rate)
-			.map(
-				|found| {
-					if invert_rate {
-						1 / found
-					} else {
-						found
-					}
-				},
-			)
-	}
-
-	/// Returns a rate that exists for the *exact* passed date, if any.
-	fn get_exact_rate(
-		&self,
-		key: &(String, String),
-		date: Date,
-		rate_type: RateType,
-	) -> Option<Scalar> {
-		self.rates
-			.get(key)
-			.and_then(|rates| {
-				rates.iter().find(|rate| {
-					rate.date == date
-						&& rate.rate_type == rate_type
-				})
-			})
-			.map(|r| r.rate)
-	}
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum RateType {
-	/// i.e. The user said this is true
-	Declared,
-	/// i.e. We inferred this rate from an entry or detail
-	Inferred,
-}
-
-#[derive(Clone, Debug)]
-struct ExchangeRate {
-	date: Date,
-	rate_type: RateType,
-
-	rate: Scalar,
-}
-
-impl ExchangeRate {
-	fn new(date: Date, rate_type: RateType, rate: Scalar) -> Self {
-		Self {
-			date,
-			rate_type,
-			rate,
-		}
+		self.resolved_rates
+			.get(&(base, quote))
+			.and_then(|rates| rates.first().map(|(_, rate)| *rate))
 	}
 }
 
@@ -373,6 +319,8 @@ mod tests {
 			.declare(date, base.clone(), quote.clone(), rate)
 			.unwrap();
 
+		exchange_rates.finalize().expect("finalize failed");
+
 		assert_eq!(
 			exchange_rates.get_effective_rate_on(
 				date,
@@ -410,6 +358,8 @@ mod tests {
 			.declare(date2, base.clone(), quote.clone(), rate2)
 			.unwrap();
 
+		exchange_rates.finalize().expect("finalize failed");
+
 		assert_eq!(
 			exchange_rates
 				.get_latest_rate(base.clone(), quote.clone()),
@@ -421,6 +371,9 @@ mod tests {
 		exchange_rates
 			.declare(date3, base.clone(), quote.clone(), rate3)
 			.unwrap();
+
+		exchange_rates.finalize().expect("finalize failed");
+
 		assert_eq!(
 			exchange_rates.get_latest_rate(base, quote),
 			Some(rate3)

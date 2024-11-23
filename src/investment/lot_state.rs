@@ -62,24 +62,9 @@ impl LotState {
 			let mut remaining_quantity = action.quantity;
 
 			for lot in lots.iter_mut() {
-				if lot.commodity != action.commodity {
-					// TODO: Right now we cannot match lots if they
-					//  were bought & sold in different currencies,
-					//  but it's a matter of calculating the gains
-					//  and losses, so it might come when there is a
-					//  beautiful exchange rates graph data
-					//  structure... :)
-					continue;
-				}
-
-				if lot.commodity.unit_cost()
-					!= action.commodity.unit_cost()
+				if lot.commodity != action.commodity
+					|| lot.status == LotStatus::Closed
 				{
-					// Not an applicable lot if cost basis differs
-					continue;
-				}
-
-				if lot.status == LotStatus::Closed {
 					continue;
 				}
 
@@ -93,7 +78,6 @@ impl LotState {
 				lot.sales.push(Sale {
 					date: action.date,
 					quantity: sell_quantity,
-					unit_cost: action.commodity.unit_cost(),
 				});
 
 				// If the lot is fully sold, mark it as closed
@@ -149,7 +133,6 @@ pub enum LotStatus {
 struct Sale {
 	date: Date,
 	quantity: Scalar,
-	unit_cost: Scalar,
 }
 
 impl Lot {

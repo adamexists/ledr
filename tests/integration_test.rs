@@ -34,6 +34,8 @@ fn test_integration_standard() {
 		("12_in.txt", "12_out.txt"),
 		("13_in.txt", "13_out.txt"),
 		("14_in.txt", "14_out.txt"),
+		("15_in.txt", "15_out.txt"),
+		("16_in.txt", "16_out.txt"),
 	];
 
 	execute("standard", test_cases, true, "tb", vec![])

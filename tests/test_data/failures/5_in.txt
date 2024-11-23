@@ -7,5 +7,5 @@
 ! 2024-11-19 account Assets:B
 
 2024-11-19 Multiline Implicit Conversion (Mismatched)
-    Assets:Investments:ETH        2 ETH @@ 2900.00 USD
-    Assets:Cash            -2000.00 USD
+    Assets:A                   2 ETH @@ 2900.00 USD
+    Assets:B            -2000.00 USD

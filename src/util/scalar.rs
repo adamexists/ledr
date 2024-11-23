@@ -22,6 +22,7 @@ use std::ops::{
 	Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign,
 };
 
+const COMFORTABLE_RESOLUTION: u32 = 18;
 const MAX_RESOLUTION: u32 = 32;
 
 /// A general-purpose number, capable of holding an exact decimal value, backed
@@ -164,9 +165,36 @@ impl Scalar {
 		}
 	}
 
-	// TODO: Document this is not in the critical path.
 	pub fn to_f64(&self) -> f64 {
 		self.amount as f64 / 10f64.powf(self.resolution as f64)
+	}
+
+	/// A relatively uncomfortable compromise that is only used in dire circumstances, i.e.
+	/// indirect currency conversion via graph traversal. The Scalar data type, as it is
+	/// currently designed, does not stand up well to repeated multiplication, as resolution
+	/// grows too high. Unless & until that is refactored, we have to let this f64 creep in.
+	///
+	/// That said, the consequences are extremely minimal: indirect conversion is only
+	/// important in cases of complex currency conversion, i.e. someone requests their financial
+	/// statement in some obscure crypto that trades three markets away from the dollar, or in
+	/// certain cases related to selling some lots in a different currency than they bought the
+	/// asset in while also not having a direct exchange market between the two fiat currencies.
+	/// The practical odds of this are nil.
+	pub fn from_f64(amount: f64) -> Self {
+		let mut out =
+			Scalar::from_str(amount.to_string().as_str()).unwrap();
+		out.set_resolution(out.resolution.min(COMFORTABLE_RESOLUTION));
+
+		// failsafe to prevent representing nonzero number as zero after resolution setting
+		if amount > f64::EPSILON && out.amount == 0
+			|| amount < f64::EPSILON && out.amount == 0
+		{
+			out.amount = 1;
+		} else if amount < f64::EPSILON && out.amount == 0 {
+			out.amount = -1;
+		}
+
+		out
 	}
 }
 

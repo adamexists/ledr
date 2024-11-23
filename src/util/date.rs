@@ -18,7 +18,7 @@ use anyhow::{bail, Error};
 use std::cmp::Ordering;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
 pub struct Date {
 	year: u32,
 	month: u8,

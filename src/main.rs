@@ -182,6 +182,8 @@ fn finalize_ledger(
 	ledger: &mut Ledger,
 	parse_result: ParseResult,
 ) -> Result<(), Error> {
+	ledger.exchange_rates.finalize()?;
+
 	if let Some(collapse) = &args.currency {
 		ledger.collapse_to(collapse.clone());
 	}
