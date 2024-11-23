@@ -13,9 +13,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
+use crate::investment::action::Action;
 use crate::investment::commodity::Commodity;
 use crate::investment::lot::{Lot, LotStatus, Sale};
-use crate::investment::lot_buffer::Action;
+use crate::util::amount::Amount;
 use anyhow::{bail, Error};
 use std::collections::HashMap;
 
@@ -55,7 +56,12 @@ impl LotState {
 	//  buys and then with all sells on that date. So by the time
 	//  we process a sell, all the buys are in, in chronological
 	//  order.
-	pub fn sell_lot(&mut self, action: &Action) -> Result<(), Error> {
+	// TODO: Rework the below loop to be less... wide.
+	pub fn sell_lot(
+		&mut self,
+		action: &Action,
+		unit_proceeds: Option<Amount>,
+	) -> Result<(), Error> {
 		let lots = self.state.get_mut(&action.commodity);
 		if let Some(lots) = lots {
 			let mut remaining_quantity = action.quantity;
@@ -77,6 +83,7 @@ impl LotState {
 				lot.sales.push(Sale {
 					date: action.date,
 					quantity: sell_quantity,
+					unit_proceeds: unit_proceeds.clone(),
 				});
 
 				// If the lot is fully sold, mark it as closed
@@ -91,7 +98,6 @@ impl LotState {
 				}
 			}
 
-			// Handle any remaining quantity that couldn't be matched
 			if remaining_quantity > 0 {
 				bail!("No remaining lots for {} of {} (cost basis {})", remaining_quantity, action.commodity.symbol(), action.commodity.cost_basis())
 			}

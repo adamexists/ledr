@@ -16,6 +16,7 @@
 
 use crate::gl::entry::{Entry, VIRTUAL_CONVERSION_ACCOUNT};
 use crate::gl::exchange_rate::ExchangeRates;
+use crate::investment::action::Action;
 use crate::investment::lot_buffer::LotBuffer;
 use crate::util::amount::Amount;
 use crate::util::date::Date;
@@ -180,31 +181,31 @@ impl Ledger {
 			)?;
 
 			// Move the imbalance to the cost basis currency via
-			// the virtual conversion account
-			let conversion = VIRTUAL_CONVERSION_ACCOUNT.to_string();
-			pending_entry.add_detail(
-				&conversion,
-				Amount::new(
-					ica.value * amount.value,
-					ica.currency,
-				),
-			)?;
-			pending_entry.add_detail(
-				&conversion,
-				Amount::new(
-					-amount.value,
-					amount.currency.clone(),
-				),
-			)?;
+			// the virtual conversion account, if this is not a lot
+			if cost_basis.is_none() {
+				let conversion =
+					VIRTUAL_CONVERSION_ACCOUNT.to_string();
+				pending_entry.add_detail(
+					&conversion,
+					Amount::new(
+						ica.value * amount.value,
+						ica.currency,
+					),
+				)?;
+				pending_entry.add_detail(
+					&conversion,
+					-amount.clone(),
+				)?;
+			}
 		}
 
 		if let Some(cb) = cost_basis {
-			self.lots.add_action(
-				self.pending_entry_date(),
+			pending_entry.add_action(Action::new(
+				pending_entry.get_date(),
 				account.clone(),
 				amount,
 				cb,
-			)?;
+			)?);
 		}
 
 		Ok(())
@@ -245,17 +246,15 @@ impl Ledger {
 		match self.pending_entry.take() {
 			None => Ok(()),
 			Some(mut entry) => {
-				entry.finalize(&mut self.exchange_rates)?;
+				let actions = entry
+					.finalize(&mut self.exchange_rates)?;
+				for action in actions {
+					self.lots.add_action(action);
+				}
+
 				self.entries.push(entry);
 				Ok(())
 			},
-		}
-	}
-
-	fn pending_entry_date(&self) -> Date {
-		match &self.pending_entry {
-			Some(e) => e.get_date(),
-			None => panic!("pending_entry_date has no entry"),
 		}
 	}
 
@@ -423,7 +422,7 @@ mod tests {
 			.new_entry(date, "Test Entry".to_string())
 			.is_ok());
 		assert!(ledger.pending_entry.is_some());
-		assert_eq!(ledger.pending_entry_date(), date);
+		assert_eq!(ledger.pending_entry.unwrap().get_date(), date);
 	}
 
 	#[test]

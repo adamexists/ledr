@@ -14,6 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::investment::commodity::Commodity;
+use crate::util::amount::Amount;
 use crate::util::date::{Date, Duration};
 use crate::util::scalar::Scalar;
 use std::cmp::Ordering;
@@ -42,6 +43,10 @@ pub enum LotStatus {
 pub struct Sale {
 	pub date: Date,
 	pub quantity: Scalar,
+
+	/// Always conceptually exists, but only present if known;
+	/// not necessarily the currency of acquisition
+	pub unit_proceeds: Option<Amount>,
 }
 
 impl PartialOrd for LotStatus {

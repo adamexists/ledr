@@ -15,6 +15,7 @@
  */
 use crate::util::scalar::Scalar;
 use std::fmt;
+use std::ops::Neg;
 
 /// A scalar value with a currency.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -31,6 +32,16 @@ impl Amount {
 	pub fn convert_to(&mut self, currency: &str, rate: Scalar) {
 		self.currency = currency.to_owned();
 		self.value *= rate;
+	}
+}
+
+impl Neg for Amount {
+	type Output = Amount;
+	fn neg(self) -> Self::Output {
+		Self::Output {
+			currency: self.currency.to_owned(),
+			value: -self.value,
+		}
 	}
 }
 

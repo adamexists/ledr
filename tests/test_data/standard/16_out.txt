@@ -1,10 +1,12 @@
-       CAD 100,000    Assets
+      CAD -200,000    Assets
     NATGAS 100,000    ↩
+     USD 33,000.00    ↩
+      CAD -200,000      B
+     USD 33,000.00      ↩
     NATGAS 100,000      A
-       CAD 100,000      B
-      CAD -100,000    Equity:Conversions
+       CAD 200,000    Equity:Conversions
    NATGAS -100,000    ↩
-          USD 0.00    ↩
+    USD -33,000.00    ↩
 ------------------
              CAD 0
           NATGAS 0

@@ -73,7 +73,7 @@ impl Total {
 				// Update each total along the hierarchy
 				*current.amounts
 					.entry(detail.currency())
-					.or_insert_with(Scalar::zero) += detail.amount().value;
+					.or_insert_with(Scalar::zero) += detail.value();
 
 				current = current
 					.subtotals
@@ -89,7 +89,7 @@ impl Total {
 			// Update the leaf node with the final amount
 			*current.amounts
 				.entry(detail.currency())
-				.or_insert_with(Scalar::zero) += detail.amount().value;
+				.or_insert_with(Scalar::zero) += detail.value();
 		}
 	}
 
@@ -167,6 +167,7 @@ mod tests {
 		let detail = Detail::new(
 			"Assets:Cash".to_string(),
 			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
+			false,
 		);
 		total.ingest_details(&vec![detail]);
 
@@ -194,6 +195,7 @@ mod tests {
 					Scalar::new(1000, 1),
 					"USD".to_string(),
 				),
+				false,
 			),
 			Detail::new(
 				"Assets:AR".to_string(),
@@ -201,6 +203,7 @@ mod tests {
 					Scalar::new(2000, 1),
 					"USD".to_string(),
 				),
+				false,
 			),
 		];
 		total.ingest_details(&details);
@@ -231,6 +234,7 @@ mod tests {
 		let detail = Detail::new(
 			"Liabilities:Short-Term:CreditCard".to_string(),
 			Amount::new(Scalar::new(500, 1), "EUR".to_string()),
+			false,
 		);
 		total.ingest_details(&vec![detail]);
 
@@ -262,6 +266,7 @@ mod tests {
 					Scalar::new(1000, 1),
 					"USD".to_string(),
 				),
+				false,
 			),
 			Detail::new(
 				"Liabilities:CreditCard".to_string(),
@@ -269,6 +274,7 @@ mod tests {
 					Scalar::new(500, 1),
 					"USD".to_string(),
 				),
+				false,
 			),
 		]);
 
@@ -294,6 +300,7 @@ mod tests {
 					Scalar::new(3000, 1),
 					"USD".to_string(),
 				),
+				false,
 			),
 			Detail::new(
 				"Expenses:Rent".to_string(),
@@ -301,6 +308,7 @@ mod tests {
 					Scalar::new(1000, 1),
 					"USD".to_string(),
 				),
+				false,
 			),
 		]);
 
@@ -335,6 +343,7 @@ mod tests {
 					Scalar::new(1000, 1),
 					"USD".to_string(),
 				),
+				false,
 			),
 			Detail::new(
 				"Liabilities:CreditCard".to_string(),
@@ -342,6 +351,7 @@ mod tests {
 					Scalar::new(500, 1),
 					"USD".to_string(),
 				),
+				false,
 			),
 		]);
 

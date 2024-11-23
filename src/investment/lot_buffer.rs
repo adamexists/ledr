@@ -14,12 +14,10 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::investment::commodity::Commodity;
+use crate::investment::action::{Action, Direction};
 use crate::investment::lot_state::LotState;
-use crate::util::amount::Amount;
 use crate::util::date::Date;
-use crate::util::scalar::Scalar;
-use anyhow::{bail, Error};
+use anyhow::Error;
 use std::cmp::Ordering;
 
 /// Stores actions related to lots until they are all in, at which time this
@@ -30,33 +28,9 @@ pub struct LotBuffer {
 }
 
 impl LotBuffer {
-	/// Adds an action to the lot buffer. Should only be called if
-	/// cost_basis on the passed Amount is Some, or this will panic.
-	pub fn add_action(
-		&mut self,
-		date: Date,
-		account: String,
-		amount: Amount,
-		cost_basis: Amount,
-	) -> Result<(), Error> {
-		if amount.value == 0 {
-			bail!("Lot cannot have zero quantity")
-		}
-
-		let (direction, quantity) = if amount.value > 0 {
-			(Direction::Buy, amount.value)
-		} else {
-			(Direction::Sell, -amount.value)
-		};
-
-		self.actions.push(Action {
-			direction,
-			date,
-			account,
-			quantity,
-			commodity: Commodity::new(amount.currency, cost_basis),
-		});
-		Ok(())
+	/// Adds an action to the lot buffer.
+	pub fn add_action(&mut self, action: Action) {
+		self.actions.push(action);
 	}
 
 	/// Aggregates all actions into lots, in chronological order by date.
@@ -70,12 +44,15 @@ impl LotBuffer {
 		let mut state = LotState::new();
 
 		for action in &mut self.actions {
-			match action.direction {
+			match &action.direction {
 				Direction::Buy => {
 					state.buy_lot(action);
 				},
-				Direction::Sell => {
-					state.sell_lot(action)?;
+				Direction::Sell(proceeds) => {
+					state.sell_lot(
+						action,
+						proceeds.clone(),
+					)?;
 				},
 			}
 		}
@@ -87,58 +64,5 @@ impl LotBuffer {
 			a.partial_cmp(b).unwrap_or(Ordering::Equal)
 		});
 		self.actions.retain(|m| &m.date <= as_of);
-	}
-}
-
-/// Represents a buy or sell that was recorded by the user. Aggregated into a
-/// series of lots. We gather all actions before tabulating them into lots,
-/// because we do not require ledger input to be in order.
-#[derive(Debug)]
-pub struct Action {
-	pub direction: Direction,
-	pub date: Date,
-
-	pub account: String,
-	pub commodity: Commodity,
-	pub quantity: Scalar,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Direction {
-	Buy,
-	Sell,
-}
-
-impl PartialEq for Action {
-	fn eq(&self, other: &Self) -> bool {
-		self.date == other.date
-			&& self.direction == other.direction
-			&& self.commodity == other.commodity
-	}
-}
-
-impl PartialOrd for Action {
-	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-		// Compare by date first
-		match self.date.partial_cmp(&other.date) {
-			Some(Ordering::Equal) => {
-				// If dates are equal, sort buys before sells
-				match (&self.direction, &other.direction) {
-					(Direction::Buy, Direction::Sell) => {
-						Some(Ordering::Less)
-					},
-					(Direction::Sell, Direction::Buy) => {
-						Some(Ordering::Greater)
-					},
-					_ => {
-						// Lastly, use commodity string
-						self.commodity.partial_cmp(
-							&other.commodity,
-						)
-					},
-				}
-			},
-			non_equal => non_equal,
-		}
 	}
 }

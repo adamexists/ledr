@@ -1,5 +1,4 @@
-# Checks that negative cost-basis lots are handled
-# properly
+# Checks that negative lots are handled properly
 
 ! 2024-11-19 currency NATGAS
 ! 2024-11-19 currency CAD
@@ -10,7 +9,7 @@
 
 2024-11-19 Buy
     Assets:A      300000 NATGAS { -0.11 USD }
-    Assets:B      300000 CAD
+    Assets:B
 
 2024-11-19 Sell
     Assets:A     -200000 NATGAS { -0.11 USD }

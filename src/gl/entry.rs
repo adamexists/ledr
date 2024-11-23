@@ -14,6 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::gl::exchange_rate::ExchangeRates;
+use crate::investment::action::{Action, Direction};
 use crate::util::amount::Amount;
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
@@ -33,6 +34,11 @@ pub struct Entry {
 	virtual_detail: Option<String>,
 	totals: HashMap<String, Scalar>, // Currency -> Amount
 	reference: Option<String>,       // optional string, not inspected
+
+	/// Lot actions related to this entry. Don't read until finalization,
+	/// because we need to associate proceeds with sales, if known, which
+	/// requires context across multiple detail lines.
+	actions: Vec<Action>,
 }
 
 impl Entry {
@@ -44,6 +50,7 @@ impl Entry {
 			virtual_detail: None,
 			totals: HashMap::new(),
 			reference: None,
+			actions: vec![],
 		}
 	}
 
@@ -60,9 +67,39 @@ impl Entry {
 			.entry(amount.currency.clone())
 			.or_insert(Scalar::zero()) += amount.value;
 
-		self.details.push(Detail::new(account.to_owned(), amount));
+		self.details.push(Detail::new(
+			account.to_owned(),
+			amount,
+			false,
+		));
 
 		Ok(())
+	}
+
+	pub fn add_system_detail(
+		&mut self,
+		account: &str,
+		amount: Amount,
+	) -> Result<(), Error> {
+		if account.is_empty() {
+			bail!("Account is empty")
+		}
+
+		*self.totals
+			.entry(amount.currency.clone())
+			.or_insert(Scalar::zero()) += amount.value;
+
+		self.details.push(Detail::new(
+			account.to_owned(),
+			amount,
+			true,
+		));
+
+		Ok(())
+	}
+
+	pub fn add_action(&mut self, action: Action) {
+		self.actions.push(action);
 	}
 
 	pub fn set_virtual_detail(
@@ -164,10 +201,44 @@ impl Entry {
 	/// Completes an entry. We have to pass the exchange rate set in here,
 	/// because this is where exchange rates are inferred in some cases,
 	/// i.e. if exactly two currencies are imbalanced.
+	///
+	/// Returns the final set of actions related to any lots that moved
+	/// due to this entry.
 	pub fn finalize(
 		&mut self,
 		rates: &mut ExchangeRates,
-	) -> Result<(), Error> {
+	) -> Result<Vec<Action>, Error> {
+		let actual_details = self.get_actual_details();
+		let actions = self.actions.clone();
+
+		// Special case if exactly one line with a lot exists and is
+		// netted against a virtual detail, in which case it is implied
+		// that the cost basis of the lot should be netted against the
+		// virtual detail rather than the asset held or sold
+		if actions.len() == 1
+			&& actual_details.len() == 1
+			&& self.virtual_detail.is_some()
+		{
+			let actual_detail = actual_details.first().unwrap();
+			let action = actions.get(0).unwrap();
+
+			self.add_system_detail(
+				&VIRTUAL_CONVERSION_ACCOUNT,
+				-actual_detail.amount.clone(),
+			)?;
+			self.add_system_detail(
+				&VIRTUAL_CONVERSION_ACCOUNT,
+				Amount::new(
+					action.commodity.cost_basis().value
+						* actual_detail.value(),
+					action.commodity
+						.cost_basis()
+						.currency
+						.clone(),
+				),
+			)?;
+		}
+
 		let mut imbalances = self.get_imbalances();
 
 		// Special case if exactly two currencies are unbalanced with no
@@ -177,8 +248,10 @@ impl Entry {
 				&mut imbalances,
 				rates,
 			)?;
-			return Ok(());
 		}
+
+		// Attach proceeds to associated sell actions if possible
+		self.resolve_sell_action_proceeds(actual_details);
 
 		// If a virtual detail exists, it can absorb all imbalances.
 		// Otherwise, if any remain, we fail the entry as unbalanced.
@@ -187,13 +260,14 @@ impl Entry {
 				self.details.push(Detail::new(
 					vd.clone(),
 					Amount::new(-value, currency),
+					true,
 				));
 			} else {
 				bail!("Unbalanced entry")
 			}
 		}
 
-		Ok(())
+		Ok(self.actions.clone())
 	}
 
 	/// This is a special case in which there is no virtual detail, but
@@ -207,40 +281,96 @@ impl Entry {
 		let (currency1, amount1) = imbalances.remove(0);
 		let (currency2, amount2) = imbalances.remove(0);
 
-		if (amount1 < 0 && amount2 < 0) || (amount1 > 0 && amount2 > 0)
-		{
-			bail!("Unbalanced entry")
-		}
-
 		self.details.push(Detail::new(
 			VIRTUAL_CONVERSION_ACCOUNT.to_string(),
 			Amount::new(-amount1, currency1.clone()),
+			true,
 		));
 		self.details.push(Detail::new(
 			VIRTUAL_CONVERSION_ACCOUNT.to_string(),
 			Amount::new(-amount2, currency2.clone()),
+			true,
 		));
 
-		// This implies an exchange rate between the currencies.
-		// We use a lame method here to make the underlying integer
-		// division nicer.
-		if amount1.abs() > amount2.abs() {
-			rates.infer(
-				self.date,
-				&currency2,
-				&currency1,
-				(amount1 / amount2).abs(),
-			)?;
-		} else {
-			rates.infer(
-				self.date,
-				&currency1,
-				&currency2,
-				(amount2 / amount1).abs(),
-			)?;
-		}
+		// This implies an exchange rate between the currencies
+		rates.infer(
+			self.date,
+			&currency1,
+			&currency2,
+			(amount2 / amount1).abs(),
+		)?;
 
 		Ok(())
+	}
+
+	/// Adds proceeds to applicable Sell lot actions iff they can be
+	/// inferred from user input.
+	fn resolve_sell_action_proceeds(
+		&mut self,
+		actual_details: Vec<Detail>,
+	) {
+		let actions_copy = self.actions.clone();
+		for sale in &mut self.actions {
+			if sale.direction == Direction::Buy {
+				continue;
+			}
+
+			if actual_details.len() > 2
+				|| (actual_details.len() == 2
+					&& self.virtual_detail.is_some())
+			{
+				// TODO: Consider logging a warning here
+				return;
+			}
+
+			if self.virtual_detail.is_some() {
+				// Perfectly netted out against the cost basis
+				sale.add_unit_proceeds(
+					sale.commodity.cost_basis().clone(),
+				);
+				return;
+			}
+
+			if let Some(other_action) =
+				actions_copy.iter().find(|a| *a != sale)
+			{
+				let other_quantity = match &other_action
+					.direction
+				{
+					Direction::Buy => other_action.quantity,
+					Direction::Sell(_) => {
+						-other_action.quantity
+					},
+				};
+
+				sale.add_unit_proceeds(Amount::new(
+					other_quantity
+						* other_action
+							.commodity
+							.cost_basis()
+							.value / sale.quantity,
+					other_action
+						.commodity
+						.cost_basis()
+						.currency
+						.clone(),
+				));
+			} else {
+				let detail_opt =
+					actual_details.iter().find(|&a| {
+						a.amount.currency
+							!= sale.commodity
+								.symbol() || a.amount.value
+							!= -sale.quantity
+					});
+				if let Some(detail) = detail_opt {
+					sale.add_unit_proceeds(Amount::new(
+						detail.value() / sale.quantity,
+						detail.currency(),
+					));
+				}
+			}
+		}
 	}
 
 	/// Find all currencies that don't sum to zero, with amounts
@@ -254,6 +384,15 @@ impl Entry {
 					None
 				}
 			})
+			.collect()
+	}
+
+	/// Returns those details that were not inserted automatically
+	fn get_actual_details(&self) -> Vec<Detail> {
+		self.details
+			.iter()
+			.filter(|&d| d.account != VIRTUAL_CONVERSION_ACCOUNT)
+			.cloned()
 			.collect()
 	}
 }
@@ -286,11 +425,18 @@ impl Ord for Entry {
 pub struct Detail {
 	account: String,
 	amount: Amount,
+	/// True iff the system inserted this entry and it did not come from
+	/// user input
+	is_system: bool,
 }
 
 impl Detail {
-	pub fn new(account: String, amount: Amount) -> Self {
-		Self { account, amount }
+	pub fn new(account: String, amount: Amount, is_system: bool) -> Self {
+		Self {
+			account,
+			amount,
+			is_system,
+		}
 	}
 
 	pub fn account(&self) -> &String {
@@ -302,8 +448,8 @@ impl Detail {
 		self.amount.currency.clone()
 	}
 
-	pub fn amount(&self) -> &Amount {
-		&self.amount
+	pub fn value(&self) -> Scalar {
+		self.amount.value
 	}
 
 	pub fn convert_to(&mut self, currency: &str, rate: Scalar) {
@@ -521,30 +667,5 @@ mod tests {
 
 		assert!(result.is_ok());
 		assert_eq!(entry.details.len(), 4);
-	}
-
-	#[test]
-	fn test_multiline_implicit_currency_conversion_error() {
-		let mut entry = create_entry();
-		entry.add_detail(
-			"Assets:Cash",
-			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
-		)
-		.unwrap();
-		entry.add_detail(
-			"Assets:Bank",
-			Amount::new(Scalar::new(2000, 1), "EUR".to_string()),
-		)
-		.unwrap(); // Both amounts are positive
-
-		let mut rates = ExchangeRates::default();
-		let mut imbalances = entry.get_imbalances();
-		let result = entry.multiline_implicit_currency_conversion(
-			&mut imbalances,
-			&mut rates,
-		);
-
-		// Both imbalances are in the same direction, which is bad
-		assert!(result.is_err());
 	}
 }

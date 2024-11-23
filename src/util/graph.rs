@@ -60,15 +60,15 @@ impl Graph {
 		let rate_ab = a.value / b.value;
 		let rate_ba = b.value / a.value;
 
+		if rate_ab == Scalar::zero() || rate_ba == Scalar::zero() {
+			bail!("Exchange rates cannot be zero");
+		}
+
 		let rate_type = if is_inferred {
 			RateType::Inferred
 		} else {
 			RateType::Declared
 		};
-
-		if rate_ab == Scalar::zero() || rate_ba == Scalar::zero() {
-			bail!("Exchange rates cannot be zero");
-		}
 
 		// Update the graph
 		self.nodes

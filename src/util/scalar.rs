@@ -26,7 +26,7 @@ const COMFORTABLE_RESOLUTION: u32 = 18;
 const MAX_RESOLUTION: u32 = 32;
 
 /// A general-purpose number, capable of holding an exact decimal value, backed
-/// by integer arithmetic and not float arithmetic.
+/// by integer arithmetic and not float arithmetic for addition and subtraction.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Scalar {
 	amount: i128,
@@ -88,22 +88,22 @@ impl Scalar {
 		self.resolution
 	}
 
-	pub fn set_resolution(&mut self, resolution: u32) {
+	pub fn set_resolution(&mut self, resolution: u32, can_increase: bool) {
 		if resolution == self.resolution {
 			return;
 		}
 
-		if resolution < self.resolution {
+		if self.resolution > resolution {
 			// Truncate the underlying amount, losing precision
 			let factor = 10i128.pow(self.resolution - resolution);
 			self.amount /= factor;
-		} else {
+			self.resolution = resolution;
+		} else if can_increase {
 			// Pad the underlying amount with zeroes
 			let factor = 10i128.pow(resolution - self.resolution);
 			self.amount *= factor;
+			self.resolution = resolution;
 		}
-
-		self.resolution = resolution;
 	}
 
 	fn align_resolution(&self, other: &Scalar) -> (i128, i128, u32) {
@@ -123,7 +123,7 @@ impl Scalar {
 	/// necessary using Banker's rounding (round to nearest, ties to even).
 	pub fn round(&mut self, resolution: u32) {
 		if resolution >= self.resolution {
-			self.set_resolution(resolution)
+			self.set_resolution(resolution, true)
 		} else {
 			let scale = 10i128.pow(self.resolution - resolution);
 
@@ -186,7 +186,10 @@ impl Scalar {
 	pub fn from_f64(amount: f64) -> Self {
 		let mut out =
 			Scalar::from_str(amount.to_string().as_str()).unwrap();
-		out.set_resolution(out.resolution.min(COMFORTABLE_RESOLUTION));
+		out.set_resolution(
+			out.resolution.min(COMFORTABLE_RESOLUTION),
+			false,
+		);
 
 		// failsafe to prevent representing nonzero number as zero after resolution setting
 		if amount > f64::EPSILON && out.amount == 0 {
@@ -362,6 +365,21 @@ impl DivAssign for Scalar {
 		if rhs.amount == 0 {
 			panic!("Attempt to divide by zero");
 		}
+
+		if self.amount == 0 {
+			// TODO: Clean this up maybe.
+			self.set_resolution(
+				self.resolution.max(rhs.resolution),
+				true,
+			);
+			return;
+		}
+
+		// First, perform Scalar division. If that yields 0, fall back to
+		// floating point division. TODO: Address further in the future.
+
+		let (initial_self, initial_rhs) = (self.clone(), rhs.clone());
+
 		let (mut aligned_self, aligned_rhs, mut resolution) =
 			self.align_resolution(&rhs);
 
@@ -380,11 +398,58 @@ impl DivAssign for Scalar {
 
 		self.amount = quotient;
 		self.resolution = resolution - initial_resolution;
-		self.set_resolution(resolution);
+		self.set_resolution(resolution, true);
 
+		self.reduce(initial_resolution);
+
+		// This means we have a sensible result and don't need fallback
+		if self.amount != 0 {
+			return;
+		}
+
+		let initial_resolution =
+			initial_self.resolution.max(initial_rhs.resolution);
+
+		let result = initial_self.as_f64() / initial_rhs.as_f64();
+		let res_str = result.to_string();
+		let new = Scalar::from_str(&res_str).unwrap();
+
+		self.amount = new.amount;
+		self.resolution = new.resolution;
+
+		self.set_resolution(MAX_RESOLUTION, false);
 		self.reduce(initial_resolution);
 	}
 }
+
+// fn div_assign(&mut self, rhs: Self) {
+// 		if rhs.amount == 0 {
+// 			panic!("Attempt to divide by zero");
+// 		}
+//
+// 		if self.amount == 0 {
+// 			self.set_resolution(self.resolution.max(rhs.resolution), true);
+// 			return;
+// 		}
+//
+// 		// First, perform Scalar division. If that yields 0, fall back to
+// 		// floating point division. TODO: Address further in the future.
+//
+// 		let initial_resolution = self.resolution.max(rhs.resolution);
+//
+// 		let result = self.as_f64() / rhs.as_f64();
+// 		let res_str = result.to_string();
+// 		let new = Scalar::from_str(&res_str).unwrap();
+//
+// 		println!("{:?} {}, {} {:?}", self, result, res_str, new);
+// 		self.amount = new.amount;
+// 		self.resolution = new.resolution;
+//
+// 		self.set_resolution(COMFORTABLE_RESOLUTION, false);
+// 		self.reduce(initial_resolution);
+//
+// 		println!("final: {:?}", self);
+// 	}
 
 impl Neg for Scalar {
 	type Output = Self;
@@ -915,8 +980,8 @@ mod tests {
 			let scalar2 =
 				Scalar::from_str("12345678901234.00").unwrap();
 			let result = scalar1 / scalar2;
-			assert_eq!(result.amount, 243000002187011197);
 			assert_eq!(result.resolution, 30);
+			assert_eq!(result.amount, 243000002187011197);
 		}
 
 		#[test]
@@ -1200,21 +1265,21 @@ mod tests {
 			let mut money = Scalar::from_str("123.45").unwrap();
 			assert_eq!(money.amount, 12345);
 			assert_eq!(money.resolution, 2);
-			money.set_resolution(0);
+			money.set_resolution(0, true);
 			assert_eq!(money.amount, 123);
 			assert_eq!(money.resolution, 0);
 
 			let mut money = Scalar::from_str("123.4567").unwrap();
 			assert_eq!(money.amount, 1234567);
 			assert_eq!(money.resolution, 4);
-			money.set_resolution(6);
+			money.set_resolution(6, true);
 			assert_eq!(money.amount, 123456700);
 			assert_eq!(money.resolution, 6);
 
 			let mut money = Scalar::from_str("123.45").unwrap();
 			assert_eq!(money.amount, 12345);
 			assert_eq!(money.resolution, 2);
-			money.set_resolution(2);
+			money.set_resolution(2, true);
 			assert_eq!(money.amount, 12345);
 			assert_eq!(money.resolution, 2);
 		}
