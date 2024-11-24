@@ -14,6 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::gl::ledger::Ledger;
+use crate::parsing::filesystem::Filesystem;
 use crate::util::amount::Amount;
 use crate::util::date::Date;
 use crate::util::scalar::Scalar;
@@ -23,9 +24,9 @@ use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, Seek};
-use std::path::Path;
 
 pub struct Parser {
+	fs: Filesystem,
 	detail_regex: Regex,
 }
 
@@ -33,29 +34,67 @@ impl Parser {
 	pub fn new() -> Self {
 		// TODO: Expand the use and sophistication of regexes within!
 		let re = Regex::new(r#""([^"]*)"|(\S+)"#).unwrap();
-		Self { detail_regex: re }
+		Self {
+			detail_regex: re,
+			fs: Filesystem::new(),
+		}
+	}
+
+	/// Opens and parses the file at file_path into the passed Ledger. We make two
+	/// passes through the file: the first processes directives, and the second
+	/// processes everything else. This means we are agnostic to the order of any
+	/// contents of the file. The only exception is that when multiple implicit
+	/// currency conversions occur in the same day between the same currencies, all
+	/// reporting will use the latest one processed in the file.
+	pub fn parse(
+		&mut self,
+		file_path: &str,
+		begin: &Date,
+		end: &Date,
+		ledger: &mut Ledger,
+	) -> Result<ParseResult, Error> {
+		let mut file = self.fs.open(file_path)?;
+
+		self.first_pass(file_path, &file, ledger)?;
+		file.rewind()?;
+
+		// Second pass is responsible for assembling the ParseResult object,
+		// which we pass in this way so it can be passed recursively within.
+		let mut output: ParseResult = Default::default();
+		self.second_pass(&file, ledger, &mut output, begin, end)?;
+
+		Ok(output)
 	}
 
 	/// First pass to process only directive lines. Include statements in the file
 	/// may cause this to be called recursively, so it uses the passed Ledger struct
 	/// to keep track of files it's traversed before, and block circular inclusion.
+	///
+	/// Note: The first pass ignores beginning and end bounds, to make sure all
+	/// directives are captured; it'd be too annoying to move account and currency
+	/// declarations for the interval you want.
 	fn first_pass(
-		&self,
+		&mut self,
 		path: &str,
 		file: &File,
 		ledger: &mut Ledger,
-		begin: &Date,
-		end: &Date,
 	) -> Result<(), Error> {
-		ledger.declare_file(path)?;
+		self.fs.declare_file(path)?;
 
 		let reader = io::BufReader::new(file);
 
 		for (i, line) in reader.lines().enumerate() {
-			let l = line?.trim().to_string();
+			// Chop comments out
+			let l = line?
+				.trim()
+				.split('#')
+				.next()
+				.unwrap_or_default()
+				.trim()
+				.to_string();
 
-			// Skip blank lines and comments
-			if l.is_empty() || l.starts_with("#") {
+			// Skip blank lines
+			if l.is_empty() {
 				continue;
 			}
 
@@ -67,10 +106,8 @@ impl Parser {
 					bail!("Invalid include (line {})", i)
 				}
 
-				let file = self.file_from_path(include[1])?;
-				self.first_pass(
-					include[1], &file, ledger, begin, end,
-				)?;
+				let file = self.fs.open(include[1])?;
+				self.first_pass(include[1], &file, ledger)?;
 				continue;
 			}
 
@@ -92,11 +129,6 @@ impl Parser {
 			let date_str = directive.pop_front().unwrap();
 			let date = Date::from_str(date_str.trim())
 				.map_err(|e| anyhow!("{} (line {})", e, i))?;
-
-			// Ignore entries from outside the date bounds
-			if &date < begin || &date > end {
-				continue;
-			}
 
 			match directive[0] {
 				"account" if directive.len() == 2 => {
@@ -166,14 +198,17 @@ impl Parser {
 	) -> Result<(), Error> {
 		let reader = io::BufReader::new(file);
 
-		let mut lines = reader.lines();
-		let mut i = 0;
-
 		let mut ignore_until_next_entry = false;
 
-		while let Some(Ok(line)) = lines.next() {
-			i += 1;
-			let l = line.trim();
+		for (i, line) in reader.lines().enumerate() {
+			// Chop comments out
+			let l = line?
+				.trim()
+				.split('#')
+				.next()
+				.unwrap_or_default()
+				.trim()
+				.to_string();
 
 			// If a line is blank, this entry is over (or we are not in one)
 			if l.is_empty() {
@@ -186,11 +221,11 @@ impl Parser {
 			// Handle includes, which recursively second_passes when seen.
 			// No need to check the structure of the include because the
 			// first pass would've failed by now if it were invalid.
-			if line.starts_with("include") {
+			if l.starts_with("include") {
 				let include: Vec<&str> =
-					line.split_whitespace().collect();
+					l.split_whitespace().collect();
 
-				let file = self.file_from_path(include[1])?;
+				let file = self.fs.open(include[1])?;
 				self.second_pass(
 					&file,
 					ledger,
@@ -201,8 +236,8 @@ impl Parser {
 				continue;
 			}
 
-			// ignore comment lines and directives
-			if l.starts_with("#") || l.starts_with('!') {
+			// ignore directives
+			if l.starts_with('!') {
 				continue;
 			}
 
@@ -244,7 +279,7 @@ impl Parser {
 			}
 
 			// Make sure the line is not a date by itself
-			if Date::from_str(l).is_ok() {
+			if Date::from_str(&l).is_ok() {
 				bail!("Orphaned date (line {}): {}", i, l);
 			}
 
@@ -253,7 +288,7 @@ impl Parser {
 			}
 
 			// Handle entry detail lines
-			let parts = self.parse_line(&l);
+			let parts = self.parse_entry_detail(&l);
 
 			// The rest of the things this line can be all have different
 			// numbers of terms
@@ -331,7 +366,7 @@ impl Parser {
 				7 | 8 => {
 					// lot declaration, i.e. `{ 20.00 USD }`
 					if parts[3] != "{"
-						|| parts.last().unwrap() != &"}"
+						|| parts.last().unwrap() != "}"
 					{
 						bail!("Invalid format (line {})", i);
 					}
@@ -384,42 +419,7 @@ impl Parser {
 		Ok(())
 	}
 
-	/// Opens and parses the file at file_path into the passed Ledger. We make two
-	/// passes through the file: the first processes directives, and the second
-	/// processes everything else. This means we are agnostic to the order of any
-	/// contents of the file. The only exception is that when multiple implicit
-	/// currency conversions occur in the same day between the same currencies, all
-	/// reporting will use the latest one processed in the file.
-	///
-	/// TODO: Create test case to test for begin and end directives working.
-	pub fn parse(
-		&self,
-		file_path: &str,
-		begin: &Date,
-		end: &Date,
-		ledger: &mut Ledger,
-	) -> Result<ParseResult, Error> {
-		let mut file = self.file_from_path(file_path)?;
-
-		self.first_pass(file_path, &file, ledger, begin, end)?;
-		file.rewind()?;
-
-		// Second pass is responsible for assembling the ParseResult object,
-		// which we pass in this way so it can be passed recursively within.
-		let mut output: ParseResult = Default::default();
-		self.second_pass(&file, ledger, &mut output, begin, end)?;
-
-		Ok(output)
-	}
-
-	fn file_from_path(&self, file_path: &str) -> Result<File, Error> {
-		let path = Path::new(file_path);
-		let file = File::open(path)?;
-		Ok(file)
-	}
-
-	fn parse_line(&self, input: &str) -> Vec<String> {
-		// Define a regex to capture quoted substrings or individual words
+	fn parse_entry_detail(&self, input: &str) -> Vec<String> {
 		self.detail_regex
 			.captures_iter(input)
 			.map(|cap| {
@@ -435,8 +435,10 @@ impl Parser {
 
 #[derive(Debug, Default)]
 pub struct ParseResult {
-	pub max_precision_by_currency: HashMap<String, u32>, // currency > precision
-	pub latest_date: Date, // latest date across entries (not directives)
+	/// Greatest amount of precision indicated for each currency
+	pub max_precision_by_currency: HashMap<String, u32>,
+	/// Latest date of any entry (ignores directives)
+	pub latest_date: Date,
 }
 
 impl ParseResult {

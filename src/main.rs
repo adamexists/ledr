@@ -111,7 +111,7 @@ fn main() -> Result<(), Error> {
 
 	let mut ledger = Ledger::new(args.lenient);
 
-	let parser = parsing::parser::Parser::new();
+	let mut parser = parsing::parser::Parser::new();
 	let parse_result = parser.parse(&args.file, &beg, &end, &mut ledger)?;
 
 	// TODO: Not a huge fan aesthetically of lot_state being the only output from here.

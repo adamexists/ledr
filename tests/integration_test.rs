@@ -37,6 +37,7 @@ fn test_integration_standard() {
 		("15_in.txt", "15_out.txt"),
 		("16_in.txt", "16_out.txt"),
 		("17_in.txt", "17_out.txt"),
+		("18_in.txt", "18_out.txt"),
 	];
 
 	execute("standard", test_cases, true, "tb", vec![])
@@ -86,6 +87,19 @@ fn test_integration_account_summary() {
 		true,
 		"as",
 		vec!["Assets:A", "-c", "USD"],
+	)
+}
+
+#[test]
+fn test_integration_bounded_range() {
+	let test_cases = vec![("1_in.txt", "1_out.txt")];
+
+	execute(
+		"bounded",
+		test_cases,
+		true,
+		"tb",
+		vec!["-b", "2024-11-13", "-e", "2024-11-17"],
 	)
 }
 
