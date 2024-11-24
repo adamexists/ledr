@@ -17,6 +17,7 @@ use crate::investment::lot::Lot;
 use crate::reports::table::Table;
 use crate::util::amount::Amount;
 use crate::util::date::Date;
+use crate::util::scalar::Scalar;
 use std::collections::HashMap;
 
 /// Struct for handling and displaying an ordered list of lots, for reports
@@ -101,13 +102,20 @@ impl OrderedLots {
 			"Open Lots"
 		};
 
+		table.add_partial_separator(vec![1]);
+
 		// total just shows lot count
-		table.print(
-			Some(1),
-			Some(format!("{} {}", self.lots.len(), bottom_line)),
-			None,
-			None,
-		)
+		table.add_row(vec![
+			"",
+			&format!("{} {}", self.lots.len(), bottom_line),
+			"",
+			"",
+			"",
+			"",
+			"",
+			"",
+		]);
+		table.print();
 	}
 
 	/// Prints a profit and loss report.
@@ -143,9 +151,32 @@ impl OrderedLots {
 
 		// TODO: Rework this heinously nested thing.
 		table.add_separator();
+
+		// currency -> total cost, proceeds, total g/l
+		let mut totals: HashMap<String, (Amount, Amount, Amount)> =
+			HashMap::new();
+
 		for l in &self.lots {
 			for s in &l.sales {
 				let cb = l.commodity.cost_basis();
+				totals.entry(cb.clone().currency)
+					.or_insert((
+						Amount::new(
+							Scalar::zero(),
+							cb.clone().currency,
+						),
+						Amount::new(
+							Scalar::zero(),
+							cb.clone().currency,
+						),
+						Amount::new(
+							Scalar::zero(),
+							cb.clone().currency,
+						),
+					))
+					.0
+					.value += cb.value;
+
 				let (pr, unit_gl, total_gl) =
 					if let Some(pr) = &s.unit_proceeds {
 						if cb.currency == pr.currency {
@@ -159,6 +190,43 @@ impl OrderedLots {
 								* s.quantity,
 							cb.currency.clone(),
 						);
+							totals.entry(pr
+							.currency
+							.clone())
+							.or_insert((
+								Amount::new(
+									Scalar::zero(),
+									cb.clone().currency,
+								),
+								Amount::new(
+									Scalar::zero(),
+									cb.clone().currency,
+								),
+								Amount::new(
+									Scalar::zero(),
+									cb.clone().currency,
+								),
+							))
+							.1.value += pr.value;
+
+							totals.entry(unit_gl
+							.clone()
+							.currency)
+							.or_insert((
+								Amount::new(
+									Scalar::zero(),
+									cb.clone().currency,
+								),
+								Amount::new(
+									Scalar::zero(),
+									cb.clone().currency,
+								),
+								Amount::new(
+									Scalar::zero(),
+									cb.clone().currency,
+								),
+							))
+							.2.value += total_gl.value;
 
 							(
 							pr.to_string(),
@@ -197,7 +265,24 @@ impl OrderedLots {
 			}
 		}
 
-		// TODO: Add totals for each computed col to this report.
-		table.print(None, None, None, None)
+		table.add_partial_separator(vec![6, 7, 9]);
+
+		// One line of totals per currency. TODO needs to be deterministically sorted.
+		for (_, (total_cost, total_proceeds, total_gl)) in totals {
+			table.add_row(vec![
+				"",
+				"",
+				"",
+				"",
+				"",
+				"",
+				&total_cost.to_string(),
+				&total_proceeds.to_string(),
+				"",
+				&total_gl.to_string(),
+			]);
+		}
+
+		table.print()
 	}
 }

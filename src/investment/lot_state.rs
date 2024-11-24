@@ -63,7 +63,6 @@ impl LotState {
 	//  buys and then with all sells on that date. So by the time
 	//  we process a sell, all the buys are in, in chronological
 	//  order.
-	// TODO: Rework the below loop to be less... wide.
 	pub fn sell_lot(
 		&mut self,
 		action: &Action,
@@ -106,7 +105,12 @@ impl LotState {
 			}
 
 			if remaining_quantity > 0 {
-				bail!("No remaining lots for {} of {} (cost basis {})", remaining_quantity, action.commodity.symbol(), action.commodity.cost_basis())
+				bail!(
+					"No remaining lots for {} of {} (cost basis {})",
+					remaining_quantity,
+					action.commodity.symbol(),
+					action.commodity.cost_basis(),
+				)
 			}
 
 			Ok(())

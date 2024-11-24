@@ -154,7 +154,7 @@ fn main() -> Result<(), Error> {
 					LotStatus::Open,
 				)]),
 				parse_result.max_precision_by_currency,
-				args.precision.unwrap_or(99), // TODO
+				args.precision.unwrap_or(u32::MAX),
 			);
 			ordered_lots.print_open_lots(&end.min(today()))
 		},
@@ -165,7 +165,7 @@ fn main() -> Result<(), Error> {
 					true,
 				)]),
 				parse_result.max_precision_by_currency,
-				args.precision.unwrap_or(99), // TODO
+				args.precision.unwrap_or(u32::MAX),
 			);
 			ordered_lots.print_profit_loss()
 		},

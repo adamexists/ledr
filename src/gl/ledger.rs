@@ -339,7 +339,7 @@ impl Ledger {
 		max_reso_by_currency: &HashMap<String, u32>,
 		overall_max_reso: Option<u32>,
 	) -> Result<(), Error> {
-		let max_reso = overall_max_reso.unwrap_or(99);
+		let max_reso = overall_max_reso.unwrap_or(u32::MAX);
 
 		for entry in &mut self.entries {
 			for (currency, &reso) in max_reso_by_currency {

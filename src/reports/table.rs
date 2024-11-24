@@ -22,13 +22,13 @@
 pub struct Table {
 	column_count: usize,
 	rows: Vec<Row>,
-	right_align: Vec<bool>,
+	right_align: Vec<bool>, // indicates columns by index
 }
 
 pub enum Row {
 	Data(Vec<String>),
 	Separator,
-	// TODO: Total rows and separators should be a row type.
+	PartialSeparator(Vec<bool>), // indicates columns by index
 }
 
 impl Table {
@@ -54,18 +54,22 @@ impl Table {
 		self.rows.push(Row::Separator);
 	}
 
+	pub fn add_partial_separator(&mut self, indices: Vec<usize>) {
+		let mut cols = vec![false; self.column_count];
+
+		for i in indices {
+			cols[i] = true;
+		}
+
+		self.rows.push(Row::PartialSeparator(cols));
+	}
+
 	pub fn right_align(&mut self, col: usize) {
 		self.right_align[col] = true;
 	}
 
 	// TODO: This could also use a refactor.
-	pub fn print(
-		&self,
-		total_col: Option<usize>,
-		total: Option<String>,
-		cur_index: Option<usize>, // TODO: Refactor.
-		currency: Option<String>,
-	) {
+	pub fn print(&self) {
 		println!();
 		let mut max_widths = vec![0; self.column_count];
 
@@ -110,71 +114,29 @@ impl Table {
 						total_width = total_width
 					);
 				},
-			}
-		}
-
-		if total_col.is_none() || total.is_none() {
-			return;
-		}
-
-		let total_col_index = total_col.unwrap();
-		let total_val = total.unwrap();
-
-		// Print the footer
-		for (_, width) in
-			max_widths.iter().enumerate().take(total_col_index)
-		{
-			print!("{:width$}  ", "", width = width);
-		}
-
-		let mut separator_width = match cur_index {
-			Some(index) => {
-				max_widths[total_col_index]
-					+ max_widths[index] + 2
-			},
-			None => max_widths[total_col_index] + 2,
-		};
-		if total_col_index + 1 == self.column_count {
-			separator_width -= 2;
-		}
-
-		println!(
-			"{:->separator_width$}",
-			"",
-			separator_width = separator_width
-		);
-
-		for (i, width) in
-			max_widths.iter().enumerate().take(self.column_count)
-		{
-			if i == total_col_index {
-				if self.right_align[i] {
-					print!(
-						"{:>width$}",
-						total_val,
-						width = width
-					);
-				} else {
-					print!(
-						"{:<width$}",
-						total_val,
-						width = width
-					);
-				}
-			} else if cur_index.is_some() && i == cur_index.unwrap()
-			{
-				print!(
-					"{:<width$}",
-					currency.clone()
-						.unwrap_or("".to_string()),
-					width = width
-				);
-			} else {
-				print!("{:width$}", "", width = width);
-			}
-
-			if i < self.column_count - 1 {
-				print!("  ");
+				Row::PartialSeparator(data_sep) => {
+					for (i, draw) in
+						data_sep.iter().enumerate()
+					{
+						if !draw {
+							print!(
+								"{: <width$}",
+								"",
+								width = max_widths[i] + 2
+							);
+						} else {
+							print!(
+								"{:-<width$}",
+								"",
+								width = max_widths[i]
+							);
+							if i < data_sep.len() - 1 {
+								print!("  ");
+							}
+						}
+					}
+					println!()
+				},
 			}
 		}
 		println!();

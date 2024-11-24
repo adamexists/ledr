@@ -53,11 +53,15 @@ impl OrderedEntry {
 			}
 		}
 
-		table.print(
-			Some(2),
-			Some(total.to_string()),
-			Some(3),
-			Some(currency.clone()),
-		)
+		table.add_partial_separator(vec![2]);
+		table.add_row(vec![
+			"",
+			"",
+			&total.to_string(),
+			&currency,
+			"",
+		]);
+
+		table.print();
 	}
 }

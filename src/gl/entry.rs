@@ -319,7 +319,6 @@ impl Entry {
 				|| (actual_details.len() == 2
 					&& self.virtual_detail.is_some())
 			{
-				// TODO: Consider logging a warning here
 				return;
 			}
 
