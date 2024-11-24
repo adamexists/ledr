@@ -106,7 +106,7 @@ impl Graph {
 				currency,
 				&mut visited,
 				&mut rec_stack,
-				1.0,
+				Scalar::from_i128(1),
 				currency,
 			) {
 				return true;
@@ -121,16 +121,17 @@ impl Graph {
 		current: &str,
 		visited: &mut HashSet<String>,
 		rec_stack: &mut HashSet<String>,
-		rate_product: f64,
+		rate_product: Scalar,
 		start: &str, // Track the original starting node
 	) -> bool {
 		if rec_stack.contains(current) {
 			// Cycle detected, but only check consistency if we're back at the starting node
 			if current == start {
-				return !(0.95..=1.05).contains(&rate_product);
+				return rate_product > Scalar::from_frac(21, 20)
+					|| rate_product < Scalar::from_frac(19, 20);
 			} else {
-				return false;
-			}
+				false
+			};
 		}
 
 		if visited.contains(current) {
@@ -143,7 +144,7 @@ impl Graph {
 
 		if let Some(node) = self.nodes.get(current) {
 			for (neighbor, rate) in &node.edges {
-				let new_rate_product = rate_product * rate.ratio.as_f64();
+				let new_rate_product = rate_product * rate.ratio;
 
 				// Recursive call for the neighbor
 				if self.detect_inconsistent_cycle(
@@ -176,16 +177,16 @@ impl Graph {
 		}
 
 		let mut visited = HashMap::new();
-		let mut queue = vec![(quote.to_string(), 1f64)];
+		let mut queue = vec![(quote.to_string(), Scalar::from_i128(1))];
 
 		while let Some((current_currency, current_rate)) = queue.pop() {
 			if let Some(node) = self.nodes.get(&current_currency) {
 				for (neighbor, rate) in &node.edges {
 					if !visited.contains_key(neighbor) {
-						let new_rate = current_rate * rate.ratio.as_f64();
+						let new_rate = current_rate * rate.ratio;
 
 						if neighbor == base {
-							return Some(Scalar::from_f64(new_rate));
+							return Some(new_rate);
 						}
 
 						visited.insert(neighbor.clone(), new_rate);
@@ -421,8 +422,8 @@ mod tests {
 		// Add consistent bidirectional rates
 		for i in 0..currencies.len() {
 			for j in i + 1..currencies.len() {
-				let rate1 = Scalar::from_i128((i + 1) as i128);
-				let rate2 = Scalar::from_i128((j + 1) as i128);
+				let rate1 = Scalar::from_i128((i * 10 + 3) as i128);
+				let rate2 = Scalar::from_i128((j * 10 + 3) as i128);
 				let a = Amount::new(rate1, &currencies[i]);
 				let b = Amount::new(rate2, &currencies[j]);
 				graph.add_rate(&a, &b, true).expect("Could not add rate");
@@ -566,5 +567,155 @@ mod tests {
 			!graph.has_inconsistent_cycle(),
 			"No inconsistent cycles expected"
 		);
+	}
+
+	#[test]
+	fn test_extreme_high_rate() {
+		let mut graph = Graph::new();
+		let a = Amount::new(Scalar::new(1, 0), "USD");
+		let b = Amount::new(Scalar::new(1_000_000_000_000, 0), "BTC"); // 1 USD = 1 trillion BTC
+		graph.add_rate(&a, &b, true).expect("Could not add rate");
+
+		let expected_output = Scalar::new(1_000_000_000_000, 0);
+		let result = graph.convert("USD", "BTC");
+
+		assert_eq!(result.unwrap(), expected_output);
+		assert!(!graph.has_inconsistent_cycle());
+	}
+
+	#[test]
+	fn test_extreme_low_rate() {
+		let mut graph = Graph::new();
+		let a = Amount::new(Scalar::new(1, 0), "USD");
+		let b = Amount::new(Scalar::from_frac(1, 1_000_000_000_000), "BTC"); // 1 USD = 1e-12 BTC
+		graph.add_rate(&a, &b, true).expect("Could not add rate");
+
+		let expected_output = Scalar::from_frac(1, 1_000_000_000_000);
+		let result = graph.convert("USD", "BTC");
+
+		assert_eq!(result.unwrap(), expected_output);
+		assert!(!graph.has_inconsistent_cycle());
+	}
+
+	#[test]
+	fn test_combined_extreme_rates() {
+		let mut graph = Graph::new();
+		let a = Amount::new(Scalar::new(1, 0), "USD");
+		let b = Amount::new(Scalar::new(1_000_000_000, 0), "BTC");
+		graph.add_rate(&a, &b, true).expect("Could not add rate");
+
+		let c = Amount::new(Scalar::from_frac(1, 1_000_000_000), "BTC");
+		let d = Amount::new(Scalar::new(1, 0), "ETH");
+		graph.add_rate(&c, &d, true).expect("Could not add rate");
+
+		let expected_output = Scalar::new(1_000_000_000_000_000_000, 0);
+		let result = graph.convert("USD", "ETH");
+
+		assert_eq!(result.unwrap(), expected_output);
+		assert!(!graph.has_inconsistent_cycle());
+	}
+
+	#[test]
+	fn test_edge_case_self_loop() {
+		let mut graph = Graph::new();
+		let a = Amount::new(Scalar::new(1, 0), "USD");
+		let b = Amount::new(Scalar::new(1, 0), "USD"); // Self-loop
+		graph.add_rate(&a, &b, true).expect("Could not add rate");
+
+		let result = graph.convert("USD", "USD");
+		assert_eq!(result.unwrap(), Scalar::from_i128(1));
+		assert!(!graph.has_inconsistent_cycle());
+	}
+
+	#[test]
+	fn test_bizarre_fraction_high() {
+		let mut graph = Graph::new();
+		let a = Amount::new(Scalar::from_frac(123456789, 987654321), "USD");
+		let b = Amount::new(Scalar::from_frac(987654321, 123456789), "EUR");
+		graph.add_rate(&a, &b, true).expect("Could not add rate");
+
+		let expected_output =
+			Scalar::from_frac(12042729108518161, 188167638891241);
+		let result = graph.convert("USD", "EUR");
+
+		assert_eq!(result.unwrap(), expected_output);
+		assert!(!graph.has_inconsistent_cycle());
+	}
+
+	#[test]
+	fn test_bizarre_fraction_low() {
+		let mut graph = Graph::new();
+		let a = Amount::new(Scalar::from_frac(1, 987654321), "USD"); // 1/987654321 USD
+		let b = Amount::new(Scalar::new(1, 0), "JPY"); // 1 JPY
+		graph.add_rate(&a, &b, true).expect("Could not add rate");
+
+		let expected_output = Scalar::from_frac(1, 987654321);
+		let result = graph.convert("JPY", "USD");
+
+		assert_eq!(result.unwrap(), expected_output);
+		assert!(!graph.has_inconsistent_cycle());
+	}
+
+	#[test]
+	fn test_bizarre_fraction_chain() {
+		let mut graph = Graph::new();
+
+		// Add several fractions in a chain
+		let a = Amount::new(Scalar::from_frac(123456789, 987654321), "USD");
+		let b = Amount::new(Scalar::from_frac(987654321, 123456789), "EUR");
+		graph.add_rate(&a, &b, true).expect("Could not add rate");
+
+		let c = Amount::new(Scalar::from_frac(22222222, 33333333), "EUR");
+		let d = Amount::new(Scalar::from_frac(33333333, 22222222), "GBP");
+		graph.add_rate(&c, &d, true).expect("Could not add rate");
+
+		let expected_output =
+			Scalar::from_frac(108384561976663449, 752670555564964);
+		let result = graph.convert("USD", "GBP");
+
+		assert_eq!(result.unwrap(), expected_output);
+		assert!(!graph.has_inconsistent_cycle());
+	}
+
+	#[test]
+	fn test_extreme_bizarre_fraction() {
+		let mut graph = Graph::new();
+
+		// Extreme fraction rates
+		let a = Amount::new(Scalar::from_frac(1, 1_000_000_000_007), "BTC");
+		let b = Amount::new(Scalar::from_frac(1_000_000_000_007, 1), "ETH");
+		graph.add_rate(&a, &b, true).expect("Could not add rate");
+
+		let expected_output =
+			Scalar::from_frac(1_000_000_000_014_000_000_000_049, 1);
+		let result = graph.convert("BTC", "ETH");
+
+		assert_eq!(result.unwrap(), expected_output);
+		assert!(!graph.has_inconsistent_cycle());
+	}
+
+	#[test]
+	fn test_bizarre_fraction_cascade() {
+		let mut graph = Graph::new();
+
+		// Chain of bizarre fractions
+		let a = Amount::new(Scalar::from_frac(987654321, 123456789), "USD");
+		let b = Amount::new(Scalar::from_frac(123456789, 987654321), "EUR");
+		graph.add_rate(&a, &b, true).expect("Could not add rate");
+
+		let c = Amount::new(Scalar::from_frac(44444444, 55555555), "EUR");
+		let d = Amount::new(Scalar::from_frac(55555555, 44444444), "JPY");
+		graph.add_rate(&c, &d, true).expect("Could not add rate");
+
+		let e = Amount::new(Scalar::from_frac(22222222, 33333333), "JPY");
+		let f = Amount::new(Scalar::from_frac(33333333, 22222222), "AUD");
+		graph.add_rate(&e, &f, true).expect("Could not add rate");
+
+		let expected_output =
+			Scalar::from_frac(42337718750529225, 770734662945162304);
+		let result = graph.convert("USD", "AUD");
+
+		assert_eq!(result.unwrap(), expected_output);
+		assert!(!graph.has_inconsistent_cycle());
 	}
 }

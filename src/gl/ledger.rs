@@ -169,11 +169,12 @@ impl Ledger {
 			// the virtual conversion account, if this is not a lot
 			if cost_basis.is_none() {
 				let conversion = VIRTUAL_CONVERSION_ACCOUNT.to_string();
-				pending_entry.add_detail(
+				pending_entry.add_system_detail(
 					&conversion,
 					Amount::new(ica.value * amount.value, &ica.currency),
 				)?;
-				pending_entry.add_detail(&conversion, -amount.clone())?;
+				pending_entry
+					.add_system_detail(&conversion, -amount.clone())?;
 			}
 		}
 
