@@ -36,7 +36,7 @@ impl OrderedEntry {
 		}
 
 		let mut table = Table::new(5);
-		table.right_align(2);
+		table.right_align(vec![2]);
 
 		let mut total = Scalar::zero();
 		for entry in &self.entries {

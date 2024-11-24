@@ -57,15 +57,6 @@ impl LotState {
 		});
 	}
 
-	// TODO: Currently we use FIFO only; we could expand this to
-	//  point to specific shares based on minimizing spread in
-	//  consideration of specific capital gains tax thresholds,
-	//  but that would probably require a config file and a number
-	//  of disclaimers. For now, we know we're doing FIFO because
-	//  we iterate chronologically through dates, first with all
-	//  buys and then with all sells on that date. So by the time
-	//  we process a sell, all the buys are in, in chronological
-	//  order.
 	pub fn sell_lot(
 		&mut self,
 		action: &Action,
@@ -155,6 +146,7 @@ impl LotState {
 	}
 }
 
+/// Pass these into the take_lots() method to filter the output.
 pub enum LotFilter {
 	Status(LotStatus),
 	HasSales(bool),

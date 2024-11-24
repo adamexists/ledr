@@ -40,6 +40,7 @@ impl Table {
 		}
 	}
 
+	/// Row that contains fields.
 	pub fn add_row(&mut self, row: Vec<&str>) {
 		if row.len() != self.column_count {
 			panic!("Inconsistent column count");
@@ -50,10 +51,12 @@ impl Table {
 		));
 	}
 
+	/// Separator that goes across the entire table without gaps.
 	pub fn add_separator(&mut self) {
 		self.rows.push(Row::Separator);
 	}
 
+	/// Separator that only shows dashed lines at indicated columns.
 	pub fn add_partial_separator(&mut self, indices: Vec<usize>) {
 		let mut cols = vec![false; self.column_count];
 
@@ -64,11 +67,13 @@ impl Table {
 		self.rows.push(Row::PartialSeparator(cols));
 	}
 
-	pub fn right_align(&mut self, col: usize) {
-		self.right_align[col] = true;
+	/// Indicate columns by index that should be right-aligned.
+	pub fn right_align(&mut self, cols: Vec<usize>) {
+		for col in cols {
+			self.right_align[col] = true;
+		}
 	}
 
-	// TODO: This could also use a refactor.
 	pub fn print(&self) {
 		println!();
 		let mut max_widths = vec![0; self.column_count];
@@ -88,59 +93,76 @@ impl Table {
 		// Print each row
 		for row in &self.rows {
 			match row {
-				Row::Data(data_row) => {
-					for (i, value) in
-						data_row.iter().enumerate()
-					{
-						if self.right_align[i] {
-							print!("{:>width$}", value, width = max_widths[i]);
-						} else {
-							print!("{:<width$}", value, width = max_widths[i]);
-						}
-						if i < data_row.len() - 1 {
-							print!("  ");
-						}
-					}
-					println!();
-				},
+				Row::Data(data_row) => self
+					.print_data_row(&max_widths, data_row),
 				Row::Separator => {
-					let total_width: usize = max_widths
-						.iter()
-						.sum::<usize>()
-						+ (2 * (self.column_count - 1));
-					println!(
-						"{:-<total_width$}",
-						"",
-						total_width = total_width
-					);
+					self.print_separator(&max_widths)
 				},
-				Row::PartialSeparator(data_sep) => {
-					for (i, draw) in
-						data_sep.iter().enumerate()
-					{
-						if !draw {
-							print!(
-								"{: <width$}",
-								"",
-								width = max_widths[i] + 2
-							);
-						} else {
-							print!(
-								"{:-<width$}",
-								"",
-								width = max_widths[i]
-							);
-							if i < data_sep.len()
-								- 1
-							{
-								print!("  ");
-							}
-						}
-					}
-					println!()
-				},
+				Row::PartialSeparator(data_sep) => self
+					.print_partial_separator(
+						&max_widths,
+						data_sep,
+					),
+			}
+			println!();
+		}
+	}
+
+	fn print_data_row(
+		&self,
+		max_widths: &Vec<usize>,
+		data_row: &Vec<String>,
+	) {
+		for (i, value) in data_row.iter().enumerate() {
+			if self.right_align[i] {
+				print!(
+					"{:>width$}",
+					value,
+					width = max_widths[i]
+				);
+			} else {
+				print!(
+					"{:<width$}",
+					value,
+					width = max_widths[i]
+				);
+			}
+			if i < data_row.len() - 1 {
+				print!("  ");
 			}
 		}
 		println!();
+	}
+
+	fn print_separator(&self, max_widths: &Vec<usize>) {
+		let total_width: usize = max_widths.iter().sum::<usize>()
+			+ (2 * (self.column_count - 1));
+		println!("{:-<total_width$}", "", total_width = total_width);
+	}
+
+	fn print_partial_separator(
+		&self,
+		max_widths: &Vec<usize>,
+		data_sep: &Vec<bool>,
+	) {
+		for (i, draw) in data_sep.iter().enumerate() {
+			if !draw {
+				print!(
+					"{: <width$}",
+					"",
+					width = max_widths[i] + 2
+				);
+			} else {
+				print!(
+					"{:-<width$}",
+					"",
+					width = max_widths[i]
+				);
+				if i < data_sep.len() - 1 {
+					print!("  ");
+				}
+			}
+		}
+		println!()
 	}
 }

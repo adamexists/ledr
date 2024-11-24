@@ -65,11 +65,7 @@ impl OrderedLots {
 		}
 
 		let mut table = Table::new(8);
-		table.right_align(0);
-		table.right_align(1);
-		table.right_align(2);
-		table.right_align(4);
-		table.right_align(5);
+		table.right_align(vec![0, 1, 2, 4, 5]);
 
 		table.add_row(vec![
 			"ID",
@@ -126,15 +122,7 @@ impl OrderedLots {
 		}
 
 		let mut table = Table::new(10);
-		table.right_align(0);
-		table.right_align(1);
-		table.right_align(2);
-		table.right_align(3);
-		table.right_align(5);
-		table.right_align(6);
-		table.right_align(7);
-		table.right_align(8);
-		table.right_align(9);
+		table.right_align(vec![0, 1, 2, 3, 5, 6, 7, 8, 9]);
 
 		table.add_row(vec![
 			"ID",

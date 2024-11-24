@@ -50,12 +50,10 @@ struct Cli {
 	// -- FLAGS --
 	// -----------
 	/// Ignore entries prior to this date (YYYY-MM-DD)
-	/// TODO: Add test data examples to validate this one.
 	#[arg(short, long, required = false)]
 	begin: Option<String>,
 
 	/// Ignore entries after this date (YYYY-MM-DD)
-	/// TODO: Add test data examples to validate this one.
 	#[arg(short, long, required = false)]
 	end: Option<String>,
 
