@@ -61,7 +61,7 @@ impl Ledger {
 			lenient_mode: lenient,
 			declared_currencies: Default::default(),
 			declared_accounts: Default::default(),
-			exchange_rates: Default::default(),
+			exchange_rates: ExchangeRates::new(lenient),
 			lots: Default::default(),
 		}
 	}

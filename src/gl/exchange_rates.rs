@@ -29,9 +29,20 @@ pub struct ExchangeRates {
 	/// Preprocessed data for constant-time lookups, only available after
 	/// finalize() has been called on this
 	resolved_rates: HashMap<(String, String), Vec<(Date, Quant)>>,
+	
+	/// Skip consistency checks on price graphs TODO document
+	lenient_mode: bool,
 }
 
 impl ExchangeRates {
+	pub fn new(lenient: bool) -> Self {
+		Self {
+			rate_graphs: Default::default(),
+			resolved_rates: Default::default(),
+			lenient_mode: lenient,
+		}
+	}
+	
 	/// Adds a new exchange rate declared via directive. Might fail if
 	/// there's already a declared rate on the same date, or if the input
 	/// is incoherent.
@@ -169,7 +180,7 @@ impl ExchangeRates {
 			.retain(|date, _| date >= drop_before && date <= drop_after);
 
 		for (date, graph) in &self.rate_graphs {
-			if graph.has_inconsistent_cycle() {
+			if !self.lenient_mode && graph.has_inconsistent_cycle() {
 				bail!("Exchange rates on {} are incoherent", date)
 			}
 
