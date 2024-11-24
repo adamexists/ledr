@@ -14,18 +14,16 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::investment::action::Action;
-use crate::investment::commodity::Commodity;
 use crate::investment::lot::{Lot, LotStatus};
 use crate::investment::sale::Sale;
 use crate::util::amount::Amount;
 use anyhow::{bail, Error};
-use std::collections::HashMap;
 
 /// TODO rename this and write a proper description
 pub struct LotState {
-	// TODO: Lot state does not need to nest by commodity
-	state: HashMap<Commodity, Vec<Lot>>, // commodity -> its lots
-	/// The ID number that will be assigned to the next lot
+	/// Sorted deterministically, with all buys coming before all sells TODO confirm; very important
+	state: Vec<Lot>,
+	/// The ID number that will be automatically assigned to the next lot
 	next_id: u64,
 }
 
@@ -33,7 +31,7 @@ impl LotState {
 	pub fn new() -> Self {
 		Self {
 			state: Default::default(),
-			next_id: 1,
+			next_id: 0,
 		}
 	}
 
@@ -41,26 +39,22 @@ impl LotState {
 		let id = match action.lot_name {
 			Some(ref name) => name.clone(),
 			None => {
-				// TODO: Make certain ordering of these is deterministic
 				self.next_id += 1;
 				self.next_id.to_string()
 			},
 		};
 
-		self.state
-			.entry(action.commodity.clone())
-			.or_default()
-			.push(Lot {
-				id,
-				is_named: action.lot_name.is_some(),
-				status: LotStatus::Open,
-				account: action.account.clone(),
-				commodity: action.commodity.clone(),
-				quantity: action.quantity,
-				acquisition_date: action.date,
-				closed_date: None,
-				sales: vec![],
-			});
+		self.state.push(Lot {
+			id,
+			is_named: action.lot_name.is_some(),
+			status: LotStatus::Open,
+			account: action.account.clone(),
+			commodity: action.commodity.clone(),
+			quantity: action.quantity,
+			acquisition_date: action.date,
+			closed_date: None,
+			sales: vec![],
+		});
 	}
 
 	// TODO: Currently we use FIFO only; we could expand this to
@@ -77,67 +71,57 @@ impl LotState {
 		action: &Action,
 		unit_proceeds: Option<Amount>,
 	) -> Result<(), Error> {
-		let lots = self.state.get_mut(&action.commodity);
-		if let Some(lots) = lots {
-			let mut remaining_quantity = action.quantity;
+		let mut remaining_quantity = action.quantity;
 
-			for lot in lots.iter_mut() {
-				if lot.commodity != action.commodity
-					|| lot.status == LotStatus::Closed
-				{
+		for lot in self.state.iter_mut() {
+			if lot.commodity != action.commodity
+				|| lot.status == LotStatus::Closed
+			{
+				continue;
+			}
+
+			// If a lot is named, we only sell against the matching lot
+			if let Some(name) = &action.lot_name {
+				if name != &lot.id {
 					continue;
-				}
-
-				// If a lot is named, we only sell against the matching lot
-				if let Some(name) = &action.lot_name {
-					if name != &lot.id {
-						continue;
-					}
-				}
-
-				// Determine how much can be sold from this lot
-				let sell_quantity =
-					remaining_quantity.min(lot.quantity);
-				lot.quantity -= sell_quantity;
-				remaining_quantity -= sell_quantity;
-
-				// Register the sale against the lot
-				lot.sales.push(Sale {
-					date: action.date,
-					quantity: sell_quantity,
-					unit_proceeds: unit_proceeds.clone(),
-				});
-
-				// If the lot is fully sold, mark it as closed
-				if lot.quantity == 0 {
-					lot.status = LotStatus::Closed;
-					lot.closed_date = Some(action.date);
-				}
-
-				// Break if we've sold everything needed
-				if remaining_quantity == 0 {
-					break;
 				}
 			}
 
-			if remaining_quantity > 0 {
-				bail!(
+			// Determine how much can be sold from this lot
+			let sell_quantity =
+				remaining_quantity.min(lot.quantity);
+			lot.quantity -= sell_quantity;
+			remaining_quantity -= sell_quantity;
+
+			// Register the sale against the lot
+			lot.sales.push(Sale {
+				date: action.date,
+				quantity: sell_quantity,
+				unit_proceeds: unit_proceeds.clone(),
+			});
+
+			// If the lot is fully sold, mark it as closed
+			if lot.quantity == 0 {
+				lot.status = LotStatus::Closed;
+				lot.closed_date = Some(action.date);
+			}
+
+			// Break if we've sold everything needed
+			if remaining_quantity == 0 {
+				break;
+			}
+		}
+
+		if remaining_quantity > 0 {
+			bail!(
 					"No remaining lots for {} of {} (cost basis {})",
 					remaining_quantity,
 					action.commodity.symbol(),
 					action.commodity.cost_basis(),
 				)
-			}
-
-			Ok(())
-		} else {
-			// No lots available to sell
-			bail!(
-				"No matching lots to sell {} (cost basis {})",
-				action.commodity.symbol(),
-				action.commodity.cost_basis()
-			);
 		}
+
+		Ok(())
 	}
 
 	/// Flattens the set of lots into one Vec, applies filters, and returns it.
@@ -149,7 +133,7 @@ impl LotState {
 		// First assign IDs to all lots
 
 		let mut lots_iter: Box<dyn Iterator<Item = Lot>> =
-			Box::new(self.state.into_values().flatten());
+			Box::new(self.state.into_iter());
 
 		for filter in filters {
 			lots_iter = match filter {
