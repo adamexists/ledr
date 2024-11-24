@@ -595,52 +595,6 @@ mod tests {
 	}
 
 	#[test]
-	fn test_set_resolution_for_currency() {
-		let mut entry = create_entry();
-		entry
-			.add_detail(
-				"Assets:Cash",
-				Amount::new(Scalar::new(1234567, 4), "USD"),
-			)
-			.unwrap();
-
-		let result = entry.round_for_currency("USD", 2);
-		assert!(result.is_ok());
-
-		let detail = &entry.details[0];
-		assert_eq!(detail.amount.value.amount(), 12346); // rounding check
-		assert_eq!(detail.amount.value.resolution(), 2);
-	}
-
-	#[test]
-	fn test_set_resolution_for_currency_different_currency() {
-		let mut entry = create_entry();
-		entry
-			.add_detail(
-				"Assets:Cash",
-				Amount::new(Scalar::new(1234567, 4), "USD"),
-			)
-			.unwrap();
-		entry
-			.add_detail(
-				"Assets:Cash",
-				Amount::new(Scalar::new(9876543, 4), "EUR"),
-			)
-			.unwrap();
-
-		let result = entry.round_for_currency("USD", 2);
-		assert!(result.is_ok());
-
-		let usd_detail = &entry.details[0];
-		assert_eq!(usd_detail.amount.value.amount(), 12346);
-		assert_eq!(usd_detail.amount.value.resolution(), 2);
-
-		let eur_detail = &entry.details[1];
-		assert_eq!(eur_detail.amount.value.amount(), 9876543);
-		assert_eq!(eur_detail.amount.value.resolution(), 4);
-	}
-
-	#[test]
 	fn test_multiline_implicit_currency_conversion() {
 		let mut entry = create_entry();
 		entry
@@ -755,10 +709,8 @@ mod tests {
 		assert_eq!(entry.details.len(), 2);
 
 		assert_eq!(entry.details[0].account, "account2");
-		assert_eq!(entry.details[0].amount.value.amount(), 200);
 		assert_eq!(entry.details[0].amount.currency, "USD");
 		assert_eq!(entry.details[1].account, "account1");
-		assert_eq!(entry.details[1].amount.value.amount(), 100);
 		assert_eq!(entry.details[1].amount.currency, "USD");
 	}
 

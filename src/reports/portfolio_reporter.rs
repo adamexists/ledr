@@ -157,6 +157,7 @@ impl PortfolioReporter {
 
 				let cb = l.commodity.cost_basis();
 
+				// TODO: Simplify this.
 				let (pr, unit_gl, total_gl) = if let Some(pr) = &s.unit_proceeds
 				{
 					if cb.currency == pr.currency {
