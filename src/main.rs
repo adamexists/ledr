@@ -17,7 +17,7 @@
 use crate::gl::total::Total;
 use crate::investment::lot::LotStatus;
 use crate::investment::lot_state::{LotFilter, LotState};
-use crate::parsing::parser::{parse, ParseResult};
+use crate::parsing::parser::ParseResult;
 use crate::reports::ordered_entry::OrderedEntry;
 use crate::reports::ordered_lots::OrderedLots;
 use crate::reports::ordered_total::OrderedTotal;
@@ -110,7 +110,9 @@ fn main() -> Result<(), Error> {
 	let (beg, end) = get_range(&args)?;
 
 	let mut ledger = Ledger::new(args.lenient);
-	let parse_result = parse(&args.file, &beg, &end, &mut ledger)?;
+
+	let parser = parsing::parser::Parser::new();
+	let parse_result = parser.parse(&args.file, &beg, &end, &mut ledger)?;
 
 	// TODO: Not a huge fan aesthetically of lot_state being the only output from here.
 	let lot_state = finalize_ledger(&args, &mut ledger, &parse_result)?;

@@ -77,7 +77,7 @@ impl OrderedLots {
 			"Held",
 			"Asset",
 			"Qty",
-			"Basis",
+			"Cost Basis",
 			"Account",
 			"Dispositions",
 		]);
@@ -85,7 +85,7 @@ impl OrderedLots {
 		table.add_separator();
 		for l in self.lots.iter() {
 			table.add_row(vec![
-				&l.id.to_string(),
+				&l.id,
 				&l.acquisition_date.to_string(),
 				&l.time_held(as_of).to_string(),
 				l.commodity.symbol(),
@@ -121,7 +121,7 @@ impl OrderedLots {
 	/// Prints a profit and loss report.
 	pub fn print_profit_loss(&self) {
 		if self.lots.is_empty() {
-			println!("No lots");
+			println!("No applicable lots");
 			return;
 		}
 
@@ -155,6 +155,7 @@ impl OrderedLots {
 		// currency -> total cost, proceeds, total g/l
 		let mut totals: HashMap<String, (Amount, Amount, Amount)> =
 			HashMap::new();
+		let mut has_any_unknown_gl = false;
 
 		for l in &self.lots {
 			for s in &l.sales {
@@ -179,6 +180,25 @@ impl OrderedLots {
 
 				let (pr, unit_gl, total_gl) =
 					if let Some(pr) = &s.unit_proceeds {
+						totals.entry(pr
+							.currency
+							.clone())
+							.or_insert((
+								Amount::new(
+									Scalar::zero(),
+									pr.currency.clone(),
+								),
+								Amount::new(
+									Scalar::zero(),
+									pr.currency.clone(),
+								),
+								Amount::new(
+									Scalar::zero(),
+									pr.currency.clone(),
+								),
+							))
+							.1.value += pr.value;
+
 						if cb.currency == pr.currency {
 							let unit_gl = Amount::new(
 							pr.value - cb.value,
@@ -190,24 +210,6 @@ impl OrderedLots {
 								* s.quantity,
 							cb.currency.clone(),
 						);
-							totals.entry(pr
-							.currency
-							.clone())
-							.or_insert((
-								Amount::new(
-									Scalar::zero(),
-									cb.clone().currency,
-								),
-								Amount::new(
-									Scalar::zero(),
-									cb.clone().currency,
-								),
-								Amount::new(
-									Scalar::zero(),
-									cb.clone().currency,
-								),
-							))
-							.1.value += pr.value;
 
 							totals.entry(unit_gl
 							.clone()
@@ -215,15 +217,15 @@ impl OrderedLots {
 							.or_insert((
 								Amount::new(
 									Scalar::zero(),
-									cb.clone().currency,
+									total_gl.currency.clone(),
 								),
 								Amount::new(
 									Scalar::zero(),
-									cb.clone().currency,
+									total_gl.currency.clone(),
 								),
 								Amount::new(
 									Scalar::zero(),
-									cb.clone().currency,
+									total_gl.currency.clone(),
 								),
 							))
 							.2.value += total_gl.value;
@@ -234,6 +236,8 @@ impl OrderedLots {
 							total_gl.to_string(),
 						)
 						} else {
+							has_any_unknown_gl =
+								true;
 							// TODO: Could reduce the unknowns by pulling currency conversions in here.
 							(
 							pr.to_string(),
@@ -242,6 +246,7 @@ impl OrderedLots {
 						)
 						}
 					} else {
+						has_any_unknown_gl = true;
 						(
 							"UNK".to_string(),
 							"UNK".to_string(),
@@ -250,13 +255,13 @@ impl OrderedLots {
 					};
 
 				table.add_row(vec![
-					&l.id.to_string(),
+					&l.id,
 					&l.acquisition_date.to_string(),
 					&s.date.to_string(),
 					&s.time_held(&l.acquisition_date)
 						.to_string(),
 					l.commodity.symbol(),
-					&l.quantity.to_string(),
+					&s.quantity.to_string(),
 					&l.commodity.cost_basis().to_string(),
 					&pr,
 					&unit_gl,
@@ -269,6 +274,12 @@ impl OrderedLots {
 
 		// One line of totals per currency. TODO needs to be deterministically sorted.
 		for (_, (total_cost, total_proceeds, total_gl)) in totals {
+			let final_total_gl = if has_any_unknown_gl {
+				"UNK".to_string()
+			} else {
+				total_gl.to_string()
+			};
+
 			table.add_row(vec![
 				"",
 				"",
@@ -279,7 +290,7 @@ impl OrderedLots {
 				&total_cost.to_string(),
 				&total_proceeds.to_string(),
 				"",
-				&total_gl.to_string(),
+				&final_total_gl,
 			]);
 		}
 

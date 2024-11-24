@@ -23,6 +23,7 @@ use std::collections::HashMap;
 
 /// TODO rename this and write a proper description
 pub struct LotState {
+	// TODO: Lot state does not need to nest by commodity
 	state: HashMap<Commodity, Vec<Lot>>, // commodity -> its lots
 	/// The ID number that will be assigned to the next lot
 	next_id: u64,
@@ -37,11 +38,21 @@ impl LotState {
 	}
 
 	pub fn buy_lot(&mut self, action: &Action) {
+		let id = match action.lot_name {
+			Some(ref name) => name.clone(),
+			None => {
+				// TODO: Make certain ordering of these is deterministic
+				self.next_id += 1;
+				self.next_id.to_string()
+			},
+		};
+
 		self.state
 			.entry(action.commodity.clone())
 			.or_default()
 			.push(Lot {
-				id: self.next_id, // TODO: Make certain this is deterministic
+				id,
+				is_named: action.lot_name.is_some(),
 				status: LotStatus::Open,
 				account: action.account.clone(),
 				commodity: action.commodity.clone(),
@@ -50,8 +61,6 @@ impl LotState {
 				closed_date: None,
 				sales: vec![],
 			});
-
-		self.next_id += 1;
 	}
 
 	// TODO: Currently we use FIFO only; we could expand this to
@@ -77,6 +86,13 @@ impl LotState {
 					|| lot.status == LotStatus::Closed
 				{
 					continue;
+				}
+
+				// If a lot is named, we only sell against the matching lot
+				if let Some(name) = &action.lot_name {
+					if name != &lot.id {
+						continue;
+					}
 				}
 
 				// Determine how much can be sold from this lot

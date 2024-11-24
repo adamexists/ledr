@@ -31,6 +31,9 @@ pub struct Action {
 	pub account: String,
 	pub commodity: Commodity,
 	pub quantity: Scalar,
+
+	/// User-defined string, used to force specific lot matching
+	pub lot_name: Option<String>,
 }
 
 impl Action {
@@ -39,6 +42,7 @@ impl Action {
 		account: String,
 		amount: Amount,
 		cost_basis: Amount,
+		lot_name: Option<String>,
 	) -> Result<Self, Error> {
 		if amount.value == 0 {
 			bail!("Action cannot have zero quantity")
@@ -56,6 +60,7 @@ impl Action {
 			account,
 			quantity,
 			commodity: Commodity::new(amount.currency, cost_basis),
+			lot_name,
 		})
 	}
 

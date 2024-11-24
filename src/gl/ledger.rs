@@ -137,6 +137,7 @@ impl Ledger {
 		amount: Amount,
 		inline_conversion: Option<Amount>,
 		cost_basis: Option<Amount>,
+		lot_name: Option<String>, // TODO: Too many linked params here now
 	) -> Result<(), Error> {
 		if self.pending_entry.is_none() {
 			bail!("Orphaned entry detail")
@@ -205,6 +206,7 @@ impl Ledger {
 				account.clone(),
 				amount,
 				cb,
+				lot_name,
 			)?);
 		}
 
@@ -444,6 +446,7 @@ mod tests {
 				),
 				None,
 				None,
+				None,
 			)
 			.is_ok());
 	}
@@ -464,6 +467,7 @@ mod tests {
 					Scalar::new(1000, 1),
 					"EUR".to_string(),
 				),
+				None,
 				None,
 				None
 			)
@@ -486,6 +490,7 @@ mod tests {
 					"USD".to_string(),
 				),
 				None,
+				None,
 				None
 			)
 			.is_err());
@@ -502,6 +507,7 @@ mod tests {
 					Scalar::new(1000, 1),
 					"USD".to_string(),
 				),
+				None,
 				None,
 				None
 			)
@@ -566,6 +572,7 @@ mod tests {
 					"EUR".to_string(),
 				),
 				None,
+				None,
 				None
 			)
 			.is_ok());
@@ -586,6 +593,7 @@ mod tests {
 					Scalar::new(1000, 1),
 					"USD".to_string(),
 				),
+				None,
 				None,
 				None
 			)

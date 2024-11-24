@@ -89,6 +89,13 @@ fn test_integration_account_summary() {
 	)
 }
 
+#[test]
+fn test_integration_lots() {
+	let test_cases = vec![("1_in.txt", "1_out.txt")];
+
+	execute("lots", test_cases, true, "pnl", vec![])
+}
+
 fn execute(
 	subfolder: &str,
 	test_cases: Vec<(&str, &str)>,

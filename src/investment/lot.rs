@@ -21,7 +21,10 @@ use std::cmp::Ordering;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Lot {
-	pub id: u64,
+	pub id: String,
+
+	/// Indicates whether the user specifically named this lot
+	pub is_named: bool,
 
 	pub status: LotStatus,
 	pub account: String,
@@ -76,6 +79,10 @@ impl Lot {
 
 	/// Assembles sales into a semicolon-separated string in the format: "{quantity} on {date}; ..."
 	pub fn format_sales(&self) -> String {
+		if self.sales.is_empty() {
+			return "n/a".to_string();
+		}
+
 		self.sales
 			.iter()
 			.map(|sale| {

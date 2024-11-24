@@ -30,3 +30,4 @@ unsafe_code = "forbid"
 anyhow = "1.0.93"
 chrono = "0.4.38"
 clap = { version = "4.5.21", features = ["derive"] }
+regex = "1.11.1"
