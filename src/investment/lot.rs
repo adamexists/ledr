@@ -84,19 +84,6 @@ impl Lot {
 		};
 		self.acquisition_date.until(end)
 	}
-
-	/// Assembles sales into a semicolon-separated string in the format: "{quantity} on {date}; ..."
-	pub fn format_sales(&self) -> String {
-		if self.sales.is_empty() {
-			return "n/a".to_string();
-		}
-
-		self.sales
-			.iter()
-			.map(|sale| format!("{} on {}", sale.quantity, sale.date))
-			.collect::<Vec<String>>()
-			.join("; ")
-	}
 }
 
 impl PartialOrd for Lot {

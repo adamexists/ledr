@@ -72,10 +72,10 @@ impl PortfolioReporter {
 			return;
 		}
 
-		let mut table = Table::new(8);
+		let mut table = Table::new(7);
 		table.right_align(vec![0, 1, 2, 4, 5]);
 
-		table.add_row(vec![
+		table.add_header(vec![
 			"ID",
 			"Opened",
 			"Held",
@@ -83,7 +83,6 @@ impl PortfolioReporter {
 			"Qty",
 			"Cost Basis",
 			"Account",
-			"Dispositions",
 		]);
 
 		table.add_separator();
@@ -96,7 +95,6 @@ impl PortfolioReporter {
 				&l.quantity.to_string(),
 				&l.commodity.cost_basis().to_string(),
 				&l.account.to_string(),
-				&l.format_sales(),
 			])
 		}
 
@@ -117,7 +115,6 @@ impl PortfolioReporter {
 			"",
 			"",
 			"",
-			"",
 		]);
 		table.print();
 	}
@@ -132,7 +129,7 @@ impl PortfolioReporter {
 		let mut table = Table::new(10);
 		table.right_align(vec![0, 1, 2, 3, 5, 6, 7, 8, 9]);
 
-		table.add_row(vec![
+		table.add_header(vec![
 			"ID",
 			"Opened",
 			"Closed",
