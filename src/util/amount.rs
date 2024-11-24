@@ -17,7 +17,7 @@ use crate::util::quant::Quant;
 use std::fmt;
 use std::ops::Neg;
 
-/// A scalar value with a currency.
+/// A quant value with a currency.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct Amount {
 	pub currency: String,

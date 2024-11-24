@@ -132,8 +132,8 @@ impl Total {
 
 	/// Invert the signs of every Quant in the hierarchy
 	pub fn invert(&mut self) {
-		for scalar in self.amounts.values_mut() {
-			scalar.negate();
+		for quant in self.amounts.values_mut() {
+			quant.negate();
 		}
 
 		for subtotal in self.subtotals.values_mut() {

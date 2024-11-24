@@ -165,9 +165,6 @@ impl ExchangeRates {
 	///
 	/// Ignores and drops all data outside the bounds defined by the
 	/// relevant arguments.
-	///
-	/// TODO: I think there is a general problem with base/quote syntax
-	///  consistency in this project. Should audit all that sometime.
 	pub fn finalize(
 		&mut self,
 		drop_before: &Date,

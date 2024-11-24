@@ -57,6 +57,9 @@ impl Quant {
 
 	/// Creates a new Quant with the given numerator and the denominator
 	/// set at 10^exp where exp is the function argument of that name.
+	/// Render precision is set to the exponent value, as though you were
+	/// inserting a decimal point that many places from the right into
+	/// the number.
 	pub fn new(numerator: i128, exp: u32) -> Self {
 		let mut out = Self {
 			numerator: numerator.unsigned_abs(),
@@ -301,7 +304,7 @@ impl AddAssign for Quant {
 
 impl Sum for Quant {
 	fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-		iter.fold(Quant::zero(), |acc, scalar| acc + scalar)
+		iter.fold(Quant::zero(), |acc, quant| acc + quant)
 	}
 }
 
@@ -588,7 +591,6 @@ impl Hash for Quant {
 	}
 }
 
-// TODO: This is many tests and that's great, but check for redundancies.
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -601,90 +603,91 @@ mod tests {
 
 			#[test]
 			fn test_positive_number_with_precision() {
-				let scalar = Quant::new(123, 2);
-				assert_eq!(scalar.numerator, 123);
-				assert_eq!(scalar.denominator, 100);
-				assert_eq!(scalar.render_precision, 2);
+				let quant = Quant::new(123, 2);
+				assert_eq!(quant.numerator, 123);
+				assert_eq!(quant.denominator, 100);
+				assert_eq!(quant.render_precision, 2);
 			}
 
 			#[test]
 			fn test_zero_number() {
-				let scalar = Quant::new(0, 5);
-				assert_eq!(scalar.numerator, 0);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 5);
-				assert!(!scalar.is_negative);
+				let quant = Quant::new(0, 5);
+				assert_eq!(quant.numerator, 0);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 5);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_negative_number_with_precision() {
-				let scalar = Quant::new(-456, 3);
-				assert_eq!(scalar.numerator, 57);
-				assert_eq!(scalar.denominator, 125);
-				assert_eq!(scalar.render_precision, 3);
-				assert!(scalar.is_negative);
+				let quant = Quant::new(-456, 3);
+				assert_eq!(quant.numerator, 57);
+				assert_eq!(quant.denominator, 125);
+				assert_eq!(quant.render_precision, 3);
+				assert!(quant.is_negative);
 			}
 
 			#[test]
 			fn test_high_precision() {
-				let scalar = Quant::new(789, 10);
-				assert_eq!(scalar.numerator, 789);
-				assert_eq!(scalar.denominator, 10u128.pow(10));
-				assert_eq!(scalar.render_precision, 10);
-				assert!(!scalar.is_negative);
+				let quant = Quant::new(789, 10);
+				assert_eq!(quant.numerator, 789);
+				assert_eq!(quant.denominator, 10u128.pow(10));
+				assert_eq!(quant.render_precision, 10);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_no_precision() {
-				let scalar = Quant::new(42, 0);
-				assert_eq!(scalar.numerator, 42);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(!scalar.is_negative);
+				let quant = Quant::new(42, 0);
+				assert_eq!(quant.numerator, 42);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 0);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_large_number_and_precision() {
-				let scalar = Quant::new(987654321, 15);
-				assert_eq!(scalar.numerator, 987654321);
-				assert_eq!(scalar.denominator, 10u128.pow(15));
-				assert_eq!(scalar.render_precision, 15);
-				assert!(!scalar.is_negative);
+				let quant = Quant::new(987654321, 15);
+				assert_eq!(quant.numerator, 987654321);
+				assert_eq!(quant.denominator, 10u128.pow(15));
+				assert_eq!(quant.render_precision, 15);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_number_reduction() {
-				let scalar = Quant::new(200, 2);
-				assert_eq!(scalar.numerator, 2);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 2);
+				let quant = Quant::new(200, 2);
+				assert_eq!(quant.numerator, 2);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 2);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_negative_number_reduction() {
-				let scalar = Quant::new(-200, 2);
-				assert_eq!(scalar.numerator, 2);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 2);
-				assert!(scalar.is_negative);
+				let quant = Quant::new(-200, 2);
+				assert_eq!(quant.numerator, 2);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 2);
+				assert!(quant.is_negative);
 			}
 
 			#[test]
 			fn test_zero_precision_with_large_number() {
-				let scalar = Quant::new(999999999999999999, 0);
-				assert_eq!(scalar.numerator, 999999999999999999);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(!scalar.is_negative);
+				let quant = Quant::new(999999999999999999, 0);
+				assert_eq!(quant.numerator, 999999999999999999);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 0);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_large_negative_number_with_high_precision() {
-				let scalar = Quant::new(-123456789, 18);
-				assert_eq!(scalar.numerator, 123456789);
-				assert_eq!(scalar.denominator, 10u128.pow(18));
-				assert_eq!(scalar.render_precision, 18);
-				assert!(scalar.is_negative);
+				let quant = Quant::new(-123456789, 18);
+				assert_eq!(quant.numerator, 123456789);
+				assert_eq!(quant.denominator, 10u128.pow(18));
+				assert_eq!(quant.render_precision, 18);
+				assert!(quant.is_negative);
 			}
 		}
 
@@ -699,111 +702,111 @@ mod tests {
 
 			#[test]
 			fn test_positive_fraction() {
-				let scalar = Quant::from_frac(6, 8);
-				assert_eq!(scalar.numerator, 3);
-				assert_eq!(scalar.denominator, 4);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_frac(6, 8);
+				assert_eq!(quant.numerator, 3);
+				assert_eq!(quant.denominator, 4);
+				assert_eq!(quant.render_precision, 0);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_negative_fraction_numerator() {
-				let scalar = Quant::from_frac(-6, 8);
-				assert_eq!(scalar.numerator, 3);
-				assert_eq!(scalar.denominator, 4);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(scalar.is_negative);
+				let quant = Quant::from_frac(-6, 8);
+				assert_eq!(quant.numerator, 3);
+				assert_eq!(quant.denominator, 4);
+				assert_eq!(quant.render_precision, 0);
+				assert!(quant.is_negative);
 			}
 
 			#[test]
 			fn test_negative_fraction_denominator() {
-				let scalar = Quant::from_frac(6, -8);
-				assert_eq!(scalar.numerator, 3);
-				assert_eq!(scalar.denominator, 4);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(scalar.is_negative);
+				let quant = Quant::from_frac(6, -8);
+				assert_eq!(quant.numerator, 3);
+				assert_eq!(quant.denominator, 4);
+				assert_eq!(quant.render_precision, 0);
+				assert!(quant.is_negative);
 			}
 
 			#[test]
 			fn test_negative_fraction_both() {
-				let scalar = Quant::from_frac(-6, -8);
-				assert_eq!(scalar.numerator, 3);
-				assert_eq!(scalar.denominator, 4);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_frac(-6, -8);
+				assert_eq!(quant.numerator, 3);
+				assert_eq!(quant.denominator, 4);
+				assert_eq!(quant.render_precision, 0);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_reduction_to_lowest_terms() {
-				let scalar = Quant::from_frac(100, 400);
-				assert_eq!(scalar.numerator, 1);
-				assert_eq!(scalar.denominator, 4);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_frac(100, 400);
+				assert_eq!(quant.numerator, 1);
+				assert_eq!(quant.denominator, 4);
+				assert_eq!(quant.render_precision, 0);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_large_numbers() {
-				let scalar =
+				let quant =
 					Quant::from_frac(12345678901234567890, 9876543210987654321);
-				assert_eq!(scalar.numerator, 137174210);
-				assert_eq!(scalar.denominator, 109739369);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(!scalar.is_negative);
+				assert_eq!(quant.numerator, 137174210);
+				assert_eq!(quant.denominator, 109739369);
+				assert_eq!(quant.render_precision, 0);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_one_as_denominator() {
-				let scalar = Quant::from_frac(7, 1);
-				assert_eq!(scalar.numerator, 7);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_frac(7, 1);
+				assert_eq!(quant.numerator, 7);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 0);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_zero_as_numerator() {
-				let scalar = Quant::from_frac(0, 5);
-				assert_eq!(scalar.numerator, 0);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_frac(0, 5);
+				assert_eq!(quant.numerator, 0);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 0);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_already_reduced_fraction() {
-				let scalar = Quant::from_frac(3, 4);
-				assert_eq!(scalar.numerator, 3);
-				assert_eq!(scalar.denominator, 4);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_frac(3, 4);
+				assert_eq!(quant.numerator, 3);
+				assert_eq!(quant.denominator, 4);
+				assert_eq!(quant.render_precision, 0);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_negative_one_as_denominator() {
-				let scalar = Quant::from_frac(7, -1);
-				assert_eq!(scalar.numerator, 7);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(scalar.is_negative);
+				let quant = Quant::from_frac(7, -1);
+				assert_eq!(quant.numerator, 7);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 0);
+				assert!(quant.is_negative);
 			}
 
 			#[test]
 			fn test_negative_one_as_numerator() {
-				let scalar = Quant::from_frac(-1, 3);
-				assert_eq!(scalar.numerator, 1);
-				assert_eq!(scalar.denominator, 3);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(scalar.is_negative);
+				let quant = Quant::from_frac(-1, 3);
+				assert_eq!(quant.numerator, 1);
+				assert_eq!(quant.denominator, 3);
+				assert_eq!(quant.render_precision, 0);
+				assert!(quant.is_negative);
 			}
 
 			#[test]
 			fn test_minimal_fraction() {
-				let scalar = Quant::from_frac(1, 2);
-				assert_eq!(scalar.numerator, 1);
-				assert_eq!(scalar.denominator, 2);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_frac(1, 2);
+				assert_eq!(quant.numerator, 1);
+				assert_eq!(quant.denominator, 2);
+				assert_eq!(quant.render_precision, 0);
+				assert!(!quant.is_negative);
 			}
 		}
 
@@ -812,38 +815,38 @@ mod tests {
 
 			#[test]
 			fn test_from_str_positive_integer() {
-				let scalar = Quant::from_str("123").unwrap();
-				assert_eq!(scalar.numerator, 123);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_str("123").unwrap();
+				assert_eq!(quant.numerator, 123);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 0);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_from_str_negative_integer() {
-				let scalar = Quant::from_str("-123").unwrap();
-				assert_eq!(scalar.numerator, 123);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(scalar.is_negative);
+				let quant = Quant::from_str("-123").unwrap();
+				assert_eq!(quant.numerator, 123);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 0);
+				assert!(quant.is_negative);
 			}
 
 			#[test]
 			fn test_from_str_positive_decimal() {
-				let scalar = Quant::from_str("123.456").unwrap();
-				assert_eq!(scalar.numerator, 15432);
-				assert_eq!(scalar.denominator, 125);
-				assert_eq!(scalar.render_precision, 3);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_str("123.456").unwrap();
+				assert_eq!(quant.numerator, 15432);
+				assert_eq!(quant.denominator, 125);
+				assert_eq!(quant.render_precision, 3);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_from_str_negative_decimal() {
-				let scalar = Quant::from_str("-123.456").unwrap();
-				assert_eq!(scalar.numerator, 15432);
-				assert_eq!(scalar.denominator, 125);
-				assert_eq!(scalar.render_precision, 3);
-				assert!(scalar.is_negative);
+				let quant = Quant::from_str("-123.456").unwrap();
+				assert_eq!(quant.numerator, 15432);
+				assert_eq!(quant.denominator, 125);
+				assert_eq!(quant.render_precision, 3);
+				assert!(quant.is_negative);
 			}
 
 			#[test]
@@ -872,56 +875,56 @@ mod tests {
 
 			#[test]
 			fn test_from_str_zero() {
-				let scalar = Quant::from_str("0").unwrap();
-				assert_eq!(scalar.numerator, 0);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_str("0").unwrap();
+				assert_eq!(quant.numerator, 0);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 0);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_from_str_negative_zero() {
-				let scalar = Quant::from_str("-0").unwrap();
-				assert_eq!(scalar.numerator, 0);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_str("-0").unwrap();
+				assert_eq!(quant.numerator, 0);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 0);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_from_str_zero_decimal() {
-				let scalar = Quant::from_str("0.00").unwrap();
-				assert_eq!(scalar.numerator, 0);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 2);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_str("0.00").unwrap();
+				assert_eq!(quant.numerator, 0);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 2);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_from_str_negative_zero_decimal() {
-				let scalar = Quant::from_str("-0.00").unwrap();
-				assert_eq!(scalar.numerator, 0);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 2);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_str("-0.00").unwrap();
+				assert_eq!(quant.numerator, 0);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 2);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_from_str_near_zero_decimal() {
-				let scalar = Quant::from_str("0.05").unwrap();
-				assert_eq!(scalar.numerator, 1);
-				assert_eq!(scalar.denominator, 20);
-				assert_eq!(scalar.render_precision, 2);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_str("0.05").unwrap();
+				assert_eq!(quant.numerator, 1);
+				assert_eq!(quant.denominator, 20);
+				assert_eq!(quant.render_precision, 2);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_from_str_negative_near_zero_decimal() {
-				let scalar = Quant::from_str("-0.05").unwrap();
-				assert_eq!(scalar.numerator, 1);
-				assert_eq!(scalar.denominator, 20);
-				assert_eq!(scalar.render_precision, 2);
-				assert!(scalar.is_negative);
+				let quant = Quant::from_str("-0.05").unwrap();
+				assert_eq!(quant.numerator, 1);
+				assert_eq!(quant.denominator, 20);
+				assert_eq!(quant.render_precision, 2);
+				assert!(quant.is_negative);
 			}
 		}
 
@@ -930,20 +933,20 @@ mod tests {
 
 			#[test]
 			fn test_from_i128_positive() {
-				let scalar = Quant::from_i128(42);
-				assert_eq!(scalar.numerator, 42);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(!scalar.is_negative);
+				let quant = Quant::from_i128(42);
+				assert_eq!(quant.numerator, 42);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 0);
+				assert!(!quant.is_negative);
 			}
 
 			#[test]
 			fn test_from_i128_negative() {
-				let scalar = Quant::from_i128(-42);
-				assert_eq!(scalar.numerator, 42);
-				assert_eq!(scalar.denominator, 1);
-				assert_eq!(scalar.render_precision, 0);
-				assert!(scalar.is_negative);
+				let quant = Quant::from_i128(-42);
+				assert_eq!(quant.numerator, 42);
+				assert_eq!(quant.denominator, 1);
+				assert_eq!(quant.render_precision, 0);
+				assert!(quant.is_negative);
 			}
 		}
 	}
@@ -1457,7 +1460,7 @@ mod tests {
 		use super::*;
 
 		#[test]
-		fn test_scalar_greater_equal() {
+		fn test_quant_greater_equal() {
 			let a = Quant::from_frac(5, 2);
 			let b = Quant::from_frac(10, 4);
 			let c = Quant::from_frac(6, 2);
@@ -1469,7 +1472,7 @@ mod tests {
 		}
 
 		#[test]
-		fn test_scalar_less_equal() {
+		fn test_quant_less_equal() {
 			let a = Quant::from_frac(5, 2);
 			let b = Quant::from_frac(10, 4);
 			let c = Quant::from_frac(6, 2);
@@ -1481,32 +1484,32 @@ mod tests {
 		}
 
 		#[test]
-		fn test_scalar_equal_i128() {
-			let scalar = Quant::from_frac(10, 2);
+		fn test_quant_equal_i128() {
+			let quant = Quant::from_frac(10, 2);
 			let int_value: i128 = 5;
 
-			assert!(scalar == int_value, "Expected scalar == int_value");
+			assert!(quant == int_value, "Expected quant == int_value");
 		}
 
 		#[test]
-		fn test_i128_equal_scalar() {
-			let scalar = Quant::from_frac(10, 2);
+		fn test_i128_equal_quant() {
+			let quant = Quant::from_frac(10, 2);
 			let int_value: i128 = 5;
 
-			assert_eq!(int_value, scalar, "Expected int_value == scalar");
+			assert_eq!(int_value, quant, "Expected int_value == quant");
 		}
 
 		#[test]
-		fn test_scalar_partial_ord_i128() {
-			let scalar = Quant::from_frac(15, 2);
+		fn test_quant_partial_ord_i128() {
+			let quant = Quant::from_frac(15, 2);
 			let int_value: i128 = 8;
 
-			assert!(scalar < int_value, "Expected scalar < int_value");
-			assert!(int_value > scalar, "Expected int_value > scalar");
+			assert!(quant < int_value, "Expected quant < int_value");
+			assert!(int_value > quant, "Expected int_value > quant");
 		}
 
 		#[test]
-		fn test_scalar_partial_ord() {
+		fn test_quant_partial_ord() {
 			let a = Quant::from_frac(7, 2);
 			let b = Quant::from_frac(9, 2);
 			let c = Quant::from_frac(14, 4);
@@ -1517,7 +1520,7 @@ mod tests {
 		}
 
 		#[test]
-		fn test_scalar_negative_ordering() {
+		fn test_quant_negative_ordering() {
 			let a = Quant::from_frac(-5, 2);
 			let b = Quant::from_frac(-10, 4);
 			let c = Quant::from_frac(-6, 2);
@@ -1529,7 +1532,7 @@ mod tests {
 		}
 
 		#[test]
-		fn test_scalar_abs_ordering() {
+		fn test_quant_abs_ordering() {
 			let a = Quant::from_frac(-5, 2);
 			let b = Quant::from_frac(5, 2);
 			let c = Quant::from_frac(-6, 2);
@@ -1549,223 +1552,223 @@ mod tests {
 
 		#[test]
 		fn test_round_basic() {
-			let mut scalar = Quant {
+			let mut quant = Quant {
 				numerator: 15,
 				denominator: 10,
 				is_negative: false,
 				render_precision: 0,
 			};
-			scalar.round(0);
-			assert_eq!(scalar.numerator, 2);
-			assert_eq!(scalar.denominator, 1);
+			quant.round(0);
+			assert_eq!(quant.numerator, 2);
+			assert_eq!(quant.denominator, 1);
 		}
 
 		#[test]
 		fn test_round_half_to_even() {
-			let mut scalar = Quant {
+			let mut quant = Quant {
 				numerator: 155,
 				denominator: 100,
 				is_negative: false,
 				render_precision: 0,
 			};
-			scalar.round(1);
-			assert_eq!(scalar.numerator, 8);
-			assert_eq!(scalar.denominator, 5);
+			quant.round(1);
+			assert_eq!(quant.numerator, 8);
+			assert_eq!(quant.denominator, 5);
 		}
 
 		#[test]
 		fn test_round_half_to_odd() {
-			let mut scalar = Quant {
+			let mut quant = Quant {
 				numerator: 254,
 				denominator: 100,
 				is_negative: false,
 				render_precision: 0,
 			};
-			scalar.round(1);
-			assert_eq!(scalar.numerator, 5);
-			assert_eq!(scalar.denominator, 2);
+			quant.round(1);
+			assert_eq!(quant.numerator, 5);
+			assert_eq!(quant.denominator, 2);
 		}
 
 		#[test]
 		fn test_round_precision_0() {
-			let mut scalar = Quant {
+			let mut quant = Quant {
 				numerator: 7,
 				denominator: 3,
 				is_negative: false,
 				render_precision: 0,
 			};
-			scalar.round(0);
-			assert_eq!(scalar.numerator, 2);
-			assert_eq!(scalar.denominator, 1);
+			quant.round(0);
+			assert_eq!(quant.numerator, 2);
+			assert_eq!(quant.denominator, 1);
 		}
 
 		#[test]
 		fn test_round_negative() {
-			let mut scalar = Quant {
+			let mut quant = Quant {
 				numerator: 7,
 				denominator: 3,
 				is_negative: true,
 				render_precision: 0,
 			};
-			scalar.round(0);
-			assert_eq!(scalar.numerator, 2);
-			assert!(scalar.is_negative);
+			quant.round(0);
+			assert_eq!(quant.numerator, 2);
+			assert!(quant.is_negative);
 		}
 
 		#[test]
 		fn test_reduce_after_round() {
-			let mut scalar = Quant {
+			let mut quant = Quant {
 				numerator: 200,
 				denominator: 100,
 				is_negative: false,
 				render_precision: 0,
 			};
-			scalar.round(0);
-			assert_eq!(scalar.numerator, 2);
-			assert_eq!(scalar.denominator, 1);
+			quant.round(0);
+			assert_eq!(quant.numerator, 2);
+			assert_eq!(quant.denominator, 1);
 		}
 
 		#[test]
 		fn test_round_to_integer_no_string() {
-			let mut scalar = Quant::from_frac(123456, 1000);
-			scalar.round(0);
+			let mut quant = Quant::from_frac(123456, 1000);
+			quant.round(0);
 			assert_eq!(
-				scalar.numerator, 123,
+				quant.numerator, 123,
 				"Numerator should be 123 after rounding to 0 decimals"
 			);
 			assert_eq!(
-				scalar.denominator, 1,
+				quant.denominator, 1,
 				"Denominator should be 1 after rounding to 0 decimals"
 			);
-			assert!(!scalar.is_negative, "Scalar should not be negative");
+			assert!(!quant.is_negative, "quant should not be negative");
 		}
 
 		#[test]
 		fn test_round_to_two_decimals_no_string() {
-			let mut scalar = Quant::from_frac(123456, 1000);
-			scalar.round(2);
+			let mut quant = Quant::from_frac(123456, 1000);
+			quant.round(2);
 			assert_eq!(
-				scalar.numerator, 6173,
+				quant.numerator, 6173,
 				"Numerator should be 6173 after rounding to 2 decimals"
 			);
 			assert_eq!(
-				scalar.denominator, 50,
+				quant.denominator, 50,
 				"Denominator should be 50 after rounding to 2 decimals"
 			);
-			assert!(!scalar.is_negative, "Scalar should not be negative");
+			assert!(!quant.is_negative, "quant should not be negative");
 		}
 
 		#[test]
 		fn test_bankers_rounding_down_no_string() {
-			let mut scalar = Quant::from_frac(123445, 1000);
-			scalar.round(2);
+			let mut quant = Quant::from_frac(123445, 1000);
+			quant.round(2);
 			assert_eq!(
-				scalar.numerator, 3086,
+				quant.numerator, 3086,
 				"Numerator should be 3086 due to Banker's rounding"
 			);
 			assert_eq!(
-				scalar.denominator, 25,
+				quant.denominator, 25,
 				"Denominator should remain scaled correctly"
 			);
-			assert!(!scalar.is_negative, "Scalar should not be negative");
+			assert!(!quant.is_negative, "quant should not be negative");
 		}
 
 		#[test]
 		fn test_bankers_rounding_up_no_string() {
-			let mut scalar = Quant::from_frac(123455, 1000);
-			scalar.round(2);
+			let mut quant = Quant::from_frac(123455, 1000);
+			quant.round(2);
 			assert_eq!(
-				scalar.numerator, 6173,
+				quant.numerator, 6173,
 				"Numerator should be 6173 due to Banker's rounding"
 			);
 			assert_eq!(
-				scalar.denominator, 50,
+				quant.denominator, 50,
 				"Denominator should remain scaled correctly"
 			);
-			assert!(!scalar.is_negative, "Scalar should not be negative");
+			assert!(!quant.is_negative, "quant should not be negative");
 		}
 
 		#[test]
 		fn test_round_negative_to_integer_no_string() {
-			let mut scalar = Quant::from_frac(-123456, 1000);
-			scalar.round(0);
+			let mut quant = Quant::from_frac(-123456, 1000);
+			quant.round(0);
 			assert_eq!(
-				scalar.numerator, 123,
+				quant.numerator, 123,
 				"Numerator should be 123 after rounding"
 			);
 			assert_eq!(
-				scalar.denominator, 1,
+				quant.denominator, 1,
 				"Denominator should be 1 after rounding"
 			);
-			assert!(scalar.is_negative, "Scalar should be negative");
+			assert!(quant.is_negative, "quant should be negative");
 		}
 
 		#[test]
 		fn test_round_negative_to_one_decimal_no_string() {
-			let mut scalar = Quant::from_frac(-123456, 1000);
-			scalar.round(1);
+			let mut quant = Quant::from_frac(-123456, 1000);
+			quant.round(1);
 			assert_eq!(
-				scalar.numerator, 247,
+				quant.numerator, 247,
 				"Numerator should be 247 after rounding"
 			);
 			assert_eq!(
-				scalar.denominator, 2,
+				quant.denominator, 2,
 				"Denominator should be 2 after rounding to 1 decimal"
 			);
-			assert!(scalar.is_negative, "Scalar should be negative");
+			assert!(quant.is_negative, "quant should be negative");
 		}
 
 		#[test]
 		fn test_round_large_number_no_string() {
-			let mut scalar = Quant::from_frac(123456789987654321, 1000000000);
-			scalar.round(6);
+			let mut quant = Quant::from_frac(123456789987654321, 1000000000);
+			quant.round(6);
 			assert_eq!(
-				scalar.numerator, 61728394993827,
+				quant.numerator, 61728394993827,
 				"Numerator should match rounded value"
 			);
 			assert_eq!(
-				scalar.denominator, 500000,
+				quant.denominator, 500000,
 				"Denominator should match scaled precision"
 			);
-			assert!(!scalar.is_negative, "Scalar should not be negative");
+			assert!(!quant.is_negative, "quant should not be negative");
 		}
 
 		#[test]
 		fn test_round_small_number_up_no_string() {
-			let mut scalar = Quant::from_frac(-5, 10000);
-			scalar.round(3);
+			let mut quant = Quant::from_frac(-5, 10000);
+			quant.round(3);
 			assert_eq!(
-				scalar.numerator, 0,
+				quant.numerator, 0,
 				"Numerator should be 0 after rounding down"
 			);
 			assert_eq!(
-				scalar.denominator, 1,
+				quant.denominator, 1,
 				"Denominator should be set to one when numerator is zero"
 			);
-			assert!(!scalar.is_negative, "Scalar should not be negative");
+			assert!(!quant.is_negative, "quant should not be negative");
 		}
 
 		#[test]
 		fn test_round_small_number_down_no_string() {
-			let mut scalar = Quant::from_frac(49, 100000);
-			scalar.round(3);
+			let mut quant = Quant::from_frac(49, 100000);
+			quant.round(3);
 			assert_eq!(
-				scalar.numerator, 0,
+				quant.numerator, 0,
 				"Numerator should be 0 after rounding down"
 			);
 			assert_eq!(
-				scalar.denominator, 1,
+				quant.denominator, 1,
 				"Denominator should simplify to 1 for zero value"
 			);
-			assert!(!scalar.is_negative, "Scalar should not be negative");
+			assert!(!quant.is_negative, "quant should not be negative");
 		}
 
 		#[test]
 		fn test_round_to_integer() {
-			let mut scalar = Quant::from_str("123.456").unwrap();
-			scalar.round(0);
+			let mut quant = Quant::from_str("123.456").unwrap();
+			quant.round(0);
 			assert_eq!(
-				scalar.to_string(),
+				quant.to_string(),
 				"123",
 				"Expected 123 after rounding to 0 decimals"
 			);
@@ -1773,10 +1776,10 @@ mod tests {
 
 		#[test]
 		fn test_round_to_two_decimals() {
-			let mut scalar = Quant::from_str("123.456").unwrap();
-			scalar.round(2);
+			let mut quant = Quant::from_str("123.456").unwrap();
+			quant.round(2);
 			assert_eq!(
-				scalar.to_string(),
+				quant.to_string(),
 				"123.46",
 				"Expected 123.46 after rounding to 2 decimals"
 			);
@@ -1784,10 +1787,10 @@ mod tests {
 
 		#[test]
 		fn test_bankers_rounding_down() {
-			let mut scalar = Quant::from_str("123.445").unwrap();
-			scalar.round(2);
+			let mut quant = Quant::from_str("123.445").unwrap();
+			quant.round(2);
 			assert_eq!(
-				scalar.to_string(),
+				quant.to_string(),
 				"123.44",
 				"Expected 123.44 due to Banker's rounding (tie to even)"
 			);
@@ -1795,10 +1798,10 @@ mod tests {
 
 		#[test]
 		fn test_bankers_rounding_up() {
-			let mut scalar = Quant::from_str("123.455").unwrap();
-			scalar.round(2);
+			let mut quant = Quant::from_str("123.455").unwrap();
+			quant.round(2);
 			assert_eq!(
-				scalar.to_string(),
+				quant.to_string(),
 				"123.46",
 				"Expected 123.46 due to Banker's rounding (tie to even)"
 			);
@@ -1806,10 +1809,10 @@ mod tests {
 
 		#[test]
 		fn test_round_negative_to_integer() {
-			let mut scalar = Quant::from_str("-123.456").unwrap();
-			scalar.round(0);
+			let mut quant = Quant::from_str("-123.456").unwrap();
+			quant.round(0);
 			assert_eq!(
-				scalar.to_string(),
+				quant.to_string(),
 				"-123",
 				"Expected -123 after rounding to 0 decimals"
 			);
@@ -1817,10 +1820,10 @@ mod tests {
 
 		#[test]
 		fn test_round_negative_to_one_decimal() {
-			let mut scalar = Quant::from_str("-123.456").unwrap();
-			scalar.round(1);
+			let mut quant = Quant::from_str("-123.456").unwrap();
+			quant.round(1);
 			assert_eq!(
-				scalar.to_string(),
+				quant.to_string(),
 				"-123.5",
 				"Expected -123.5 after rounding to 1 decimal"
 			);
@@ -1828,10 +1831,10 @@ mod tests {
 
 		#[test]
 		fn test_round_large_number() {
-			let mut scalar = Quant::from_str("123456789.987654321").unwrap();
-			scalar.round(6);
+			let mut quant = Quant::from_str("123456789.987654321").unwrap();
+			quant.round(6);
 			assert_eq!(
-				scalar.to_string(),
+				quant.to_string(),
 				"123,456,789.987654",
 				"Expected 123,456,789.987654 after rounding to 6 decimals"
 			);
@@ -1839,10 +1842,10 @@ mod tests {
 
 		#[test]
 		fn test_round_zero() {
-			let mut scalar = Quant::from_str("0.0005").unwrap();
-			scalar.round(3);
+			let mut quant = Quant::from_str("0.0005").unwrap();
+			quant.round(3);
 			assert_eq!(
-				scalar.to_string(),
+				quant.to_string(),
 				"0.000",
 				"Expected bankers rounding to bring us back to zero"
 			);
@@ -1850,10 +1853,10 @@ mod tests {
 
 		#[test]
 		fn test_round_small_number_down() {
-			let mut scalar = Quant::from_str("0.00049").unwrap();
-			scalar.round(3);
+			let mut quant = Quant::from_str("0.00049").unwrap();
+			quant.round(3);
 			assert_eq!(
-				scalar.to_string(),
+				quant.to_string(),
 				"0.000",
 				"Expected 0.000 after rounding down small value"
 			);
