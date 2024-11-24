@@ -100,6 +100,7 @@ enum Directive {
 
 	Lots, // open lots report
 	Rgl,  // realized gains/losses report
+	Ugl,  // unrealized gains/losses report
 }
 
 fn main() -> Result<(), Error> {
@@ -112,7 +113,7 @@ fn main() -> Result<(), Error> {
 	let mut parser = parsing::parser::Parser::new();
 	let parse_result = parser.parse(&args.file, &mut ledger)?;
 
-	// For the open lots report, the end date is an as-of date, so we "rewind"
+	// For some filtered reports, the end date is an as-of date, so we "rewind"
 	// history if that report is selected by ignoring lot actions after it.
 	// Everything before it is always computed. In other cases, the portfolio
 	// always sees everything, but other date filters may change what we show
@@ -124,7 +125,7 @@ fn main() -> Result<(), Error> {
 		&parse_result,
 		&begin,
 		&end,
-		args.command == Directive::Lots,
+		args.command == Directive::Lots || args.command == Directive::Ugl,
 	)?;
 
 	match args.command {
@@ -154,7 +155,6 @@ fn main() -> Result<(), Error> {
 			}
 		},
 		Directive::Lots => {
-			// TODO: Add customization for this directive.
 			let ordered_lots = PortfolioReporter::new(
 				portfolio.take_lots(vec![LotFilter::Status(LotStatus::Open)]),
 				parse_result.max_precision_by_currency,
@@ -163,13 +163,23 @@ fn main() -> Result<(), Error> {
 			ordered_lots.print_open_lots(&end.min(today()))
 		},
 		Directive::Rgl => {
-			// TODO: Add customization for this directive.
 			let ordered_lots = PortfolioReporter::new(
 				portfolio.take_lots(vec![LotFilter::HasSales(true)]),
 				parse_result.max_precision_by_currency,
 				args.precision.unwrap_or(u32::MAX),
 			);
-			ordered_lots.print_profit_loss(&begin, &end.min(today()))
+			ordered_lots.print_realized_gain_loss(&begin, &end.min(today()))
+		},
+		Directive::Ugl => {
+			let ordered_lots = PortfolioReporter::new(
+				portfolio.take_lots(vec![LotFilter::Status(LotStatus::Open)]),
+				parse_result.max_precision_by_currency,
+				args.precision.unwrap_or(u32::MAX),
+			);
+			ordered_lots.print_unrealized_gain_loss(
+				&end.min(today()),
+				&ledger.exchange_rates,
+			)
 		},
 	}
 

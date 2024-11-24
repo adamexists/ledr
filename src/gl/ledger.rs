@@ -121,7 +121,7 @@ impl Ledger {
 		amount: Amount,
 		inline_conversion: Option<Amount>,
 		cost_basis: Option<Amount>,
-		lot_name: Option<String>, // TODO: Too many linked params here now
+		lot_name: Option<String>,
 	) -> Result<(), Error> {
 		if self.pending_entry.is_none() {
 			bail!("Orphaned entry detail")
@@ -285,9 +285,8 @@ impl Ledger {
 			.iter_mut()
 			.flat_map(|e| e.details())
 			.for_each(|d| {
-				if let Some(rate) = self
-					.exchange_rates
-					.get_latest_rate(d.currency(), currency.clone())
+				if let Some(rate) =
+					self.exchange_rates.get_latest_rate(d.currency(), &currency)
 				{
 					d.convert_to(&currency, rate)
 				}

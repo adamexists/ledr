@@ -118,6 +118,35 @@ impl ExchangeRates {
 		Ok(())
 	}
 
+	pub fn infer_equal_amts(
+		&mut self,
+		date: Date,
+		a: Amount,
+		b: Amount,
+	) -> Result<(), Error> {
+		let entry = self.rate_graphs.entry(date).or_insert_with(Graph::new);
+
+		if let Some(existing_rate) =
+			entry.get_direct_rate(&a.currency, &b.currency, true)
+		{
+			let rate = b.value / a.value;
+			// Check if the inferred rate is within 1% of the
+			// declared rate. If it is, ignore this inferred rate
+			// and use the declared; if not, then the declared rate
+			// is too far from reality on this date to be accurate,
+			// so we should error to stop tabulation here.
+			if !within_tolerance_of(Scalar::new(1, 2), existing_rate, rate) {
+				bail!("Inferred exchange rate deviates >1% from declared rate")
+			}
+
+			return Ok(());
+		}
+
+		entry.add_rate(&a, &b, true)?;
+
+		Ok(())
+	}
+
 	/// Finalizes the rates into a resolved form for efficient lookups,
 	/// after which the methods to retrieve rates from here will work.
 	/// Prior to that, they will not work. Finalization can fail if any
@@ -157,13 +186,9 @@ impl ExchangeRates {
 	}
 
 	/// Retrieves the most recent rate available, if any
-	pub fn get_latest_rate(
-		&self,
-		base: String,
-		quote: String,
-	) -> Option<Scalar> {
+	pub fn get_latest_rate(&self, base: &str, quote: &str) -> Option<Scalar> {
 		self.resolved_rates
-			.get(&(base, quote))
+			.get(&(base.to_string(), quote.to_string()))
 			.and_then(|rates| rates.first().map(|(_, rate)| *rate))
 	}
 }
@@ -300,10 +325,7 @@ mod tests {
 			.finalize(&Date::min(), &Date::max())
 			.expect("finalize failed");
 
-		assert_eq!(
-			exchange_rates.get_latest_rate(base.clone(), quote.clone()),
-			Some(rate2)
-		);
+		assert_eq!(exchange_rates.get_latest_rate(&base, &quote), Some(rate2));
 
 		let date3 = Date::from_str("2024-11-3").unwrap();
 		let rate3 = Scalar::new(115, 2);
@@ -315,6 +337,6 @@ mod tests {
 			.finalize(&Date::min(), &Date::max())
 			.expect("finalize failed");
 
-		assert_eq!(exchange_rates.get_latest_rate(base, quote), Some(rate3));
+		assert_eq!(exchange_rates.get_latest_rate(&base, &quote), Some(rate3));
 	}
 }

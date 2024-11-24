@@ -17,6 +17,8 @@
 use std::fs;
 use std::process::Command;
 
+// TODO: Automate picking up these file lists.
+
 #[test]
 fn test_integration_standard() {
 	let test_cases = vec![
@@ -51,6 +53,7 @@ fn test_integration_collapse_currency() {
 		("3_in.txt", "3_out.txt"),
 		("4_in.txt", "4_out.txt"),
 		("5_in.txt", "5_out.txt"),
+		("6_in.txt", "6_out.txt"),
 	];
 
 	execute("collapse", test_cases, true, "tb", vec!["-c", "USD"])
@@ -103,10 +106,17 @@ fn test_integration_bounded_range() {
 }
 
 #[test]
-fn test_integration_lots() {
+fn test_integration_rgl() {
 	let test_cases = vec![("1_in.txt", "1_out.txt")];
 
-	execute("lots", test_cases, true, "rgl", vec![])
+	execute("rgl", test_cases, true, "rgl", vec!["-e", "2024-11-23"])
+}
+
+#[test]
+fn test_integration_ugl() {
+	let test_cases = vec![("1_in.txt", "1_out.txt")];
+
+	execute("ugl", test_cases, true, "ugl", vec!["-e", "2024-11-23"])
 }
 
 fn execute(

@@ -176,7 +176,7 @@ impl Graph {
 		}
 
 		let mut visited = HashMap::new();
-		let mut queue = vec![(base.to_string(), 1f64)];
+		let mut queue = vec![(quote.to_string(), 1f64)];
 
 		while let Some((current_currency, current_rate)) = queue.pop() {
 			if let Some(node) = self.nodes.get(&current_currency) {
@@ -184,7 +184,7 @@ impl Graph {
 					if !visited.contains_key(neighbor) {
 						let new_rate = current_rate * rate.ratio.as_f64();
 
-						if neighbor == quote {
+						if neighbor == base {
 							return Some(Scalar::from_f64(new_rate));
 						}
 
@@ -299,7 +299,7 @@ mod tests {
 		let d = Amount::new(Scalar::new(1, 0), "GBP");
 		graph.add_rate(&c, &d, true).expect("Could not add rate");
 
-		let expected_output = Scalar::new(10, 0);
+		let expected_output = Scalar::new(1, 1);
 		let result = graph.convert("USD", "GBP");
 
 		assert_eq!(result.unwrap(), expected_output);
@@ -317,7 +317,7 @@ mod tests {
 		let d = Amount::new(Scalar::new(1, 0), "GBP");
 		graph.add_rate(&c, &d, true).expect("Could not add rate");
 
-		let expected_output = Scalar::new(1, 1);
+		let expected_output = Scalar::new(10, 0);
 		let result = graph.convert("GBP", "USD");
 
 		assert_eq!(result.unwrap(), expected_output);
@@ -370,7 +370,7 @@ mod tests {
 		graph.add_rate(&g, &h, true).expect("Could not add rate");
 
 		let expected_output = Scalar::new(300, 0);
-		let result = graph.convert("USD", "INR");
+		let result = graph.convert("INR", "USD");
 		let direct_rate = graph.get_direct_rate("GBP", "EUR", false).unwrap();
 
 		assert_eq!(result.unwrap(), expected_output);

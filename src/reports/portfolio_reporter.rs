@@ -13,6 +13,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
+use crate::gl::exchange_rate::ExchangeRates;
 use crate::investment::lot::Lot;
 use crate::reports::table::Table;
 use crate::util::amount::Amount;
@@ -119,15 +120,15 @@ impl PortfolioReporter {
 		table.print();
 	}
 
-	/// Prints a profit and loss report.
-	pub fn print_profit_loss(&self, begin: &Date, end: &Date) {
+	/// Prints a realized gain/loss report.
+	pub fn print_realized_gain_loss(&self, begin: &Date, end: &Date) {
 		if self.lots.is_empty() {
 			println!("No applicable lots");
 			return;
 		}
 
 		let mut table = Table::new(10);
-		table.right_align(vec![0, 1, 2, 3, 5, 6, 7, 8, 9]);
+		table.right_align(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
 		table.add_header(vec![
 			"ID",
@@ -142,12 +143,10 @@ impl PortfolioReporter {
 			"Total G/L",
 		]);
 
-		// TODO: Rework this heinously nested thing.
 		table.add_separator();
 
-		// currency -> total cost, proceeds, total g/l
-		let mut totals: HashMap<String, (Amount, Amount, Amount)> =
-			HashMap::new();
+		// currency -> total g/l
+		let mut totals: HashMap<String, Amount> = HashMap::new();
 		let mut has_any_unknown_gl = false;
 
 		for l in &self.lots {
@@ -157,28 +156,9 @@ impl PortfolioReporter {
 				}
 
 				let cb = l.commodity.cost_basis();
-				totals
-					.entry(cb.clone().currency)
-					.or_insert((
-						Amount::zero(&cb.currency),
-						Amount::zero(&cb.currency),
-						Amount::zero(&cb.currency),
-					))
-					.0
-					.value += cb.value;
 
 				let (pr, unit_gl, total_gl) = if let Some(pr) = &s.unit_proceeds
 				{
-					totals
-						.entry(pr.currency.clone())
-						.or_insert((
-							Amount::zero(&pr.currency),
-							Amount::zero(&pr.currency),
-							Amount::zero(&pr.currency),
-						))
-						.1
-						.value += pr.value;
-
 					if cb.currency == pr.currency {
 						let unit_gl =
 							Amount::new(pr.value - cb.value, &cb.currency);
@@ -190,12 +170,7 @@ impl PortfolioReporter {
 
 						totals
 							.entry(unit_gl.clone().currency)
-							.or_insert((
-								Amount::zero(&total_gl.currency),
-								Amount::zero(&total_gl.currency),
-								Amount::zero(&total_gl.currency),
-							))
-							.2
+							.or_insert(Amount::zero(&total_gl.currency))
 							.value += total_gl.value;
 
 						(
@@ -228,10 +203,10 @@ impl PortfolioReporter {
 			}
 		}
 
-		table.add_partial_separator(vec![6, 7, 9]);
+		table.add_partial_separator(vec![9]);
 
 		// One line of totals per currency. TODO needs to be deterministically sorted.
-		for (_, (total_cost, total_proceeds, total_gl)) in totals {
+		for total_gl in totals.values() {
 			let final_total_gl = if has_any_unknown_gl {
 				"UNK".to_string()
 			} else {
@@ -245,10 +220,94 @@ impl PortfolioReporter {
 				"",
 				"",
 				"",
-				&total_cost.to_string(),
-				&total_proceeds.to_string(),
+				"",
+				"",
 				"",
 				&final_total_gl,
+			]);
+		}
+
+		table.print()
+	}
+
+	/// Prints an unrealized gain/loss report.
+	pub fn print_unrealized_gain_loss(
+		&self,
+		as_of: &Date,
+		exchange_rates: &ExchangeRates,
+	) {
+		if self.lots.is_empty() {
+			println!("No applicable lots");
+			return;
+		}
+
+		let mut table = Table::new(9);
+		table.right_align(vec![0, 1, 2, 3, 4, 5, 6, 7, 8]);
+
+		table.add_header(vec![
+			"ID",
+			"Opened",
+			"Held",
+			"Asset",
+			"Qty",
+			"Cost",
+			"Latest",
+			"Unit UG/L",
+			"Total UG/L",
+		]);
+
+		// TODO: Rework this heinously nested thing.
+		table.add_separator();
+
+		// currency -> total g/l
+		let mut totals: HashMap<String, Amount> = HashMap::new();
+
+		for l in &self.lots {
+			let cb = l.commodity.cost_basis();
+			totals
+				.entry(cb.clone().currency)
+				.or_insert(Amount::zero(&cb.currency))
+				.value += cb.value;
+
+			let current = match exchange_rates
+				.get_latest_rate(l.commodity.symbol(), &cb.currency)
+			{
+				Some(r) => Amount::new(r, &cb.currency),
+				None => cb.clone(),
+			};
+
+			let unit_gl = Amount::new(current.value - cb.value, &cb.currency);
+
+			let total_gl =
+				Amount::new(unit_gl.value * l.quantity, &cb.currency);
+
+			table.add_row(vec![
+				&l.id,
+				&l.acquisition_date.to_string(),
+				&l.time_held(as_of).to_string(),
+				l.commodity.symbol(),
+				&l.quantity.to_string(),
+				&l.commodity.cost_basis().to_string(),
+				&current.to_string(),
+				&unit_gl.to_string(),
+				&total_gl.to_string(),
+			])
+		}
+
+		table.add_partial_separator(vec![8]);
+
+		// One line of totals per currency. TODO needs to be deterministically sorted.
+		for (_, total_gl) in totals {
+			table.add_row(vec![
+				"",
+				"",
+				"",
+				"",
+				"",
+				"",
+				"",
+				"",
+				&total_gl.to_string(),
 			]);
 		}
 

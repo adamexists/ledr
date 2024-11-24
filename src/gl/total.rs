@@ -69,7 +69,7 @@ impl Total {
 				// Update each total along the hierarchy
 				*current
 					.amounts
-					.entry(detail.currency())
+					.entry(detail.currency().to_string())
 					.or_insert_with(Scalar::zero) += detail.value();
 
 				current = current
@@ -86,7 +86,7 @@ impl Total {
 			// Update the leaf node with the final amount
 			*current
 				.amounts
-				.entry(detail.currency())
+				.entry(detail.currency().to_string())
 				.or_insert_with(Scalar::zero) += detail.value();
 		}
 	}

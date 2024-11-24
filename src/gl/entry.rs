@@ -278,11 +278,10 @@ impl Entry {
 		));
 
 		// This implies an exchange rate between the currencies
-		rates.infer(
+		rates.infer_equal_amts(
 			self.date,
-			&currency1,
-			&currency2,
-			(amount2 / amount1).abs(),
+			Amount::new(amount1, &currency1),
+			Amount::new(-amount2, &currency2),
 		)?;
 
 		Ok(())
@@ -329,7 +328,7 @@ impl Entry {
 				if let Some(detail) = detail_opt {
 					sale.add_unit_proceeds(Amount::new(
 						detail.value() / sale.quantity,
-						&detail.currency(),
+						detail.currency(),
 					));
 				}
 			}
@@ -355,7 +354,7 @@ impl Entry {
 		let mut balances_by_currency: HashMap<String, Scalar> = HashMap::new();
 		for detail in system_details {
 			*balances_by_currency
-				.entry(detail.currency().clone())
+				.entry(detail.currency().to_string())
 				.or_insert(Scalar::zero()) += detail.value();
 		}
 
@@ -450,9 +449,8 @@ impl Detail {
 		&self.account
 	}
 
-	// TDOO: This is a bit redundant, maybe.
-	pub fn currency(&self) -> String {
-		self.amount.currency.clone()
+	pub fn currency(&self) -> &String {
+		&self.amount.currency
 	}
 
 	pub fn value(&self) -> Scalar {
