@@ -168,7 +168,11 @@ impl Quant {
 	}
 
 	pub fn negate(&mut self) {
-		self.is_negative = !self.is_negative;
+		if self.numerator == 0 {
+			self.is_negative = false;
+		} else {
+			self.is_negative = !self.is_negative;
+		}
 	}
 
 	/// Reduces the underlying fraction as much as possible while still
@@ -354,8 +358,7 @@ impl Mul for Quant {
 	fn mul(self, rhs: Self) -> Self::Output {
 		let numerator = self.numerator * rhs.numerator;
 		let denominator = self.denominator * rhs.denominator;
-		let is_negative =
-			numerator != 0 && (self.is_negative ^ rhs.is_negative);
+		let is_negative = numerator > 0 && (self.is_negative ^ rhs.is_negative);
 
 		let mut out = Self {
 			numerator,
@@ -382,8 +385,7 @@ impl Mul<i128> for Quant {
 		let abs_rhs = rhs.unsigned_abs();
 
 		let numerator = self.numerator * abs_rhs;
-		let is_negative =
-			numerator != 0 && (self.is_negative ^ is_rhs_negative);
+		let is_negative = numerator > 0 && (self.is_negative ^ is_rhs_negative);
 
 		let mut out = Self {
 			numerator,
@@ -415,7 +417,7 @@ impl Div for Quant {
 
 		let numerator = self.numerator * rhs.denominator;
 		let denominator = self.denominator * rhs.numerator;
-		let is_negative = numerator != 0 && self.is_negative ^ rhs.is_negative;
+		let is_negative = numerator > 0 && (self.is_negative ^ rhs.is_negative);
 
 		let mut out = Self {
 			numerator,

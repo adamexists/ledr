@@ -66,7 +66,6 @@ struct Cli {
 	currency: Option<String>,
 
 	/// Hides equity accounts from reports
-	/// TODO: Add test data examples to validate this one.
 	#[arg(short = 'E', long)]
 	ignore_equity: bool,
 
@@ -75,17 +74,14 @@ struct Cli {
 	depth: Option<usize>,
 
 	/// Negates all currency values
-	/// TODO: Add test data examples to validate this one.
 	#[arg(short, long)]
 	invert: bool,
 
 	/// Ignore directives designed to catch and correct bad input data
-	/// TODO: Add test data examples to validate this one.
 	#[arg(long)]
 	lenient: bool,
 
 	/// Maximum amount of decimal places to show for any amounts
-	/// TODO: Add test data examples to validate this one.
 	#[arg(short, long)]
 	precision: Option<u32>,
 }
@@ -155,32 +151,32 @@ fn main() -> Result<(), Error> {
 			}
 		},
 		Directive::Lots => {
-			let ordered_lots = PortfolioReporter::new(
+			let reporter = PortfolioReporter::new(
 				portfolio.take_lots(vec![LotFilter::Status(LotStatus::Open)]),
 				parse_result.max_precision_by_currency,
 				args.precision.unwrap_or(u32::MAX),
 			);
-			ordered_lots.print_open_lots(&end.min(today()))
+			reporter.print_open_lots(&end.min(today()))
 		},
 		Directive::Rgl => {
-			let ordered_lots = PortfolioReporter::new(
+			let reporter = PortfolioReporter::new(
 				portfolio.take_lots(vec![LotFilter::HasSales(true)]),
 				parse_result.max_precision_by_currency,
 				args.precision.unwrap_or(u32::MAX),
 			);
-			ordered_lots.print_realized_gain_loss(
+			reporter.print_realized_gain_loss(
 				&begin,
 				&end.min(today()),
 				&ledger.exchange_rates,
 			)
 		},
 		Directive::Ugl => {
-			let ordered_lots = PortfolioReporter::new(
+			let reporter = PortfolioReporter::new(
 				portfolio.take_lots(vec![LotFilter::Status(LotStatus::Open)]),
 				parse_result.max_precision_by_currency,
 				args.precision.unwrap_or(u32::MAX),
 			);
-			ordered_lots.print_unrealized_gain_loss(
+			reporter.print_unrealized_gain_loss(
 				&end.min(today()),
 				&ledger.exchange_rates,
 			)
@@ -240,10 +236,10 @@ fn financial_statement(
 		top_levels.push("Equity");
 	}
 	totals.filter_top_level(top_levels);
-	let mut ordered_totals = StatementReporter::from_total(totals);
+	let mut reporter = StatementReporter::from_total(totals);
 
-	ordered_totals.sort_canonical();
-	ordered_totals.print_ledger_format(args.depth);
+	reporter.sort_canonical();
+	reporter.print_ledger_format(args.depth);
 	Ok(())
 }
 

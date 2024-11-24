@@ -35,7 +35,7 @@ use std::collections::HashMap;
 /// There is a top level total which will always have amount values of 0 in each
 /// currency, because double-entry accounting, and account string "". The only
 /// time the top level will be nonzero is after filtering.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Total {
 	pub account: String,
 	pub amounts: HashMap<String, Quant>, // currency -> balance held

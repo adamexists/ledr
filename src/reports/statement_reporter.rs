@@ -13,13 +13,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-
 use crate::gl::ledger::VALID_PREFIXES;
 use crate::gl::total::Total;
 use crate::util::quant::Quant;
 
 /// When using this to display something, you should instantiate it, then sort
 /// it, then display it. Filters should be handled in the Total struct.
+#[derive(Debug)]
 pub struct StatementReporter {
 	account: String,
 	amounts: Vec<(String, Quant)>, // currency -> balance held
@@ -178,8 +178,13 @@ impl StatementReporter {
 
 		let (_, subtotal) = self.subtotals.first().unwrap();
 
-		// Recursively get the name from the next node and concatenate
-		format!("{}:{}", self.account, subtotal.condensed_name())
+		// Recursively get the name from the next node and concatenate.
+		// The if block handles a special case where the top-line can condense.
+		if self.account.is_empty() {
+			format!("{}", subtotal.condensed_name())
+		} else {
+			format!("{}:{}", self.account, subtotal.condensed_name())
+		}
 	}
 
 	// ------------
@@ -212,7 +217,7 @@ impl StatementReporter {
 		max_width + 1
 	}
 
-	/// Prints the contents of the ordered_totals like the classic Ledger does.
+	/// Prints the contents of the reporter like the classic Ledger does.
 	/// We only expand the subtotals up to the max_depth, if present.
 	pub fn print_ledger_format(&self, max_depth: Option<usize>) {
 		if self.amounts.is_empty() {
@@ -246,7 +251,7 @@ impl StatementReporter {
 		let can_condense = self.can_condense_with_all_below();
 
 		// Iterate over amounts and print each one (except top-level)
-		if indent != 0 {
+		if indent != 0 || can_condense {
 			let amts = &mut self.amounts.iter().peekable();
 
 			let account_name = if can_condense {

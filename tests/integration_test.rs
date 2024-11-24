@@ -115,6 +115,18 @@ fn test_integration_ugl() {
 	execute("ugl", test_cases, true, "ugl", vec!["-e", "2024-11-23"]);
 }
 
+#[test]
+fn test_integration_misc_flags() {
+	let test_cases = collect_test_cases("miscflags");
+	execute(
+		"miscflags",
+		test_cases,
+		true,
+		"bs",
+		vec!["-i", "-E", "--lenient", "-p", "2"],
+	);
+}
+
 fn execute(
 	subfolder: &str,
 	test_cases: Vec<(String, String)>,
