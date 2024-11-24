@@ -16,26 +16,32 @@
 use anyhow::{bail, Error};
 use std::cmp::Ordering;
 use std::fmt;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 use std::iter::Sum;
 use std::ops::{
 	Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign,
 };
 
-/// A general-purpose number, capable of holding an exact decimal value, backed
-/// by integer arithmetic and not float arithmetic, precise for all numbers that
-/// can be reflected as a fraction of i128s.
-#[derive(Clone, Copy, Debug, Default, Hash)]
+/// A general-purpose rational number backed by a fraction of u128s. It is
+/// precise for all numbers that can be reflected in that format, which vastly
+/// exceeds the requirements of any human accounting. The reason it was
+/// designed so rigorously is primarily due to exchange rate calculations in
+/// potentially long chains of exchange rates, which is of interest to, for
+/// example, traders of cryptocurrency or complex foreign exchange use cases.
+///
+/// Automatically simplifies its underlying fractional representation.
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Scalar {
 	numerator: u128,
 	denominator: u128,
 
-	/// Because the negative sign can get eaten if another term is zero,
-	/// we separately store whether we're negative here.
+	/// Is always zero if the numerator is zero, else is intuitive.
 	is_negative: bool,
 
 	/// How many decimal places to render when asked to print. Will round with
 	/// banker's rounding when underlying precision exceeds what is requested.
+	///
+	/// Has no effect on the underlying fraction.
 	render_precision: u32,
 }
 
@@ -49,12 +55,13 @@ impl Scalar {
 		}
 	}
 
-	// TODO: Rework this new method.
-	pub fn new(number: i128, render_precision: u32) -> Self {
+	// TODO: This format of new() method is carried over from a prior Scalar
+	//  implementation, and it should be overhauled at some point.
+	pub fn new(number: i128, resolution: u32) -> Self {
 		let mut out = Self {
 			numerator: number.unsigned_abs(),
-			denominator: 10u128.pow(render_precision),
-			render_precision,
+			denominator: 10u128.pow(resolution),
+			render_precision: resolution,
 			is_negative: number < 0,
 		};
 		out.reduce();
@@ -87,7 +94,7 @@ impl Scalar {
 	}
 
 	pub fn from_str(amount: &str) -> Result<Self, Error> {
-		// Remove commas from the string
+		// Ignore commas; the user can use them if they want
 		let sanitized: String = amount.chars().filter(|c| *c != ',').collect();
 
 		// Check for negative sign explicitly and removing it for parsing
@@ -121,10 +128,10 @@ impl Scalar {
 		Ok(out)
 	}
 
-	/// Tells the Scalar to render with this many decimal places, rounding if
-	/// necessary using Banker's rounding (round to nearest, ties to even).
+	/// Modifies the underlying fraction to represent a value that is rounded
+	/// off to the given number of decimal places when rendered as a decimal.
+	/// Uses Banker's rounding (rounds to nearest, ties to even).
 	pub fn round(&mut self, resolution: u32) {
-		// Scale the denominator to match the desired precision
 		let scale = 10u128.pow(resolution);
 		let scaled_numerator = self.numerator * scale;
 		let quotient = scaled_numerator / self.denominator;
@@ -140,13 +147,11 @@ impl Scalar {
 			quotient
 		};
 
-		// Update the scalar to reflect the rounded value.
 		self.numerator = rounded_quotient;
 		self.denominator = scale;
 		self.render_precision = resolution;
 		self.is_negative = self.is_negative && rounded_quotient > 0;
 
-		// Ensure the fraction is reduced.
 		self.reduce();
 	}
 
@@ -157,7 +162,7 @@ impl Scalar {
 	pub fn abs(&self) -> Self {
 		Self {
 			is_negative: false,
-			..self.clone()
+			..*self
 		}
 	}
 
@@ -165,12 +170,17 @@ impl Scalar {
 		self.is_negative = !self.is_negative;
 	}
 
+	/// Reduces the underlying fraction as much as possible while still
+	/// representing the same value. Has no user-visible effect; we call this
+	/// after every operation that effects the fraction, to guard against
+	/// overflow when dealing with high-precision values.
 	fn reduce(&mut self) {
 		let gcd = Self::gcd(self.numerator, self.denominator);
 		self.numerator /= gcd;
 		self.denominator /= gcd;
 	}
 
+	/// Implementation of Euclid's algorithm for greatest common divisor
 	fn gcd(mut a: u128, mut b: u128) -> u128 {
 		while b != 0 {
 			let temp = b;
@@ -181,17 +191,14 @@ impl Scalar {
 	}
 }
 
-// TODO: Make this implementation a little cleaner.
 impl fmt::Display for Scalar {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let mut numerator = self.numerator;
 		let denominator = self.denominator;
 
-		// Integer part of the number
 		let integer_part = numerator / denominator;
 		numerator %= denominator;
 
-		// Compute fractional part with precision
 		let mut fraction_str = String::new();
 		let mut remainder = numerator;
 		let precision = f.precision().unwrap_or(self.render_precision as usize);
@@ -201,7 +208,7 @@ impl fmt::Display for Scalar {
 			remainder %= denominator;
 			fraction_str.push(std::char::from_digit(digit as u32, 10).unwrap());
 			if remainder == 0 {
-				break; // Stop if remainder is zero
+				break;
 			}
 		}
 
@@ -211,14 +218,12 @@ impl fmt::Display for Scalar {
 			fraction_str.push_str(&"0".repeat(zeros_to_add));
 		}
 
-		// Remove trailing zeros in the fraction
 		while fraction_str.ends_with('0')
 			&& fraction_str.len() > self.render_precision as usize
 		{
 			fraction_str.pop();
 		}
 
-		// Format integer part with commas
 		let mut int_str = integer_part.to_string();
 		let mut i = int_str.len() as isize - 3;
 		while i > 0 {
@@ -226,14 +231,12 @@ impl fmt::Display for Scalar {
 			i -= 3;
 		}
 
-		// Combine parts
 		let formatted = if fraction_str.is_empty() {
 			int_str
 		} else {
 			format!("{}.{}", int_str, fraction_str)
 		};
 
-		// Add sign if the original number is negative
 		if self.is_negative {
 			write!(f, "-{}", formatted)
 		} else {
@@ -291,7 +294,7 @@ impl Add for Scalar {
 
 impl AddAssign for Scalar {
 	fn add_assign(&mut self, rhs: Self) {
-		*self = *self + rhs; // TODO: Redo this for efficiency.
+		*self = *self + rhs;
 	}
 }
 
@@ -374,7 +377,7 @@ impl Mul for Scalar {
 
 impl MulAssign for Scalar {
 	fn mul_assign(&mut self, rhs: Self) {
-		*self = *self * rhs; // TODO: Redo this for efficiency.
+		*self = *self * rhs;
 	}
 }
 
@@ -434,7 +437,7 @@ impl Div for Scalar {
 
 impl DivAssign for Scalar {
 	fn div_assign(&mut self, rhs: Self) {
-		*self = *self / rhs; // TODO: Redo this for efficiency.
+		*self = *self / rhs;
 	}
 }
 
@@ -578,6 +581,15 @@ impl Ord for Scalar {
 				}
 			},
 		}
+	}
+}
+
+impl Hash for Scalar {
+	fn hash<H: Hasher>(&self, state: &mut H) {
+		self.numerator.hash(state);
+		self.denominator.hash(state);
+		self.is_negative.hash(state);
+		// `render_precision` intentionally excluded from the hash.
 	}
 }
 
@@ -954,7 +966,6 @@ mod tests {
 	mod math {
 		use super::*;
 
-		// Test addition
 		mod add {
 			use super::*;
 
@@ -1465,10 +1476,10 @@ mod tests {
 
 		#[test]
 		fn test_scalar_greater_equal() {
-			let a = Scalar::from_frac(5, 2); // 2.5
-			let b = Scalar::from_frac(10, 4); // 2.5
-			let c = Scalar::from_frac(6, 2); // 3.0
-			let d = Scalar::from_frac(4, 2); // 2.0
+			let a = Scalar::from_frac(5, 2);
+			let b = Scalar::from_frac(10, 4);
+			let c = Scalar::from_frac(6, 2);
+			let d = Scalar::from_frac(4, 2);
 
 			assert!(a >= b, "Expected a >= b (both equal to 2.5)");
 			assert!(c >= a, "Expected c >= a (3.0 >= 2.5)");
@@ -1477,10 +1488,10 @@ mod tests {
 
 		#[test]
 		fn test_scalar_less_equal() {
-			let a = Scalar::from_frac(5, 2); // 2.5
-			let b = Scalar::from_frac(10, 4); // 2.5
-			let c = Scalar::from_frac(6, 2); // 3.0
-			let d = Scalar::from_frac(4, 2); // 2.0
+			let a = Scalar::from_frac(5, 2);
+			let b = Scalar::from_frac(10, 4);
+			let c = Scalar::from_frac(6, 2);
+			let d = Scalar::from_frac(4, 2);
 
 			assert!(a <= b, "Expected a <= b (both equal to 2.5)");
 			assert!(a <= c, "Expected a <= c (2.5 <= 3.0)");
@@ -1489,7 +1500,7 @@ mod tests {
 
 		#[test]
 		fn test_scalar_equal_i128() {
-			let scalar = Scalar::from_frac(10, 2); // 5.0
+			let scalar = Scalar::from_frac(10, 2);
 			let int_value: i128 = 5;
 
 			assert!(scalar == int_value, "Expected scalar == int_value");
@@ -1497,15 +1508,15 @@ mod tests {
 
 		#[test]
 		fn test_i128_equal_scalar() {
-			let scalar = Scalar::from_frac(10, 2); // 5.0
+			let scalar = Scalar::from_frac(10, 2);
 			let int_value: i128 = 5;
 
-			assert!(int_value == scalar, "Expected int_value == scalar");
+			assert_eq!(int_value, scalar, "Expected int_value == scalar");
 		}
 
 		#[test]
 		fn test_scalar_partial_ord_i128() {
-			let scalar = Scalar::from_frac(15, 2); // 7.5
+			let scalar = Scalar::from_frac(15, 2);
 			let int_value: i128 = 8;
 
 			assert!(scalar < int_value, "Expected scalar < int_value");
@@ -1514,9 +1525,9 @@ mod tests {
 
 		#[test]
 		fn test_scalar_partial_ord() {
-			let a = Scalar::from_frac(7, 2); // 3.5
-			let b = Scalar::from_frac(9, 2); // 4.5
-			let c = Scalar::from_frac(14, 4); // 3.5
+			let a = Scalar::from_frac(7, 2);
+			let b = Scalar::from_frac(9, 2);
+			let c = Scalar::from_frac(14, 4);
 
 			assert!(a < b, "Expected a < b (3.5 < 4.5)");
 			assert!(b > a, "Expected b > a (4.5 > 3.5)");
@@ -1525,10 +1536,10 @@ mod tests {
 
 		#[test]
 		fn test_scalar_negative_ordering() {
-			let a = Scalar::from_frac(-5, 2); // -2.5
-			let b = Scalar::from_frac(-10, 4); // -2.5
-			let c = Scalar::from_frac(-6, 2); // -3.0
-			let d = Scalar::from_frac(-4, 2); // -2.0
+			let a = Scalar::from_frac(-5, 2);
+			let b = Scalar::from_frac(-10, 4);
+			let c = Scalar::from_frac(-6, 2);
+			let d = Scalar::from_frac(-4, 2);
 
 			assert!(a >= b, "Expected a >= b (both equal to -2.5)");
 			assert!(a > c, "Expected a > c (-2.5 > -3.0)");
@@ -1537,10 +1548,10 @@ mod tests {
 
 		#[test]
 		fn test_scalar_abs_ordering() {
-			let a = Scalar::from_frac(-5, 2); // -2.5
-			let b = Scalar::from_frac(5, 2); // 2.5
-			let c = Scalar::from_frac(-6, 2); // -3.0
-			let d = Scalar::from_frac(6, 2); // 3.0
+			let a = Scalar::from_frac(-5, 2);
+			let b = Scalar::from_frac(5, 2);
+			let c = Scalar::from_frac(-6, 2);
+			let d = Scalar::from_frac(6, 2);
 
 			assert_eq!(a.abs(), b.abs(), "Expected |a| == |b|");
 			assert_eq!(c.abs(), d.abs(), "Expected |c| == |d|");
@@ -1634,7 +1645,7 @@ mod tests {
 
 		#[test]
 		fn test_round_to_integer_no_string() {
-			let mut scalar = Scalar::from_frac(123456, 1000); // 123.456
+			let mut scalar = Scalar::from_frac(123456, 1000);
 			scalar.round(0);
 			assert_eq!(
 				scalar.numerator, 123,
@@ -1649,7 +1660,7 @@ mod tests {
 
 		#[test]
 		fn test_round_to_two_decimals_no_string() {
-			let mut scalar = Scalar::from_frac(123456, 1000); // 123.456
+			let mut scalar = Scalar::from_frac(123456, 1000);
 			scalar.round(2);
 			assert_eq!(
 				scalar.numerator, 6173,
@@ -1664,7 +1675,7 @@ mod tests {
 
 		#[test]
 		fn test_bankers_rounding_down_no_string() {
-			let mut scalar = Scalar::from_frac(123445, 1000); // 123.445
+			let mut scalar = Scalar::from_frac(123445, 1000);
 			scalar.round(2);
 			assert_eq!(
 				scalar.numerator, 3086,
@@ -1679,7 +1690,7 @@ mod tests {
 
 		#[test]
 		fn test_bankers_rounding_up_no_string() {
-			let mut scalar = Scalar::from_frac(123455, 1000); // 123.455
+			let mut scalar = Scalar::from_frac(123455, 1000);
 			scalar.round(2);
 			assert_eq!(
 				scalar.numerator, 6173,
@@ -1694,7 +1705,7 @@ mod tests {
 
 		#[test]
 		fn test_round_negative_to_integer_no_string() {
-			let mut scalar = Scalar::from_frac(-123456, 1000); // -123.456
+			let mut scalar = Scalar::from_frac(-123456, 1000);
 			scalar.round(0);
 			assert_eq!(
 				scalar.numerator, 123,
@@ -1709,7 +1720,7 @@ mod tests {
 
 		#[test]
 		fn test_round_negative_to_one_decimal_no_string() {
-			let mut scalar = Scalar::from_frac(-123456, 1000); // -123.456
+			let mut scalar = Scalar::from_frac(-123456, 1000);
 			scalar.round(1);
 			assert_eq!(
 				scalar.numerator, 247,
@@ -1724,7 +1735,7 @@ mod tests {
 
 		#[test]
 		fn test_round_large_number_no_string() {
-			let mut scalar = Scalar::from_frac(123456789987654321, 1000000000); // 123456789.987654321
+			let mut scalar = Scalar::from_frac(123456789987654321, 1000000000);
 			scalar.round(6);
 			assert_eq!(
 				scalar.numerator, 61728394993827,
@@ -1739,7 +1750,7 @@ mod tests {
 
 		#[test]
 		fn test_round_small_number_up_no_string() {
-			let mut scalar = Scalar::from_frac(-5, 10000); // 0.0005
+			let mut scalar = Scalar::from_frac(-5, 10000);
 			scalar.round(3);
 			assert_eq!(
 				scalar.numerator, 0,
@@ -1754,7 +1765,7 @@ mod tests {
 
 		#[test]
 		fn test_round_small_number_down_no_string() {
-			let mut scalar = Scalar::from_frac(49, 100000); // 0.00049
+			let mut scalar = Scalar::from_frac(49, 100000);
 			scalar.round(3);
 			assert_eq!(
 				scalar.numerator, 0,
