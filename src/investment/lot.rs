@@ -16,7 +16,7 @@
 use crate::investment::commodity::Commodity;
 use crate::investment::sale::Sale;
 use crate::util::date::{Date, Duration};
-use crate::util::scalar::Scalar;
+use crate::util::quant::Quant;
 use std::cmp::Ordering;
 
 /// A discrete batch of a commodity that was purchased or acquired in a single
@@ -37,7 +37,7 @@ pub struct Lot {
 	pub account: String,
 
 	pub commodity: Commodity,
-	pub quantity: Scalar, // always in positive terms; can't go negative
+	pub quantity: Quant, // always in positive terms; can't go negative
 
 	pub acquisition_date: Date,
 

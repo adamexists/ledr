@@ -17,7 +17,7 @@
 use crate::util::amount::Amount;
 use crate::util::date::Date;
 use crate::util::graph::Graph;
-use crate::util::scalar::Scalar;
+use crate::util::quant::Quant;
 use anyhow::{bail, Error};
 use std::collections::HashMap;
 
@@ -28,7 +28,7 @@ pub struct ExchangeRates {
 
 	/// Preprocessed data for constant-time lookups, only available after
 	/// finalize() has been called on this
-	resolved_rates: HashMap<(String, String), Vec<(Date, Scalar)>>,
+	resolved_rates: HashMap<(String, String), Vec<(Date, Quant)>>,
 }
 
 impl ExchangeRates {
@@ -40,7 +40,7 @@ impl ExchangeRates {
 		date: Date,
 		base: String,
 		quote: String,
-		rate: Scalar,
+		rate: Quant,
 	) -> Result<(), Error> {
 		if base == quote {
 			bail!("Cannot exchange a currency for itself")
@@ -53,7 +53,7 @@ impl ExchangeRates {
 			return Ok(());
 		}
 
-		let b_amt = Amount::new(Scalar::from_i128(1), &base);
+		let b_amt = Amount::new(Quant::from_i128(1), &base);
 		let q_amt = Amount::new(rate, &quote);
 
 		// We do not need to check for existing inferred rates, because
@@ -79,7 +79,7 @@ impl ExchangeRates {
 		date: Date,
 		base: &String,
 		quote: &String,
-		rate: Scalar,
+		rate: Quant,
 	) -> Result<(), Error> {
 		if base == quote {
 			bail!("Cannot exchange a currency for itself")
@@ -92,7 +92,7 @@ impl ExchangeRates {
 			return Ok(());
 		}
 
-		let b_amt = Amount::new(Scalar::from_i128(1), base);
+		let b_amt = Amount::new(Quant::from_i128(1), base);
 		let q_amt = Amount::new(rate, quote);
 
 		// We do not need to check for existing inferred rates, because
@@ -106,7 +106,7 @@ impl ExchangeRates {
 			// and use the declared; if not, then the declared rate
 			// is too far from reality on this date to be accurate,
 			// so we should error to stop tabulation here.
-			if !within_tolerance_of(Scalar::new(1, 2), existing_rate, rate) {
+			if !within_tolerance_of(Quant::new(1, 2), existing_rate, rate) {
 				bail!("Inferred exchange rate deviates >1% from declared rate")
 			}
 
@@ -135,7 +135,7 @@ impl ExchangeRates {
 			// and use the declared; if not, then the declared rate
 			// is too far from reality on this date to be accurate,
 			// so we should error to stop tabulation here.
-			if !within_tolerance_of(Scalar::new(1, 2), existing_rate, rate) {
+			if !within_tolerance_of(Quant::new(1, 2), existing_rate, rate) {
 				bail!("Inferred exchange rate deviates >1% from declared rate")
 			}
 
@@ -186,7 +186,7 @@ impl ExchangeRates {
 	}
 
 	/// Retrieves the most recent rate available, if any
-	pub fn get_latest_rate(&self, base: &str, quote: &str) -> Option<Scalar> {
+	pub fn get_latest_rate(&self, base: &str, quote: &str) -> Option<Quant> {
 		self.resolved_rates
 			.get(&(base.to_string(), quote.to_string()))
 			.and_then(|rates| rates.first().map(|(_, rate)| *rate))
@@ -195,7 +195,7 @@ impl ExchangeRates {
 
 /// Returns true iff a and b are within the given tolerance of each other.
 /// The given tolerance should be in the form of a percent, i.e. 1% == 0.01.
-fn within_tolerance_of(tolerance: Scalar, a: Scalar, b: Scalar) -> bool {
+fn within_tolerance_of(tolerance: Quant, a: Quant, b: Quant) -> bool {
 	(a - b).abs() <= tolerance * a.abs().max(b.abs())
 }
 
@@ -203,7 +203,7 @@ fn within_tolerance_of(tolerance: Scalar, a: Scalar, b: Scalar) -> bool {
 mod tests {
 	use super::*;
 	use crate::util::date::Date;
-	use crate::util::scalar::Scalar;
+	use crate::util::quant::Quant;
 
 	fn setup_exchange_rates() -> ExchangeRates {
 		ExchangeRates::default()
@@ -215,7 +215,7 @@ mod tests {
 		let date = Date::from_str("2024-1-1").unwrap();
 		let base = "USD".to_string();
 		let quote = "EUR".to_string();
-		let rate = Scalar::new(11, 1);
+		let rate = Quant::new(11, 1);
 
 		assert!(exchange_rates
 			.declare(date, base.clone(), quote.clone(), rate)
@@ -223,7 +223,7 @@ mod tests {
 
 		let date2 = Date::from_str("2024-11-2").unwrap();
 		assert!(exchange_rates
-			.declare(date2, base, quote, Scalar::new(12, 1))
+			.declare(date2, base, quote, Quant::new(12, 1))
 			.is_ok());
 	}
 
@@ -232,7 +232,7 @@ mod tests {
 		let mut exchange_rates = setup_exchange_rates();
 		let date = Date::from_str("2024-1-1").unwrap();
 		let base = "USD".to_string();
-		let rate = Scalar::new(11, 1);
+		let rate = Quant::new(11, 1);
 
 		assert!(exchange_rates
 			.declare(date, base.clone(), base.clone(), rate)
@@ -240,7 +240,7 @@ mod tests {
 
 		let date2 = Date::from_str("2024-11-2").unwrap();
 		assert!(exchange_rates
-			.declare(date2, base.clone(), base, Scalar::new(9, 1))
+			.declare(date2, base.clone(), base, Quant::new(9, 1))
 			.is_err());
 	}
 
@@ -252,10 +252,10 @@ mod tests {
 		let quote = "EUR".to_string();
 
 		assert!(exchange_rates
-			.declare(date, base.clone(), quote.clone(), Scalar::new(0, 0))
+			.declare(date, base.clone(), quote.clone(), Quant::new(0, 0))
 			.is_ok());
 		assert!(exchange_rates
-			.declare(date, base, quote, Scalar::new(-1, 1))
+			.declare(date, base, quote, Quant::new(-1, 1))
 			.is_ok());
 	}
 
@@ -265,20 +265,20 @@ mod tests {
 		let date = Date::from_str("2024-11-01").unwrap();
 		let base = "USD".to_string();
 		let quote = "EUR".to_string();
-		let declared_rate = Scalar::new(11, 1);
+		let declared_rate = Quant::new(11, 1);
 
 		exchange_rates
 			.declare(date, base.clone(), quote.clone(), declared_rate)
 			.unwrap();
 
-		let inferred_rate = Scalar::new(1099, 3);
+		let inferred_rate = Quant::new(1099, 3);
 		assert!(exchange_rates
 			.infer(date, &base, &quote, inferred_rate)
 			.is_ok());
 
 		let date2 = Date::from_str("2024-11-02").unwrap();
 		assert!(exchange_rates
-			.infer(date2, &base, &quote, Scalar::new(111, 2))
+			.infer(date2, &base, &quote, Quant::new(111, 2))
 			.is_ok());
 	}
 
@@ -288,19 +288,19 @@ mod tests {
 		let date = Date::from_str("2024-11-1").unwrap();
 		let base = "USD".to_string();
 		let quote = "EUR".to_string();
-		let declared_rate = Scalar::new(11, 1);
+		let declared_rate = Quant::new(11, 1);
 
 		exchange_rates
 			.declare(date, base.clone(), quote.clone(), declared_rate)
 			.unwrap();
 
-		let inferred_rate = Scalar::new(112, 2);
+		let inferred_rate = Quant::new(112, 2);
 		assert!(exchange_rates
 			.infer(date, &base, &quote, inferred_rate)
 			.is_err());
 
 		assert!(exchange_rates
-			.infer(date, &base, &quote, Scalar::new(97, 2))
+			.infer(date, &base, &quote, Quant::new(97, 2))
 			.is_err());
 	}
 
@@ -311,8 +311,8 @@ mod tests {
 		let date2 = Date::from_str("2024-11-02").unwrap();
 		let base = "USD".to_string();
 		let quote = "EUR".to_string();
-		let rate1 = Scalar::new(11, 1);
-		let rate2 = Scalar::new(12, 1);
+		let rate1 = Quant::new(11, 1);
+		let rate2 = Quant::new(12, 1);
 
 		exchange_rates
 			.declare(date1, base.clone(), quote.clone(), rate1)
@@ -328,7 +328,7 @@ mod tests {
 		assert_eq!(exchange_rates.get_latest_rate(&base, &quote), Some(rate2));
 
 		let date3 = Date::from_str("2024-11-3").unwrap();
-		let rate3 = Scalar::new(115, 2);
+		let rate3 = Quant::new(115, 2);
 		exchange_rates
 			.declare(date3, base.clone(), quote.clone(), rate3)
 			.unwrap();

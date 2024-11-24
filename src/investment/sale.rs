@@ -15,12 +15,12 @@
  */
 use crate::util::amount::Amount;
 use crate::util::date::{Date, Duration};
-use crate::util::scalar::Scalar;
+use crate::util::quant::Quant;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd)]
 pub struct Sale {
 	pub date: Date,
-	pub quantity: Scalar,
+	pub quantity: Quant,
 
 	/// Always conceptually exists, but only present if known;
 	/// not necessarily the currency of acquisition

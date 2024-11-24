@@ -13,7 +13,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-use crate::util::scalar::Scalar;
+use crate::util::quant::Quant;
 use std::fmt;
 use std::ops::Neg;
 
@@ -21,13 +21,13 @@ use std::ops::Neg;
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct Amount {
 	pub currency: String,
-	pub value: Scalar,
+	pub value: Quant,
 }
 
 impl Amount {
 	// TODO: Clean up calls to this and make currency take a ref,
 	//  to make the call sites cleaner on average.
-	pub fn new(value: Scalar, currency: &str) -> Self {
+	pub fn new(value: Quant, currency: &str) -> Self {
 		Self {
 			value,
 			currency: currency.to_string(),
@@ -36,12 +36,12 @@ impl Amount {
 
 	pub fn zero(currency: &str) -> Self {
 		Self {
-			value: Scalar::zero(),
+			value: Quant::zero(),
 			currency: currency.to_string(),
 		}
 	}
 
-	pub fn convert_to(&mut self, currency: &str, rate: Scalar) {
+	pub fn convert_to(&mut self, currency: &str, rate: Quant) {
 		self.currency = currency.to_owned();
 		self.value *= rate;
 	}

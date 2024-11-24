@@ -18,7 +18,7 @@ use crate::investment::lot::Lot;
 use crate::reports::table::Table;
 use crate::util::amount::Amount;
 use crate::util::date::Date;
-use crate::util::scalar::Scalar;
+use crate::util::quant::Quant;
 use std::collections::HashMap;
 
 /// Struct for handling and displaying an ordered list of lots, for reports
@@ -317,7 +317,7 @@ impl PortfolioReporter {
 }
 
 fn round_to_precision(
-	value: &mut Scalar,
+	value: &mut Quant,
 	symbol: &str,
 	max_precision_by_currency: &HashMap<String, u32>,
 	max_precision: u32,

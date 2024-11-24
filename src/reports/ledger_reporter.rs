@@ -16,7 +16,7 @@
 
 use crate::gl::entry::Entry;
 use crate::reports::table::Table;
-use crate::util::scalar::Scalar;
+use crate::util::quant::Quant;
 
 pub struct LedgerReporter {
 	entries: Vec<Entry>,
@@ -38,7 +38,7 @@ impl LedgerReporter {
 		let mut table = Table::new(5);
 		table.right_align(vec![2]);
 
-		let mut total = Scalar::zero();
+		let mut total = Quant::zero();
 		for entry in &self.entries {
 			let net = entry.net_for_account(account, currency);
 			total += net;

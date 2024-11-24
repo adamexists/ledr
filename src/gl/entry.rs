@@ -17,7 +17,7 @@ use crate::gl::exchange_rate::ExchangeRates;
 use crate::investment::action::{Action, Direction};
 use crate::util::amount::Amount;
 use crate::util::date::Date;
-use crate::util::scalar::Scalar;
+use crate::util::quant::Quant;
 use anyhow::{bail, Error};
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -32,8 +32,8 @@ pub struct Entry {
 	details: Vec<Detail>,
 
 	virtual_detail: Option<String>,
-	totals: HashMap<String, Scalar>, // Currency -> Amount
-	reference: Option<String>,       // optional string, not inspected
+	totals: HashMap<String, Quant>, // Currency -> Amount
+	reference: Option<String>,      // optional string, not inspected
 
 	/// Lot actions related to this entry. Don't read until finalization,
 	/// because we need to associate proceeds with sales, if known, which
@@ -66,7 +66,7 @@ impl Entry {
 		*self
 			.totals
 			.entry(amount.currency.clone())
-			.or_insert(Scalar::zero()) += amount.value;
+			.or_insert(Quant::zero()) += amount.value;
 
 		self.details.push(Detail::new(account, amount, false));
 
@@ -85,7 +85,7 @@ impl Entry {
 		*self
 			.totals
 			.entry(amount.currency.clone())
-			.or_insert(Scalar::zero()) += amount.value;
+			.or_insert(Quant::zero()) += amount.value;
 
 		self.details.push(Detail::new(account, amount, true));
 
@@ -159,8 +159,8 @@ impl Entry {
 		&self,
 		account: &String,
 		currency: &String,
-	) -> Scalar {
-		self.details.iter().fold(Scalar::zero(), |mut acc, x| {
+	) -> Quant {
+		self.details.iter().fold(Quant::zero(), |mut acc, x| {
 			if x.account.contains(account) && x.amount.currency == *currency {
 				acc += x.amount.value
 			}
@@ -260,7 +260,7 @@ impl Entry {
 	/// they are cardinally opposed.
 	fn multiline_implicit_currency_conversion(
 		&mut self,
-		imbalances: &mut Vec<(String, Scalar)>,
+		imbalances: &mut Vec<(String, Quant)>,
 		rates: &mut ExchangeRates,
 	) -> Result<(), Error> {
 		let (currency1, amount1) = imbalances.remove(0);
@@ -351,11 +351,11 @@ impl Entry {
 			.cloned()
 			.collect();
 
-		let mut balances_by_currency: HashMap<String, Scalar> = HashMap::new();
+		let mut balances_by_currency: HashMap<String, Quant> = HashMap::new();
 		for detail in system_details {
 			*balances_by_currency
 				.entry(detail.currency().to_string())
-				.or_insert(Scalar::zero()) += detail.value();
+				.or_insert(Quant::zero()) += detail.value();
 		}
 
 		let reduced_details: Vec<Detail> = balances_by_currency
@@ -378,7 +378,7 @@ impl Entry {
 	}
 
 	/// Find all currencies that don't sum to zero, with amounts
-	fn get_imbalances(&self) -> Vec<(String, Scalar)> {
+	fn get_imbalances(&self) -> Vec<(String, Quant)> {
 		self.totals
 			.iter()
 			.filter_map(
@@ -453,11 +453,11 @@ impl Detail {
 		&self.amount.currency
 	}
 
-	pub fn value(&self) -> Scalar {
+	pub fn value(&self) -> Quant {
 		self.amount.value
 	}
 
-	pub fn convert_to(&mut self, currency: &str, rate: Scalar) {
+	pub fn convert_to(&mut self, currency: &str, rate: Quant) {
 		self.amount.convert_to(currency, rate);
 	}
 }
@@ -467,7 +467,7 @@ mod tests {
 	use super::*;
 	use crate::gl::exchange_rate::ExchangeRates;
 	use crate::util::date::Date;
-	use crate::util::scalar::Scalar;
+	use crate::util::quant::Quant;
 
 	fn create_entry() -> Entry {
 		Entry::new(
@@ -486,17 +486,15 @@ mod tests {
 	#[test]
 	fn test_add_detail() {
 		let mut entry = create_entry();
-		let result = entry.add_detail(
-			"Assets:Cash",
-			Amount::new(Scalar::new(1000, 1), "USD"),
-		);
+		let result = entry
+			.add_detail("Assets:Cash", Amount::new(Quant::new(1000, 1), "USD"));
 
 		assert!(result.is_ok());
 		assert_eq!(entry.details.len(), 1);
 
 		let detail = &entry.details[0];
 		assert_eq!(detail.account, "Assets:Cash");
-		assert_eq!(detail.amount.value, Scalar::new(1000, 1));
+		assert_eq!(detail.amount.value, Quant::new(1000, 1));
 		assert_eq!(detail.amount.currency, "USD");
 	}
 
@@ -504,7 +502,7 @@ mod tests {
 	fn test_add_detail_empty_account() {
 		let mut entry = create_entry();
 		let result =
-			entry.add_detail("", Amount::new(Scalar::new(1000, 1), "USD"));
+			entry.add_detail("", Amount::new(Quant::new(1000, 1), "USD"));
 
 		assert!(result.is_err());
 	}
@@ -513,28 +511,28 @@ mod tests {
 	fn test_add_detail_multiple_same_currency() {
 		let mut entry = create_entry();
 		entry
-			.add_detail("Assets:Cash", Amount::new(Scalar::new(1000, 1), "USD"))
+			.add_detail("Assets:Cash", Amount::new(Quant::new(1000, 1), "USD"))
 			.unwrap();
 		entry
 			.add_detail(
 				"Assets:Savings",
-				Amount::new(Scalar::new(500, 1), "USD"),
+				Amount::new(Quant::new(500, 1), "USD"),
 			)
 			.unwrap();
 
-		assert_eq!(entry.totals.get("USD"), Some(&Scalar::new(1500, 1)));
+		assert_eq!(entry.totals.get("USD"), Some(&Quant::new(1500, 1)));
 	}
 
 	#[test]
 	fn test_finalize_unbalanced_entry() {
 		let mut entry = create_entry();
 		entry
-			.add_detail("Assets:Cash", Amount::new(Scalar::new(1000, 1), "USD"))
+			.add_detail("Assets:Cash", Amount::new(Quant::new(1000, 1), "USD"))
 			.unwrap();
 		entry
 			.add_detail(
 				"Expenses:Food",
-				Amount::new(Scalar::new(-500, 1), "USD"),
+				Amount::new(Quant::new(-500, 1), "USD"),
 			)
 			.unwrap();
 
@@ -549,12 +547,12 @@ mod tests {
 	fn test_finalize_balanced_entry() {
 		let mut entry = create_entry();
 		entry
-			.add_detail("Assets:Cash", Amount::new(Scalar::new(1000, 1), "USD"))
+			.add_detail("Assets:Cash", Amount::new(Quant::new(1000, 1), "USD"))
 			.unwrap();
 		entry
 			.add_detail(
 				"Expenses:Food",
-				Amount::new(Scalar::new(-1000, 1), "USD"),
+				Amount::new(Quant::new(-1000, 1), "USD"),
 			)
 			.unwrap();
 
@@ -598,12 +596,12 @@ mod tests {
 	fn test_multiline_implicit_currency_conversion() {
 		let mut entry = create_entry();
 		entry
-			.add_detail("Assets:Cash", Amount::new(Scalar::new(1000, 1), "USD"))
+			.add_detail("Assets:Cash", Amount::new(Quant::new(1000, 1), "USD"))
 			.unwrap();
 		entry
 			.add_detail(
 				"Assets:Bank",
-				Amount::new(Scalar::new(-2000, 1), &"EUR".to_string()),
+				Amount::new(Quant::new(-2000, 1), &"EUR".to_string()),
 			)
 			.unwrap();
 
@@ -625,12 +623,12 @@ mod tests {
 		entry.details = vec![
 			Detail::new(
 				"account1",
-				Amount::new(Scalar::from_i128(100), "USD"),
+				Amount::new(Quant::from_i128(100), "USD"),
 				true,
 			),
 			Detail::new(
 				"account1",
-				Amount::new(Scalar::from_i128(-100), "USD"),
+				Amount::new(Quant::from_i128(-100), "USD"),
 				true,
 			),
 		];
@@ -647,12 +645,12 @@ mod tests {
 		entry.details = vec![
 			Detail::new(
 				"account1",
-				Amount::new(Scalar::from_i128(100), "USD"),
+				Amount::new(Quant::from_i128(100), "USD"),
 				true,
 			),
 			Detail::new(
 				"account1",
-				Amount::new(Scalar::from_i128(50), "USD"),
+				Amount::new(Quant::from_i128(50), "USD"),
 				true,
 			),
 		];
@@ -672,12 +670,12 @@ mod tests {
 		entry.details = vec![
 			Detail::new(
 				"account1",
-				Amount::new(Scalar::from_i128(100), "USD"),
+				Amount::new(Quant::from_i128(100), "USD"),
 				false,
 			),
 			Detail::new(
 				"account1",
-				Amount::new(Scalar::from_i128(-100), "USD"),
+				Amount::new(Quant::from_i128(-100), "USD"),
 				true,
 			),
 		];
@@ -694,12 +692,12 @@ mod tests {
 		entry.details = vec![
 			Detail::new(
 				"account1",
-				Amount::new(Scalar::from_i128(100), "USD"),
+				Amount::new(Quant::from_i128(100), "USD"),
 				true,
 			),
 			Detail::new(
 				"account2",
-				Amount::new(Scalar::from_i128(200), "USD"),
+				Amount::new(Quant::from_i128(200), "USD"),
 				true,
 			),
 		];
@@ -721,17 +719,17 @@ mod tests {
 		entry.details = vec![
 			Detail::new(
 				"account1",
-				Amount::new(Scalar::from_i128(100), "USD"),
+				Amount::new(Quant::from_i128(100), "USD"),
 				true,
 			),
 			Detail::new(
 				"account1",
-				Amount::new(Scalar::from_i128(200), "EUR"),
+				Amount::new(Quant::from_i128(200), "EUR"),
 				true,
 			),
 			Detail::new(
 				"account1",
-				Amount::new(Scalar::from_i128(-200), "GBP"),
+				Amount::new(Quant::from_i128(-200), "GBP"),
 				true,
 			),
 		];

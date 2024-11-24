@@ -16,7 +16,7 @@
 use crate::investment::commodity::Commodity;
 use crate::util::amount::Amount;
 use crate::util::date::Date;
-use crate::util::scalar::Scalar;
+use crate::util::quant::Quant;
 use anyhow::{bail, Error};
 use std::cmp::Ordering;
 
@@ -30,7 +30,7 @@ pub struct Action {
 
 	pub account: String,
 	pub commodity: Commodity,
-	pub quantity: Scalar,
+	pub quantity: Quant,
 
 	/// User-defined string, used to force specific lot matching
 	pub lot_name: Option<String>,

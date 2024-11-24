@@ -327,7 +327,7 @@ impl Ledger {
 mod tests {
 	use super::*;
 	use crate::util::date::Date;
-	use crate::util::scalar::Scalar;
+	use crate::util::quant::Quant;
 
 	#[test]
 	fn test_ledger_initialization() {
@@ -389,7 +389,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				Amount::new(Scalar::new(1000, 1), "USD",),
+				Amount::new(Quant::new(1000, 1), "USD",),
 				None,
 				None,
 				None,
@@ -410,7 +410,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				Amount::new(Scalar::new(1000, 1), "EUR",),
+				Amount::new(Quant::new(1000, 1), "EUR",),
 				None,
 				None,
 				None
@@ -429,7 +429,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Liabilities:Loan".to_string(),
-				Amount::new(Scalar::new(1000, 1), "USD",),
+				Amount::new(Quant::new(1000, 1), "USD",),
 				None,
 				None,
 				None
@@ -444,7 +444,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				Amount::new(Scalar::new(1000, 1), "USD",),
+				Amount::new(Quant::new(1000, 1), "USD",),
 				None,
 				None,
 				None
@@ -505,7 +505,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				Amount::new(Scalar::new(500, 1), "EUR",),
+				Amount::new(Quant::new(500, 1), "EUR",),
 				None,
 				None,
 				None
@@ -525,7 +525,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Liabilities:Loan".to_string(),
-				Amount::new(Scalar::new(1000, 1), "USD",),
+				Amount::new(Quant::new(1000, 1), "USD",),
 				None,
 				None,
 				None

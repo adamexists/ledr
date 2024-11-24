@@ -31,7 +31,7 @@ use std::ops::{
 ///
 /// Automatically simplifies its underlying fractional representation.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Scalar {
+pub struct Quant {
 	numerator: u128,
 	denominator: u128,
 
@@ -45,7 +45,7 @@ pub struct Scalar {
 	render_precision: u32,
 }
 
-impl Scalar {
+impl Quant {
 	pub fn zero() -> Self {
 		Self {
 			numerator: 0,
@@ -55,7 +55,7 @@ impl Scalar {
 		}
 	}
 
-	// TODO: This format of new() method is carried over from a prior Scalar
+	// TODO: This format of new() method is carried over from a prior Quant
 	//  implementation, and it should be overhauled at some point.
 	pub fn new(number: i128, resolution: u32) -> Self {
 		let mut out = Self {
@@ -191,7 +191,7 @@ impl Scalar {
 	}
 }
 
-impl fmt::Display for Scalar {
+impl fmt::Display for Quant {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let mut numerator = self.numerator;
 		let denominator = self.denominator;
@@ -249,7 +249,7 @@ impl fmt::Display for Scalar {
 // -- BOILERPLATE --
 // -----------------
 
-impl Add for Scalar {
+impl Add for Quant {
 	type Output = Self;
 
 	fn add(self, rhs: Self) -> Self::Output {
@@ -292,19 +292,19 @@ impl Add for Scalar {
 	}
 }
 
-impl AddAssign for Scalar {
+impl AddAssign for Quant {
 	fn add_assign(&mut self, rhs: Self) {
 		*self = *self + rhs;
 	}
 }
 
-impl Sum for Scalar {
+impl Sum for Quant {
 	fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-		iter.fold(Scalar::zero(), |acc, scalar| acc + scalar)
+		iter.fold(Quant::zero(), |acc, scalar| acc + scalar)
 	}
 }
 
-impl Sub for Scalar {
+impl Sub for Quant {
 	type Output = Self;
 
 	fn sub(self, rhs: Self) -> Self::Output {
@@ -347,13 +347,13 @@ impl Sub for Scalar {
 	}
 }
 
-impl SubAssign for Scalar {
+impl SubAssign for Quant {
 	fn sub_assign(&mut self, rhs: Self) {
 		*self = *self - rhs;
 	}
 }
 
-impl Mul for Scalar {
+impl Mul for Quant {
 	type Output = Self;
 
 	fn mul(self, rhs: Self) -> Self::Output {
@@ -375,13 +375,13 @@ impl Mul for Scalar {
 	}
 }
 
-impl MulAssign for Scalar {
+impl MulAssign for Quant {
 	fn mul_assign(&mut self, rhs: Self) {
 		*self = *self * rhs;
 	}
 }
 
-impl Mul<i128> for Scalar {
+impl Mul<i128> for Quant {
 	type Output = Self;
 
 	fn mul(self, rhs: i128) -> Self::Output {
@@ -403,16 +403,16 @@ impl Mul<i128> for Scalar {
 	}
 }
 
-impl Mul<Scalar> for i128 {
-	type Output = Scalar;
+impl Mul<Quant> for i128 {
+	type Output = Quant;
 
-	fn mul(self, rhs: Scalar) -> Self::Output {
-		let a = Scalar::from_i128(self);
+	fn mul(self, rhs: Quant) -> Self::Output {
+		let a = Quant::from_i128(self);
 		a * rhs
 	}
 }
 
-impl Div for Scalar {
+impl Div for Quant {
 	type Output = Self;
 
 	fn div(self, rhs: Self) -> Self::Output {
@@ -435,31 +435,31 @@ impl Div for Scalar {
 	}
 }
 
-impl DivAssign for Scalar {
+impl DivAssign for Quant {
 	fn div_assign(&mut self, rhs: Self) {
 		*self = *self / rhs;
 	}
 }
 
-impl Div<i128> for Scalar {
+impl Div<i128> for Quant {
 	type Output = Self;
 
 	fn div(self, rhs: i128) -> Self::Output {
-		let a = Scalar::from_i128(rhs);
+		let a = Quant::from_i128(rhs);
 		self / a
 	}
 }
 
-impl Div<Scalar> for i128 {
-	type Output = Scalar;
+impl Div<Quant> for i128 {
+	type Output = Quant;
 
-	fn div(self, rhs: Scalar) -> Self::Output {
-		let a = Scalar::from_i128(self);
+	fn div(self, rhs: Quant) -> Self::Output {
+		let a = Quant::from_i128(self);
 		rhs / a
 	}
 }
 
-impl Neg for Scalar {
+impl Neg for Quant {
 	type Output = Self;
 
 	fn neg(self) -> Self::Output {
@@ -470,7 +470,7 @@ impl Neg for Scalar {
 	}
 }
 
-impl PartialEq<i128> for Scalar {
+impl PartialEq<i128> for Quant {
 	fn eq(&self, &other: &i128) -> bool {
 		let is_other_negative = other < 0;
 		let abs_other = other.unsigned_abs();
@@ -480,15 +480,15 @@ impl PartialEq<i128> for Scalar {
 	}
 }
 
-impl PartialEq for Scalar {
+impl PartialEq for Quant {
 	fn eq(&self, other: &Self) -> bool {
 		self.numerator * other.denominator == other.numerator * self.denominator
 			&& self.is_negative == other.is_negative
 	}
 }
 
-impl PartialEq<Scalar> for i128 {
-	fn eq(&self, other: &Scalar) -> bool {
+impl PartialEq<Quant> for i128 {
+	fn eq(&self, other: &Quant) -> bool {
 		if (*self < 0) ^ other.is_negative {
 			return false;
 		};
@@ -497,15 +497,15 @@ impl PartialEq<Scalar> for i128 {
 	}
 }
 
-impl Eq for Scalar {}
+impl Eq for Quant {}
 
-impl PartialOrd for Scalar {
+impl PartialOrd for Quant {
 	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
 		Some(self.cmp(other))
 	}
 }
 
-impl PartialOrd<i128> for Scalar {
+impl PartialOrd<i128> for Quant {
 	fn partial_cmp(&self, other: &i128) -> Option<Ordering> {
 		if self.numerator == 0 && *other == 0 {
 			return Some(Ordering::Equal);
@@ -535,8 +535,8 @@ impl PartialOrd<i128> for Scalar {
 	}
 }
 
-impl PartialOrd<Scalar> for i128 {
-	fn partial_cmp(&self, other: &Scalar) -> Option<Ordering> {
+impl PartialOrd<Quant> for i128 {
+	fn partial_cmp(&self, other: &Quant) -> Option<Ordering> {
 		if *self == 0 && other.numerator == 0 {
 			return Some(Ordering::Equal);
 		}
@@ -561,7 +561,7 @@ impl PartialOrd<Scalar> for i128 {
 	}
 }
 
-impl Ord for Scalar {
+impl Ord for Quant {
 	fn cmp(&self, other: &Self) -> Ordering {
 		if self.numerator == 0 && other.numerator == 0 {
 			return Ordering::Equal;
@@ -584,7 +584,7 @@ impl Ord for Scalar {
 	}
 }
 
-impl Hash for Scalar {
+impl Hash for Quant {
 	fn hash<H: Hasher>(&self, state: &mut H) {
 		self.numerator.hash(state);
 		self.denominator.hash(state);
@@ -605,7 +605,7 @@ mod tests {
 
 			#[test]
 			fn test_positive_number_with_precision() {
-				let scalar = Scalar::new(123, 2);
+				let scalar = Quant::new(123, 2);
 				assert_eq!(scalar.numerator, 123);
 				assert_eq!(scalar.denominator, 100);
 				assert_eq!(scalar.render_precision, 2);
@@ -613,7 +613,7 @@ mod tests {
 
 			#[test]
 			fn test_zero_number() {
-				let scalar = Scalar::new(0, 5);
+				let scalar = Quant::new(0, 5);
 				assert_eq!(scalar.numerator, 0);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 5);
@@ -622,7 +622,7 @@ mod tests {
 
 			#[test]
 			fn test_negative_number_with_precision() {
-				let scalar = Scalar::new(-456, 3);
+				let scalar = Quant::new(-456, 3);
 				assert_eq!(scalar.numerator, 57);
 				assert_eq!(scalar.denominator, 125);
 				assert_eq!(scalar.render_precision, 3);
@@ -631,7 +631,7 @@ mod tests {
 
 			#[test]
 			fn test_high_precision() {
-				let scalar = Scalar::new(789, 10);
+				let scalar = Quant::new(789, 10);
 				assert_eq!(scalar.numerator, 789);
 				assert_eq!(scalar.denominator, 10u128.pow(10));
 				assert_eq!(scalar.render_precision, 10);
@@ -640,7 +640,7 @@ mod tests {
 
 			#[test]
 			fn test_no_precision() {
-				let scalar = Scalar::new(42, 0);
+				let scalar = Quant::new(42, 0);
 				assert_eq!(scalar.numerator, 42);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 0);
@@ -649,7 +649,7 @@ mod tests {
 
 			#[test]
 			fn test_large_number_and_precision() {
-				let scalar = Scalar::new(987654321, 15);
+				let scalar = Quant::new(987654321, 15);
 				assert_eq!(scalar.numerator, 987654321);
 				assert_eq!(scalar.denominator, 10u128.pow(15));
 				assert_eq!(scalar.render_precision, 15);
@@ -658,7 +658,7 @@ mod tests {
 
 			#[test]
 			fn test_number_reduction() {
-				let scalar = Scalar::new(200, 2);
+				let scalar = Quant::new(200, 2);
 				assert_eq!(scalar.numerator, 2);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 2);
@@ -666,7 +666,7 @@ mod tests {
 
 			#[test]
 			fn test_negative_number_reduction() {
-				let scalar = Scalar::new(-200, 2);
+				let scalar = Quant::new(-200, 2);
 				assert_eq!(scalar.numerator, 2);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 2);
@@ -675,7 +675,7 @@ mod tests {
 
 			#[test]
 			fn test_zero_precision_with_large_number() {
-				let scalar = Scalar::new(999999999999999999, 0);
+				let scalar = Quant::new(999999999999999999, 0);
 				assert_eq!(scalar.numerator, 999999999999999999);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 0);
@@ -684,7 +684,7 @@ mod tests {
 
 			#[test]
 			fn test_large_negative_number_with_high_precision() {
-				let scalar = Scalar::new(-123456789, 18);
+				let scalar = Quant::new(-123456789, 18);
 				assert_eq!(scalar.numerator, 123456789);
 				assert_eq!(scalar.denominator, 10u128.pow(18));
 				assert_eq!(scalar.render_precision, 18);
@@ -698,12 +698,12 @@ mod tests {
 			#[test]
 			#[should_panic(expected = "Denominator cannot be zero")]
 			fn test_zero_denominator() {
-				Scalar::from_frac(1, 0);
+				Quant::from_frac(1, 0);
 			}
 
 			#[test]
 			fn test_positive_fraction() {
-				let scalar = Scalar::from_frac(6, 8);
+				let scalar = Quant::from_frac(6, 8);
 				assert_eq!(scalar.numerator, 3);
 				assert_eq!(scalar.denominator, 4);
 				assert_eq!(scalar.render_precision, 0);
@@ -712,7 +712,7 @@ mod tests {
 
 			#[test]
 			fn test_negative_fraction_numerator() {
-				let scalar = Scalar::from_frac(-6, 8);
+				let scalar = Quant::from_frac(-6, 8);
 				assert_eq!(scalar.numerator, 3);
 				assert_eq!(scalar.denominator, 4);
 				assert_eq!(scalar.render_precision, 0);
@@ -721,7 +721,7 @@ mod tests {
 
 			#[test]
 			fn test_negative_fraction_denominator() {
-				let scalar = Scalar::from_frac(6, -8);
+				let scalar = Quant::from_frac(6, -8);
 				assert_eq!(scalar.numerator, 3);
 				assert_eq!(scalar.denominator, 4);
 				assert_eq!(scalar.render_precision, 0);
@@ -730,7 +730,7 @@ mod tests {
 
 			#[test]
 			fn test_negative_fraction_both() {
-				let scalar = Scalar::from_frac(-6, -8);
+				let scalar = Quant::from_frac(-6, -8);
 				assert_eq!(scalar.numerator, 3);
 				assert_eq!(scalar.denominator, 4);
 				assert_eq!(scalar.render_precision, 0);
@@ -739,7 +739,7 @@ mod tests {
 
 			#[test]
 			fn test_reduction_to_lowest_terms() {
-				let scalar = Scalar::from_frac(100, 400);
+				let scalar = Quant::from_frac(100, 400);
 				assert_eq!(scalar.numerator, 1);
 				assert_eq!(scalar.denominator, 4);
 				assert_eq!(scalar.render_precision, 0);
@@ -748,10 +748,8 @@ mod tests {
 
 			#[test]
 			fn test_large_numbers() {
-				let scalar = Scalar::from_frac(
-					12345678901234567890,
-					9876543210987654321,
-				);
+				let scalar =
+					Quant::from_frac(12345678901234567890, 9876543210987654321);
 				assert_eq!(scalar.numerator, 137174210);
 				assert_eq!(scalar.denominator, 109739369);
 				assert_eq!(scalar.render_precision, 0);
@@ -760,7 +758,7 @@ mod tests {
 
 			#[test]
 			fn test_one_as_denominator() {
-				let scalar = Scalar::from_frac(7, 1);
+				let scalar = Quant::from_frac(7, 1);
 				assert_eq!(scalar.numerator, 7);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 0);
@@ -769,7 +767,7 @@ mod tests {
 
 			#[test]
 			fn test_zero_as_numerator() {
-				let scalar = Scalar::from_frac(0, 5);
+				let scalar = Quant::from_frac(0, 5);
 				assert_eq!(scalar.numerator, 0);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 0);
@@ -778,7 +776,7 @@ mod tests {
 
 			#[test]
 			fn test_already_reduced_fraction() {
-				let scalar = Scalar::from_frac(3, 4);
+				let scalar = Quant::from_frac(3, 4);
 				assert_eq!(scalar.numerator, 3);
 				assert_eq!(scalar.denominator, 4);
 				assert_eq!(scalar.render_precision, 0);
@@ -787,7 +785,7 @@ mod tests {
 
 			#[test]
 			fn test_negative_one_as_denominator() {
-				let scalar = Scalar::from_frac(7, -1);
+				let scalar = Quant::from_frac(7, -1);
 				assert_eq!(scalar.numerator, 7);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 0);
@@ -796,7 +794,7 @@ mod tests {
 
 			#[test]
 			fn test_negative_one_as_numerator() {
-				let scalar = Scalar::from_frac(-1, 3);
+				let scalar = Quant::from_frac(-1, 3);
 				assert_eq!(scalar.numerator, 1);
 				assert_eq!(scalar.denominator, 3);
 				assert_eq!(scalar.render_precision, 0);
@@ -805,7 +803,7 @@ mod tests {
 
 			#[test]
 			fn test_minimal_fraction() {
-				let scalar = Scalar::from_frac(1, 2);
+				let scalar = Quant::from_frac(1, 2);
 				assert_eq!(scalar.numerator, 1);
 				assert_eq!(scalar.denominator, 2);
 				assert_eq!(scalar.render_precision, 0);
@@ -818,7 +816,7 @@ mod tests {
 
 			#[test]
 			fn test_from_str_positive_integer() {
-				let scalar = Scalar::from_str("123").unwrap();
+				let scalar = Quant::from_str("123").unwrap();
 				assert_eq!(scalar.numerator, 123);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 0);
@@ -827,7 +825,7 @@ mod tests {
 
 			#[test]
 			fn test_from_str_negative_integer() {
-				let scalar = Scalar::from_str("-123").unwrap();
+				let scalar = Quant::from_str("-123").unwrap();
 				assert_eq!(scalar.numerator, 123);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 0);
@@ -836,7 +834,7 @@ mod tests {
 
 			#[test]
 			fn test_from_str_positive_decimal() {
-				let scalar = Scalar::from_str("123.456").unwrap();
+				let scalar = Quant::from_str("123.456").unwrap();
 				assert_eq!(scalar.numerator, 15432);
 				assert_eq!(scalar.denominator, 125);
 				assert_eq!(scalar.render_precision, 3);
@@ -845,7 +843,7 @@ mod tests {
 
 			#[test]
 			fn test_from_str_negative_decimal() {
-				let scalar = Scalar::from_str("-123.456").unwrap();
+				let scalar = Quant::from_str("-123.456").unwrap();
 				assert_eq!(scalar.numerator, 15432);
 				assert_eq!(scalar.denominator, 125);
 				assert_eq!(scalar.render_precision, 3);
@@ -854,7 +852,7 @@ mod tests {
 
 			#[test]
 			fn test_from_str_with_commas() {
-				let scalar = Scalar::from_str("1,234,567.89").unwrap();
+				let scalar = Quant::from_str("1,234,567.89").unwrap();
 				assert_eq!(scalar.numerator, 123456789);
 				assert_eq!(scalar.denominator, 100);
 				assert_eq!(scalar.render_precision, 2);
@@ -863,7 +861,7 @@ mod tests {
 
 			#[test]
 			fn test_from_str_invalid_format() {
-				let result = Scalar::from_str("123.45.67");
+				let result = Quant::from_str("123.45.67");
 				assert!(
 					result.is_err(),
 					"Expected error for invalid decimal format"
@@ -872,7 +870,7 @@ mod tests {
 
 			#[test]
 			fn test_from_str_invalid_characters() {
-				let result = Scalar::from_str("abc123");
+				let result = Quant::from_str("abc123");
 				assert!(
 					result.is_err(),
 					"Expected error for invalid characters"
@@ -881,13 +879,13 @@ mod tests {
 
 			#[test]
 			fn test_from_str_empty_string() {
-				let result = Scalar::from_str("");
+				let result = Quant::from_str("");
 				assert!(result.is_err(), "Expected error for empty string");
 			}
 
 			#[test]
 			fn test_from_str_zero() {
-				let scalar = Scalar::from_str("0").unwrap();
+				let scalar = Quant::from_str("0").unwrap();
 				assert_eq!(scalar.numerator, 0);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 0);
@@ -896,7 +894,7 @@ mod tests {
 
 			#[test]
 			fn test_from_str_negative_zero() {
-				let scalar = Scalar::from_str("-0").unwrap();
+				let scalar = Quant::from_str("-0").unwrap();
 				assert_eq!(scalar.numerator, 0);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 0);
@@ -905,7 +903,7 @@ mod tests {
 
 			#[test]
 			fn test_from_str_zero_decimal() {
-				let scalar = Scalar::from_str("0.00").unwrap();
+				let scalar = Quant::from_str("0.00").unwrap();
 				assert_eq!(scalar.numerator, 0);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 2);
@@ -914,7 +912,7 @@ mod tests {
 
 			#[test]
 			fn test_from_str_negative_zero_decimal() {
-				let scalar = Scalar::from_str("-0.00").unwrap();
+				let scalar = Quant::from_str("-0.00").unwrap();
 				assert_eq!(scalar.numerator, 0);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 2);
@@ -923,7 +921,7 @@ mod tests {
 
 			#[test]
 			fn test_from_str_near_zero_decimal() {
-				let scalar = Scalar::from_str("0.05").unwrap();
+				let scalar = Quant::from_str("0.05").unwrap();
 				assert_eq!(scalar.numerator, 1);
 				assert_eq!(scalar.denominator, 20);
 				assert_eq!(scalar.render_precision, 2);
@@ -932,7 +930,7 @@ mod tests {
 
 			#[test]
 			fn test_from_str_negative_near_zero_decimal() {
-				let scalar = Scalar::from_str("-0.05").unwrap();
+				let scalar = Quant::from_str("-0.05").unwrap();
 				assert_eq!(scalar.numerator, 1);
 				assert_eq!(scalar.denominator, 20);
 				assert_eq!(scalar.render_precision, 2);
@@ -945,7 +943,7 @@ mod tests {
 
 			#[test]
 			fn test_from_i128_positive() {
-				let scalar = Scalar::from_i128(42);
+				let scalar = Quant::from_i128(42);
 				assert_eq!(scalar.numerator, 42);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 0);
@@ -954,7 +952,7 @@ mod tests {
 
 			#[test]
 			fn test_from_i128_negative() {
-				let scalar = Scalar::from_i128(-42);
+				let scalar = Quant::from_i128(-42);
 				assert_eq!(scalar.numerator, 42);
 				assert_eq!(scalar.denominator, 1);
 				assert_eq!(scalar.render_precision, 0);
@@ -971,47 +969,47 @@ mod tests {
 
 			#[test]
 			fn test_add() {
-				let a = Scalar::from_frac(1, 2);
-				let b = Scalar::from_frac(1, 3);
-				assert_eq!(a + b, Scalar::from_frac(5, 6));
+				let a = Quant::from_frac(1, 2);
+				let b = Quant::from_frac(1, 3);
+				assert_eq!(a + b, Quant::from_frac(5, 6));
 			}
 
 			#[test]
 			fn test_add_with_integer() {
-				let a = Scalar::from_frac(1, 2);
-				let b = Scalar::from_i128(2);
-				assert_eq!(a + b, Scalar::from_frac(5, 2));
+				let a = Quant::from_frac(1, 2);
+				let b = Quant::from_i128(2);
+				assert_eq!(a + b, Quant::from_frac(5, 2));
 			}
 
 			#[test]
 			fn test_add_large_numbers() {
-				let a = Scalar::from_frac(123456789, 987654321);
-				let b = Scalar::from_frac(987654321, 123456789);
+				let a = Quant::from_frac(123456789, 987654321);
+				let b = Quant::from_frac(987654321, 123456789);
 				assert_eq!(
 					a + b,
-					Scalar::from_frac(990702636540161562, 121932631112635269)
+					Quant::from_frac(990702636540161562, 121932631112635269)
 				);
 			}
 
 			#[test]
 			fn test_add_negative_numbers() {
-				let a = Scalar::from_frac(-1, 3);
-				let b = Scalar::from_frac(-2, 5);
-				assert_eq!(a + b, Scalar::from_frac(-11, 15));
+				let a = Quant::from_frac(-1, 3);
+				let b = Quant::from_frac(-2, 5);
+				assert_eq!(a + b, Quant::from_frac(-11, 15));
 			}
 
 			#[test]
 			fn test_add_mixed_signs() {
-				let a = Scalar::from_frac(5, 6);
-				let b = Scalar::from_frac(-1, 3);
-				assert_eq!(a + b, Scalar::from_frac(1, 2));
+				let a = Quant::from_frac(5, 6);
+				let b = Quant::from_frac(-1, 3);
+				assert_eq!(a + b, Quant::from_frac(1, 2));
 			}
 
 			#[test]
 			fn test_add_small_numbers() {
-				let a = Scalar::from_frac(1, 1000000);
-				let b = Scalar::from_frac(1, 1000000);
-				assert_eq!(a + b, Scalar::from_frac(1, 500000));
+				let a = Quant::from_frac(1, 1000000);
+				let b = Quant::from_frac(1, 1000000);
+				assert_eq!(a + b, Quant::from_frac(1, 500000));
 			}
 		}
 
@@ -1020,37 +1018,37 @@ mod tests {
 
 			#[test]
 			fn test_add_assign() {
-				let mut a = Scalar::from_frac(1, 2);
-				let b = Scalar::from_frac(1, 3);
+				let mut a = Quant::from_frac(1, 2);
+				let b = Quant::from_frac(1, 3);
 				a += b;
-				assert_eq!(a, Scalar::from_frac(5, 6));
+				assert_eq!(a, Quant::from_frac(5, 6));
 			}
 
 			#[test]
 			fn test_add_assign_large_numbers() {
-				let mut a = Scalar::from_frac(123456789, 987654321);
-				let b = Scalar::from_frac(987654321, 123456789);
+				let mut a = Quant::from_frac(123456789, 987654321);
+				let b = Quant::from_frac(987654321, 123456789);
 				a += b;
 				assert_eq!(
 					a,
-					Scalar::from_frac(990702636540161562, 121932631112635269)
+					Quant::from_frac(990702636540161562, 121932631112635269)
 				);
 			}
 
 			#[test]
 			fn test_add_assign_negative_numbers() {
-				let mut a = Scalar::from_frac(-1, 3);
-				let b = Scalar::from_frac(-2, 5);
+				let mut a = Quant::from_frac(-1, 3);
+				let b = Quant::from_frac(-2, 5);
 				a += b;
-				assert_eq!(a, Scalar::from_frac(-11, 15));
+				assert_eq!(a, Quant::from_frac(-11, 15));
 			}
 
 			#[test]
 			fn test_add_assign_mixed_signs() {
-				let mut a = Scalar::from_frac(-1, 3);
-				let b = Scalar::from_frac(2, 5);
+				let mut a = Quant::from_frac(-1, 3);
+				let b = Quant::from_frac(2, 5);
 				a += b;
-				assert_eq!(a, Scalar::from_frac(1, 15));
+				assert_eq!(a, Quant::from_frac(1, 15));
 			}
 		}
 
@@ -1059,41 +1057,41 @@ mod tests {
 
 			#[test]
 			fn test_sub() {
-				let a = Scalar::from_frac(3, 4);
-				let b = Scalar::from_frac(1, 4);
-				assert_eq!(a - b, Scalar::from_frac(2, 4));
+				let a = Quant::from_frac(3, 4);
+				let b = Quant::from_frac(1, 4);
+				assert_eq!(a - b, Quant::from_frac(2, 4));
 			}
 
 			#[test]
 			fn test_sub_with_integer() {
-				let a = Scalar::from_i128(5);
-				let b = Scalar::from_frac(1, 2);
-				assert_eq!(a - b, Scalar::from_frac(9, 2));
+				let a = Quant::from_i128(5);
+				let b = Quant::from_frac(1, 2);
+				assert_eq!(a - b, Quant::from_frac(9, 2));
 			}
 
 			#[test]
 			fn test_sub_negative_numbers() {
-				let a = Scalar::from_frac(-1, 2);
-				let b = Scalar::from_frac(-1, 3);
-				assert_eq!(a - b, Scalar::from_frac(-1, 6));
+				let a = Quant::from_frac(-1, 2);
+				let b = Quant::from_frac(-1, 3);
+				assert_eq!(a - b, Quant::from_frac(-1, 6));
 			}
 
 			#[test]
 			fn test_sub_mixed_signs() {
-				let a = Scalar::from_frac(5, 6);
-				let b = Scalar::from_frac(-1, 3);
-				assert_eq!(a - b, Scalar::from_frac(7, 6));
+				let a = Quant::from_frac(5, 6);
+				let b = Quant::from_frac(-1, 3);
+				assert_eq!(a - b, Quant::from_frac(7, 6));
 
-				let a = Scalar::from_frac(-5, 6);
-				let b = Scalar::from_frac(1, 3);
-				assert_eq!(a - b, Scalar::from_frac(-7, 6));
+				let a = Quant::from_frac(-5, 6);
+				let b = Quant::from_frac(1, 3);
+				assert_eq!(a - b, Quant::from_frac(-7, 6));
 			}
 
 			#[test]
 			fn test_sub_small_numbers() {
-				let a = Scalar::from_frac(1, 1000000);
-				let b = Scalar::from_frac(1, 1000000);
-				assert_eq!(a - b, Scalar::from_frac(0, 1));
+				let a = Quant::from_frac(1, 1000000);
+				let b = Quant::from_frac(1, 1000000);
+				assert_eq!(a - b, Quant::from_frac(0, 1));
 			}
 		}
 
@@ -1102,26 +1100,26 @@ mod tests {
 
 			#[test]
 			fn test_sub_assign() {
-				let mut a = Scalar::from_frac(3, 4);
-				let b = Scalar::from_frac(1, 4);
+				let mut a = Quant::from_frac(3, 4);
+				let b = Quant::from_frac(1, 4);
 				a -= b;
-				assert_eq!(a, Scalar::from_frac(2, 4));
+				assert_eq!(a, Quant::from_frac(2, 4));
 			}
 
 			#[test]
 			fn test_sub_assign_negative_numbers() {
-				let mut a = Scalar::from_frac(-1, 2);
-				let b = Scalar::from_frac(-1, 3);
+				let mut a = Quant::from_frac(-1, 2);
+				let b = Quant::from_frac(-1, 3);
 				a -= b;
-				assert_eq!(a, Scalar::from_frac(-1, 6));
+				assert_eq!(a, Quant::from_frac(-1, 6));
 			}
 
 			#[test]
 			fn test_sub_assign_mixed_signs() {
-				let mut a = Scalar::from_frac(5, 6);
-				let b = Scalar::from_frac(-1, 3);
+				let mut a = Quant::from_frac(5, 6);
+				let b = Quant::from_frac(-1, 3);
 				a -= b;
-				assert_eq!(a, Scalar::from_frac(7, 6));
+				assert_eq!(a, Quant::from_frac(7, 6));
 			}
 		}
 
@@ -1130,34 +1128,34 @@ mod tests {
 
 			#[test]
 			fn test_mul() {
-				let a = Scalar::from_frac(2, 3);
-				let b = Scalar::from_frac(3, 4);
-				assert_eq!(a * b, Scalar::from_frac(6, 12));
+				let a = Quant::from_frac(2, 3);
+				let b = Quant::from_frac(3, 4);
+				assert_eq!(a * b, Quant::from_frac(6, 12));
 			}
 
 			#[test]
 			fn test_mul_with_integer() {
-				let a = Scalar::from_frac(3, 5);
+				let a = Quant::from_frac(3, 5);
 				let b = 2;
-				assert_eq!(a * b, Scalar::from_frac(6, 5));
+				assert_eq!(a * b, Quant::from_frac(6, 5));
 			}
 
 			#[test]
 			fn test_mul_negative_numbers() {
-				let a = Scalar::from_frac(-2, 3);
-				let b = Scalar::from_frac(-3, 4);
-				assert_eq!(a * b, Scalar::from_frac(6, 12));
+				let a = Quant::from_frac(-2, 3);
+				let b = Quant::from_frac(-3, 4);
+				assert_eq!(a * b, Quant::from_frac(6, 12));
 			}
 
 			#[test]
 			fn test_mul_negative_signs() {
-				let a = Scalar::from_frac(-2, 3);
-				let b = Scalar::from_frac(3, 4);
-				assert_eq!(a * b, Scalar::from_frac(-6, 12));
+				let a = Quant::from_frac(-2, 3);
+				let b = Quant::from_frac(3, 4);
+				assert_eq!(a * b, Quant::from_frac(-6, 12));
 
-				let c = Scalar::from_frac(2, 3);
-				let d = Scalar::from_frac(-3, 4);
-				assert_eq!(c * d, Scalar::from_frac(-6, 12));
+				let c = Quant::from_frac(2, 3);
+				let d = Quant::from_frac(-3, 4);
+				assert_eq!(c * d, Quant::from_frac(-6, 12));
 			}
 		}
 
@@ -1166,31 +1164,31 @@ mod tests {
 
 			#[test]
 			fn test_mul_assign() {
-				let mut a = Scalar::from_frac(3, 4);
-				let b = Scalar::from_frac(2, 3);
+				let mut a = Quant::from_frac(3, 4);
+				let b = Quant::from_frac(2, 3);
 				a *= b;
-				assert_eq!(a, Scalar::from_frac(6, 12));
+				assert_eq!(a, Quant::from_frac(6, 12));
 			}
 
 			#[test]
 			fn test_mul_assign_negative_numbers() {
-				let mut a = Scalar::from_frac(3, 4);
-				let b = Scalar::from_frac(2, 3);
+				let mut a = Quant::from_frac(3, 4);
+				let b = Quant::from_frac(2, 3);
 				a *= b;
-				assert_eq!(a, Scalar::from_frac(6, 12));
+				assert_eq!(a, Quant::from_frac(6, 12));
 			}
 
 			#[test]
 			fn test_mul_assign_mixed_signs() {
-				let mut a = Scalar::from_frac(-3, 4);
-				let b = Scalar::from_frac(2, 3);
+				let mut a = Quant::from_frac(-3, 4);
+				let b = Quant::from_frac(2, 3);
 				a *= b;
-				assert_eq!(a, Scalar::from_frac(-6, 12));
+				assert_eq!(a, Quant::from_frac(-6, 12));
 
-				let mut c = Scalar::from_frac(-3, 4);
-				let d = Scalar::from_frac(2, 3);
+				let mut c = Quant::from_frac(-3, 4);
+				let d = Quant::from_frac(2, 3);
 				c *= d;
-				assert_eq!(c, Scalar::from_frac(-6, 12));
+				assert_eq!(c, Quant::from_frac(-6, 12));
 			}
 		}
 
@@ -1199,121 +1197,121 @@ mod tests {
 
 			#[test]
 			fn test_div_large_positive_numbers() {
-				let a = Scalar::from_frac(98765432109876543210, 1);
-				let b = Scalar::from_frac(123456789, 1);
+				let a = Quant::from_frac(98765432109876543210, 1);
+				let b = Quant::from_frac(123456789, 1);
 				assert_eq!(
 					a / b,
-					Scalar::from_frac(98765432109876543210, 123456789)
+					Quant::from_frac(98765432109876543210, 123456789)
 				);
 			}
 
 			#[test]
 			fn test_div_large_negative_numbers() {
-				let a = Scalar::from_frac(-98765432109876543210, 1);
-				let b = Scalar::from_frac(-123456789, 1);
+				let a = Quant::from_frac(-98765432109876543210, 1);
+				let b = Quant::from_frac(-123456789, 1);
 				assert_eq!(
 					a / b,
-					Scalar::from_frac(98765432109876543210, 123456789)
+					Quant::from_frac(98765432109876543210, 123456789)
 				);
 			}
 
 			#[test]
 			fn test_div_small_positive_numbers() {
-				let a = Scalar::from_frac(1, 1000000);
-				let b = Scalar::from_frac(1, 1000);
-				assert_eq!(a / b, Scalar::from_frac(1, 1000));
+				let a = Quant::from_frac(1, 1000000);
+				let b = Quant::from_frac(1, 1000);
+				assert_eq!(a / b, Quant::from_frac(1, 1000));
 			}
 
 			#[test]
 			fn test_div_small_negative_numbers() {
-				let a = Scalar::from_frac(-1, 1000000);
-				let b = Scalar::from_frac(1, 1000);
-				assert_eq!(a / b, Scalar::from_frac(-1, 1000));
+				let a = Quant::from_frac(-1, 1000000);
+				let b = Quant::from_frac(1, 1000);
+				assert_eq!(a / b, Quant::from_frac(-1, 1000));
 			}
 
 			#[test]
 			fn test_div_large_and_small_numbers() {
-				let a = Scalar::from_frac(1000000000000000000, 1);
-				let b = Scalar::from_frac(1, 1000000000);
+				let a = Quant::from_frac(1000000000000000000, 1);
+				let b = Quant::from_frac(1, 1000000000);
 				assert_eq!(
 					a / b,
-					Scalar::from_frac(1000000000000000000000000000, 1)
+					Quant::from_frac(1000000000000000000000000000, 1)
 				);
 			}
 
 			#[test]
 			fn test_div_precision_boundary() {
 				let a =
-					Scalar::from_frac(123456789012345678, 1000000000000000000);
-				let b = Scalar::from_frac(1, 1000000000);
+					Quant::from_frac(123456789012345678, 1000000000000000000);
+				let b = Quant::from_frac(1, 1000000000);
 				assert_eq!(
 					a / b,
-					Scalar::from_frac(123456789012345678, 1000000000)
+					Quant::from_frac(123456789012345678, 1000000000)
 				);
 			}
 
 			#[test]
 			fn test_div_zero_dividend() {
-				let a = Scalar::from_frac(0, 1);
-				let b = Scalar::from_frac(123456789, 1);
-				assert_eq!(a / b, Scalar::from_frac(0, 1));
+				let a = Quant::from_frac(0, 1);
+				let b = Quant::from_frac(123456789, 1);
+				assert_eq!(a / b, Quant::from_frac(0, 1));
 			}
 
 			#[test]
 			#[should_panic(expected = "Attempt to divide by zero")]
 			fn test_div_zero_divisor() {
-				let a = Scalar::from_frac(123456789, 1);
-				let b = Scalar::from_frac(0, 1);
+				let a = Quant::from_frac(123456789, 1);
+				let b = Quant::from_frac(0, 1);
 				let _ = a / b;
 			}
 
 			#[test]
 			fn test_div_exact_result() {
-				let a = Scalar::from_frac(6, 1);
-				let b = Scalar::from_frac(2, 1);
-				assert_eq!(a / b, Scalar::from_frac(3, 1));
+				let a = Quant::from_frac(6, 1);
+				let b = Quant::from_frac(2, 1);
+				assert_eq!(a / b, Quant::from_frac(3, 1));
 			}
 
 			#[test]
 			fn test_div_inexact_result() {
-				let a = Scalar::from_frac(7, 1);
-				let b = Scalar::from_frac(3, 1);
-				assert_eq!(a / b, Scalar::from_frac(7, 3));
+				let a = Quant::from_frac(7, 1);
+				let b = Quant::from_frac(3, 1);
+				assert_eq!(a / b, Quant::from_frac(7, 3));
 			}
 
 			#[test]
 			fn test_div_rounding_result() {
-				let a = Scalar::from_frac(123456789, 1);
-				let b = Scalar::from_frac(1000000, 1);
-				assert_eq!(a / b, Scalar::from_frac(123456789, 1000000));
+				let a = Quant::from_frac(123456789, 1);
+				let b = Quant::from_frac(1000000, 1);
+				assert_eq!(a / b, Quant::from_frac(123456789, 1000000));
 			}
 
 			#[test]
 			fn test_div_negative_mixed_signs() {
-				let a = Scalar::from_frac(-5, 2);
-				let b = Scalar::from_frac(3, 4);
-				assert_eq!(a / b, Scalar::from_frac(-20, 6));
+				let a = Quant::from_frac(-5, 2);
+				let b = Quant::from_frac(3, 4);
+				assert_eq!(a / b, Quant::from_frac(-20, 6));
 			}
 
 			#[test]
 			fn test_div_negative_and_positive() {
-				let a = Scalar::from_frac(-5, 4);
-				let b = Scalar::from_frac(-3, 8);
-				assert_eq!(a / b, Scalar::from_frac(40, 12));
+				let a = Quant::from_frac(-5, 4);
+				let b = Quant::from_frac(-3, 8);
+				assert_eq!(a / b, Quant::from_frac(40, 12));
 			}
 
 			#[test]
 			fn test_div_near_zero_positive() {
-				let a = Scalar::from_frac(1, 1000000000);
-				let b = Scalar::from_frac(1, 1000000000000000);
-				assert_eq!(a / b, Scalar::from_frac(1000000, 1));
+				let a = Quant::from_frac(1, 1000000000);
+				let b = Quant::from_frac(1, 1000000000000000);
+				assert_eq!(a / b, Quant::from_frac(1000000, 1));
 			}
 
 			#[test]
 			fn test_div_near_zero_negative() {
-				let a = Scalar::from_frac(-1, 1000000000);
-				let b = Scalar::from_frac(1, 1000000000000000);
-				assert_eq!(a / b, Scalar::from_frac(-1000000, 1));
+				let a = Quant::from_frac(-1, 1000000000);
+				let b = Quant::from_frac(1, 1000000000000000);
+				assert_eq!(a / b, Quant::from_frac(-1000000, 1));
 			}
 		}
 
@@ -1322,135 +1320,132 @@ mod tests {
 
 			#[test]
 			fn test_div_assign_large_positive_numbers() {
-				let mut a = Scalar::from_frac(98765432109876543210, 1);
-				let b = Scalar::from_frac(123456789, 1);
+				let mut a = Quant::from_frac(98765432109876543210, 1);
+				let b = Quant::from_frac(123456789, 1);
 				a /= b;
 				assert_eq!(
 					a,
-					Scalar::from_frac(98765432109876543210, 123456789)
+					Quant::from_frac(98765432109876543210, 123456789)
 				);
 			}
 
 			#[test]
 			fn test_div_assign_large_negative_numbers() {
-				let mut a = Scalar::from_frac(-98765432109876543210, 1);
-				let b = Scalar::from_frac(-123456789, 1);
+				let mut a = Quant::from_frac(-98765432109876543210, 1);
+				let b = Quant::from_frac(-123456789, 1);
 				a /= b;
 				assert_eq!(
 					a,
-					Scalar::from_frac(98765432109876543210, 123456789)
+					Quant::from_frac(98765432109876543210, 123456789)
 				);
 			}
 
 			#[test]
 			fn test_div_assign_small_positive_numbers() {
-				let mut a = Scalar::from_frac(1, 1000000);
-				let b = Scalar::from_frac(1, 1000);
+				let mut a = Quant::from_frac(1, 1000000);
+				let b = Quant::from_frac(1, 1000);
 				a /= b;
-				assert_eq!(a, Scalar::from_frac(1, 1000));
+				assert_eq!(a, Quant::from_frac(1, 1000));
 			}
 
 			#[test]
 			fn test_div_assign_small_negative_numbers() {
-				let mut a = Scalar::from_frac(-1, 1000000);
-				let b = Scalar::from_frac(1, 1000);
+				let mut a = Quant::from_frac(-1, 1000000);
+				let b = Quant::from_frac(1, 1000);
 				a /= b;
-				assert_eq!(a, Scalar::from_frac(-1, 1000));
+				assert_eq!(a, Quant::from_frac(-1, 1000));
 			}
 
 			#[test]
 			fn test_div_assign_large_and_small_numbers() {
-				let mut a = Scalar::from_frac(1000000000000000000, 1);
-				let b = Scalar::from_frac(1, 1000000000);
+				let mut a = Quant::from_frac(1000000000000000000, 1);
+				let b = Quant::from_frac(1, 1000000000);
 				a /= b;
 				assert_eq!(
 					a,
-					Scalar::from_frac(1000000000000000000000000000, 1)
+					Quant::from_frac(1000000000000000000000000000, 1)
 				);
 			}
 
 			#[test]
 			fn test_div_assign_precision_boundary() {
 				let mut a =
-					Scalar::from_frac(123456789012345678, 1000000000000000000);
-				let b = Scalar::from_frac(1, 1000000000);
+					Quant::from_frac(123456789012345678, 1000000000000000000);
+				let b = Quant::from_frac(1, 1000000000);
 				a /= b;
-				assert_eq!(
-					a,
-					Scalar::from_frac(123456789012345678, 1000000000)
-				);
+				assert_eq!(a, Quant::from_frac(123456789012345678, 1000000000));
 			}
 
 			#[test]
 			fn test_div_assign_zero_dividend() {
-				let mut a = Scalar::from_frac(0, 1);
-				let b = Scalar::from_frac(123456789, 1);
+				let mut a = Quant::from_frac(0, 1);
+				let b = Quant::from_frac(123456789, 1);
 				a /= b;
-				assert_eq!(a, Scalar::from_frac(0, 1));
+				assert_eq!(a, Quant::from_frac(0, 1));
 			}
 
 			#[test]
 			#[should_panic(expected = "Attempt to divide by zero")]
 			fn test_div_assign_zero_divisor() {
-				let mut a = Scalar::from_frac(123456789, 1);
-				let b = Scalar::from_frac(0, 1);
+				let mut a = Quant::from_frac(123456789, 1);
+				let b = Quant::from_frac(0, 1);
 				a /= b;
 			}
 
 			#[test]
 			fn test_div_assign_exact_result() {
-				let mut a = Scalar::from_frac(6, 1);
-				let b = Scalar::from_frac(2, 1);
+				let mut a = Quant::from_frac(6, 1);
+				let b = Quant::from_frac(2, 1);
 				a /= b;
-				assert_eq!(a, Scalar::from_frac(3, 1));
+				assert_eq!(a, Quant::from_frac(3, 1));
 			}
 
 			#[test]
 			fn test_div_assign_inexact_result() {
-				let mut a = Scalar::from_frac(7, 1);
-				let b = Scalar::from_frac(3, 1);
+				let mut a = Quant::from_frac(7, 1);
+				let b = Quant::from_frac(3, 1);
 				a /= b;
-				assert_eq!(a, Scalar::from_frac(7, 3));
+				assert_eq!(a, Quant::from_frac(7, 3));
 			}
 
 			#[test]
 			fn test_div_assign_rounding_result() {
-				let mut a = Scalar::from_frac(123456789, 1);
-				let b = Scalar::from_frac(1000000, 1);
+				let mut a = Quant::from_frac(123456789, 1);
+				let b = Quant::from_frac(1000000, 1);
 				a /= b;
-				assert_eq!(a, Scalar::from_frac(123456789, 1000000));
+				assert_eq!(a, Quant::from_frac(123456789, 1000000));
 			}
 
 			#[test]
 			fn test_div_assign_negative_mixed_signs() {
-				let mut a = Scalar::from_frac(-5, 2);
-				let b = Scalar::from_frac(3, 4);
+				let mut a = Quant::from_frac(-5, 2);
+				let b = Quant::from_frac(3, 4);
 				a /= b;
-				assert_eq!(a, Scalar::from_frac(-20, 6));
+				assert_eq!(a, Quant::from_frac(-20, 6));
 			}
 
 			#[test]
 			fn test_div_assign_negative_and_positive() {
-				let mut a = Scalar::from_frac(-5, 4);
-				let b = Scalar::from_frac(-3, 8);
+				let mut a = Quant::from_frac(-5, 4);
+				let b = Quant::from_frac(-3, 8);
 				a /= b;
-				assert_eq!(a, Scalar::from_frac(40, 12));
+				assert_eq!(a, Quant::from_frac(40, 12));
 			}
 
 			#[test]
 			fn test_div_assign_near_zero_positive() {
-				let mut a = Scalar::from_frac(1, 1000000000);
-				let b = Scalar::from_frac(1, 1000000000000000);
+				let mut a = Quant::from_frac(1, 1000000000);
+				let b = Quant::from_frac(1, 1000000000000000);
 				a /= b;
-				assert_eq!(a, Scalar::from_frac(1000000, 1));
+				assert_eq!(a, Quant::from_frac(1000000, 1));
 			}
 
 			#[test]
 			fn test_div_assign_near_zero_negative() {
-				let mut a = Scalar::from_frac(-1, 1000000000);
-				let b = Scalar::from_frac(1, 1000000000000000);
+				let mut a = Quant::from_frac(-1, 1000000000);
+				let b = Quant::from_frac(1, 1000000000000000);
 				a /= b;
-				assert_eq!(a, Scalar::from_frac(-1000000, 1));
+				assert_eq!(a, Quant::from_frac(-1000000, 1));
 			}
 		}
 
@@ -1459,14 +1454,14 @@ mod tests {
 
 			#[test]
 			fn test_negation() {
-				let a = Scalar::from_frac(3, 4);
-				assert_eq!(-a, Scalar::from_frac(-3, 4));
+				let a = Quant::from_frac(3, 4);
+				assert_eq!(-a, Quant::from_frac(-3, 4));
 
-				let a = Scalar::from_frac(-3, 4);
-				assert_eq!(-a, Scalar::from_frac(3, 4));
+				let a = Quant::from_frac(-3, 4);
+				assert_eq!(-a, Quant::from_frac(3, 4));
 
-				let a = Scalar::from_frac(-3, -4);
-				assert_eq!(-a, Scalar::from_frac(-3, 4));
+				let a = Quant::from_frac(-3, -4);
+				assert_eq!(-a, Quant::from_frac(-3, 4));
 			}
 		}
 	}
@@ -1476,10 +1471,10 @@ mod tests {
 
 		#[test]
 		fn test_scalar_greater_equal() {
-			let a = Scalar::from_frac(5, 2);
-			let b = Scalar::from_frac(10, 4);
-			let c = Scalar::from_frac(6, 2);
-			let d = Scalar::from_frac(4, 2);
+			let a = Quant::from_frac(5, 2);
+			let b = Quant::from_frac(10, 4);
+			let c = Quant::from_frac(6, 2);
+			let d = Quant::from_frac(4, 2);
 
 			assert!(a >= b, "Expected a >= b (both equal to 2.5)");
 			assert!(c >= a, "Expected c >= a (3.0 >= 2.5)");
@@ -1488,10 +1483,10 @@ mod tests {
 
 		#[test]
 		fn test_scalar_less_equal() {
-			let a = Scalar::from_frac(5, 2);
-			let b = Scalar::from_frac(10, 4);
-			let c = Scalar::from_frac(6, 2);
-			let d = Scalar::from_frac(4, 2);
+			let a = Quant::from_frac(5, 2);
+			let b = Quant::from_frac(10, 4);
+			let c = Quant::from_frac(6, 2);
+			let d = Quant::from_frac(4, 2);
 
 			assert!(a <= b, "Expected a <= b (both equal to 2.5)");
 			assert!(a <= c, "Expected a <= c (2.5 <= 3.0)");
@@ -1500,7 +1495,7 @@ mod tests {
 
 		#[test]
 		fn test_scalar_equal_i128() {
-			let scalar = Scalar::from_frac(10, 2);
+			let scalar = Quant::from_frac(10, 2);
 			let int_value: i128 = 5;
 
 			assert!(scalar == int_value, "Expected scalar == int_value");
@@ -1508,7 +1503,7 @@ mod tests {
 
 		#[test]
 		fn test_i128_equal_scalar() {
-			let scalar = Scalar::from_frac(10, 2);
+			let scalar = Quant::from_frac(10, 2);
 			let int_value: i128 = 5;
 
 			assert_eq!(int_value, scalar, "Expected int_value == scalar");
@@ -1516,7 +1511,7 @@ mod tests {
 
 		#[test]
 		fn test_scalar_partial_ord_i128() {
-			let scalar = Scalar::from_frac(15, 2);
+			let scalar = Quant::from_frac(15, 2);
 			let int_value: i128 = 8;
 
 			assert!(scalar < int_value, "Expected scalar < int_value");
@@ -1525,9 +1520,9 @@ mod tests {
 
 		#[test]
 		fn test_scalar_partial_ord() {
-			let a = Scalar::from_frac(7, 2);
-			let b = Scalar::from_frac(9, 2);
-			let c = Scalar::from_frac(14, 4);
+			let a = Quant::from_frac(7, 2);
+			let b = Quant::from_frac(9, 2);
+			let c = Quant::from_frac(14, 4);
 
 			assert!(a < b, "Expected a < b (3.5 < 4.5)");
 			assert!(b > a, "Expected b > a (4.5 > 3.5)");
@@ -1536,10 +1531,10 @@ mod tests {
 
 		#[test]
 		fn test_scalar_negative_ordering() {
-			let a = Scalar::from_frac(-5, 2);
-			let b = Scalar::from_frac(-10, 4);
-			let c = Scalar::from_frac(-6, 2);
-			let d = Scalar::from_frac(-4, 2);
+			let a = Quant::from_frac(-5, 2);
+			let b = Quant::from_frac(-10, 4);
+			let c = Quant::from_frac(-6, 2);
+			let d = Quant::from_frac(-4, 2);
 
 			assert!(a >= b, "Expected a >= b (both equal to -2.5)");
 			assert!(a > c, "Expected a > c (-2.5 > -3.0)");
@@ -1548,15 +1543,15 @@ mod tests {
 
 		#[test]
 		fn test_scalar_abs_ordering() {
-			let a = Scalar::from_frac(-5, 2);
-			let b = Scalar::from_frac(5, 2);
-			let c = Scalar::from_frac(-6, 2);
-			let d = Scalar::from_frac(6, 2);
+			let a = Quant::from_frac(-5, 2);
+			let b = Quant::from_frac(5, 2);
+			let c = Quant::from_frac(-6, 2);
+			let d = Quant::from_frac(6, 2);
 
 			assert_eq!(a.abs(), b.abs(), "Expected |a| == |b|");
 			assert_eq!(c.abs(), d.abs(), "Expected |c| == |d|");
 			assert!(
-				c.abs() < d.abs() + Scalar::from_i128(1),
+				c.abs() < d.abs() + Quant::from_i128(1),
 				"Expected |c| < |d| + 1"
 			);
 		}
@@ -1567,7 +1562,7 @@ mod tests {
 
 		#[test]
 		fn test_round_basic() {
-			let mut scalar = Scalar {
+			let mut scalar = Quant {
 				numerator: 15,
 				denominator: 10,
 				is_negative: false,
@@ -1580,7 +1575,7 @@ mod tests {
 
 		#[test]
 		fn test_round_half_to_even() {
-			let mut scalar = Scalar {
+			let mut scalar = Quant {
 				numerator: 155,
 				denominator: 100,
 				is_negative: false,
@@ -1593,7 +1588,7 @@ mod tests {
 
 		#[test]
 		fn test_round_half_to_odd() {
-			let mut scalar = Scalar {
+			let mut scalar = Quant {
 				numerator: 254,
 				denominator: 100,
 				is_negative: false,
@@ -1606,7 +1601,7 @@ mod tests {
 
 		#[test]
 		fn test_round_resolution_0() {
-			let mut scalar = Scalar {
+			let mut scalar = Quant {
 				numerator: 7,
 				denominator: 3,
 				is_negative: false,
@@ -1619,7 +1614,7 @@ mod tests {
 
 		#[test]
 		fn test_round_negative() {
-			let mut scalar = Scalar {
+			let mut scalar = Quant {
 				numerator: 7,
 				denominator: 3,
 				is_negative: true,
@@ -1632,7 +1627,7 @@ mod tests {
 
 		#[test]
 		fn test_reduce_after_round() {
-			let mut scalar = Scalar {
+			let mut scalar = Quant {
 				numerator: 200,
 				denominator: 100,
 				is_negative: false,
@@ -1645,7 +1640,7 @@ mod tests {
 
 		#[test]
 		fn test_round_to_integer_no_string() {
-			let mut scalar = Scalar::from_frac(123456, 1000);
+			let mut scalar = Quant::from_frac(123456, 1000);
 			scalar.round(0);
 			assert_eq!(
 				scalar.numerator, 123,
@@ -1660,7 +1655,7 @@ mod tests {
 
 		#[test]
 		fn test_round_to_two_decimals_no_string() {
-			let mut scalar = Scalar::from_frac(123456, 1000);
+			let mut scalar = Quant::from_frac(123456, 1000);
 			scalar.round(2);
 			assert_eq!(
 				scalar.numerator, 6173,
@@ -1675,7 +1670,7 @@ mod tests {
 
 		#[test]
 		fn test_bankers_rounding_down_no_string() {
-			let mut scalar = Scalar::from_frac(123445, 1000);
+			let mut scalar = Quant::from_frac(123445, 1000);
 			scalar.round(2);
 			assert_eq!(
 				scalar.numerator, 3086,
@@ -1690,7 +1685,7 @@ mod tests {
 
 		#[test]
 		fn test_bankers_rounding_up_no_string() {
-			let mut scalar = Scalar::from_frac(123455, 1000);
+			let mut scalar = Quant::from_frac(123455, 1000);
 			scalar.round(2);
 			assert_eq!(
 				scalar.numerator, 6173,
@@ -1705,7 +1700,7 @@ mod tests {
 
 		#[test]
 		fn test_round_negative_to_integer_no_string() {
-			let mut scalar = Scalar::from_frac(-123456, 1000);
+			let mut scalar = Quant::from_frac(-123456, 1000);
 			scalar.round(0);
 			assert_eq!(
 				scalar.numerator, 123,
@@ -1720,7 +1715,7 @@ mod tests {
 
 		#[test]
 		fn test_round_negative_to_one_decimal_no_string() {
-			let mut scalar = Scalar::from_frac(-123456, 1000);
+			let mut scalar = Quant::from_frac(-123456, 1000);
 			scalar.round(1);
 			assert_eq!(
 				scalar.numerator, 247,
@@ -1735,7 +1730,7 @@ mod tests {
 
 		#[test]
 		fn test_round_large_number_no_string() {
-			let mut scalar = Scalar::from_frac(123456789987654321, 1000000000);
+			let mut scalar = Quant::from_frac(123456789987654321, 1000000000);
 			scalar.round(6);
 			assert_eq!(
 				scalar.numerator, 61728394993827,
@@ -1750,7 +1745,7 @@ mod tests {
 
 		#[test]
 		fn test_round_small_number_up_no_string() {
-			let mut scalar = Scalar::from_frac(-5, 10000);
+			let mut scalar = Quant::from_frac(-5, 10000);
 			scalar.round(3);
 			assert_eq!(
 				scalar.numerator, 0,
@@ -1765,7 +1760,7 @@ mod tests {
 
 		#[test]
 		fn test_round_small_number_down_no_string() {
-			let mut scalar = Scalar::from_frac(49, 100000);
+			let mut scalar = Quant::from_frac(49, 100000);
 			scalar.round(3);
 			assert_eq!(
 				scalar.numerator, 0,
@@ -1780,7 +1775,7 @@ mod tests {
 
 		#[test]
 		fn test_round_to_integer() {
-			let mut scalar = Scalar::from_str("123.456").unwrap();
+			let mut scalar = Quant::from_str("123.456").unwrap();
 			scalar.round(0);
 			assert_eq!(
 				scalar.to_string(),
@@ -1791,7 +1786,7 @@ mod tests {
 
 		#[test]
 		fn test_round_to_two_decimals() {
-			let mut scalar = Scalar::from_str("123.456").unwrap();
+			let mut scalar = Quant::from_str("123.456").unwrap();
 			scalar.round(2);
 			assert_eq!(
 				scalar.to_string(),
@@ -1802,7 +1797,7 @@ mod tests {
 
 		#[test]
 		fn test_bankers_rounding_down() {
-			let mut scalar = Scalar::from_str("123.445").unwrap();
+			let mut scalar = Quant::from_str("123.445").unwrap();
 			scalar.round(2);
 			assert_eq!(
 				scalar.to_string(),
@@ -1813,7 +1808,7 @@ mod tests {
 
 		#[test]
 		fn test_bankers_rounding_up() {
-			let mut scalar = Scalar::from_str("123.455").unwrap();
+			let mut scalar = Quant::from_str("123.455").unwrap();
 			scalar.round(2);
 			assert_eq!(
 				scalar.to_string(),
@@ -1824,7 +1819,7 @@ mod tests {
 
 		#[test]
 		fn test_round_negative_to_integer() {
-			let mut scalar = Scalar::from_str("-123.456").unwrap();
+			let mut scalar = Quant::from_str("-123.456").unwrap();
 			scalar.round(0);
 			assert_eq!(
 				scalar.to_string(),
@@ -1835,7 +1830,7 @@ mod tests {
 
 		#[test]
 		fn test_round_negative_to_one_decimal() {
-			let mut scalar = Scalar::from_str("-123.456").unwrap();
+			let mut scalar = Quant::from_str("-123.456").unwrap();
 			scalar.round(1);
 			assert_eq!(
 				scalar.to_string(),
@@ -1846,7 +1841,7 @@ mod tests {
 
 		#[test]
 		fn test_round_large_number() {
-			let mut scalar = Scalar::from_str("123456789.987654321").unwrap();
+			let mut scalar = Quant::from_str("123456789.987654321").unwrap();
 			scalar.round(6);
 			assert_eq!(
 				scalar.to_string(),
@@ -1857,7 +1852,7 @@ mod tests {
 
 		#[test]
 		fn test_round_zero() {
-			let mut scalar = Scalar::from_str("0.0005").unwrap();
+			let mut scalar = Quant::from_str("0.0005").unwrap();
 			scalar.round(3);
 			assert_eq!(
 				scalar.to_string(),
@@ -1868,7 +1863,7 @@ mod tests {
 
 		#[test]
 		fn test_round_small_number_down() {
-			let mut scalar = Scalar::from_str("0.00049").unwrap();
+			let mut scalar = Quant::from_str("0.00049").unwrap();
 			scalar.round(3);
 			assert_eq!(
 				scalar.to_string(),
@@ -1883,13 +1878,13 @@ mod tests {
 
 		#[test]
 		fn test_display() {
-			let money = Scalar::from_str("12345.6789").unwrap();
+			let money = Quant::from_str("12345.6789").unwrap();
 			assert_eq!(money.to_string(), "12,345.6789");
 
-			let negative_money = Scalar::from_str("-1000000.50").unwrap();
+			let negative_money = Quant::from_str("-1000000.50").unwrap();
 			assert_eq!(negative_money.to_string(), "-1,000,000.50");
 
-			let zero_money = Scalar::from_str("0.00").unwrap();
+			let zero_money = Quant::from_str("0.00").unwrap();
 			assert_eq!(zero_money.to_string(), "0.00")
 		}
 	}

@@ -16,13 +16,13 @@
 
 use crate::gl::ledger::VALID_PREFIXES;
 use crate::gl::total::Total;
-use crate::util::scalar::Scalar;
+use crate::util::quant::Quant;
 
 /// When using this to display something, you should instantiate it, then sort
 /// it, then display it. Filters should be handled in the Total struct.
 pub struct StatementReporter {
 	account: String,
-	amounts: Vec<(String, Scalar)>, // currency -> balance held
+	amounts: Vec<(String, Quant)>, // currency -> balance held
 	subtotals: Vec<(String, StatementReporter)>, // account name -> next total
 }
 
@@ -49,7 +49,7 @@ impl StatementReporter {
 	/// Each ordered_total's amounts are first sorted by currency. Each
 	/// ordered_total's subtotals beyond the first, which is the special case,
 	/// are then sorted in descending order by the absolute value of the sum of
-	/// its amounts' Scalar components.
+	/// its amounts' Quant components.
 	pub fn sort_canonical(&mut self) {
 		// Sort amounts by currency
 		self.amounts.sort_by(|(a, _), (b, _)| a.cmp(b));
@@ -72,14 +72,14 @@ impl StatementReporter {
 		// Sort amounts by currency
 		self.amounts.sort_by(|(a, _), (b, _)| a.cmp(b));
 
-		// Sort subtotals by the absolute value of the sum of their Scalar
+		// Sort subtotals by the absolute value of the sum of their Quant
 		// components,then by sign (positive first), and finally alphabetically
 		// by account name
 		self.subtotals.sort_by(|(name_a, a), (name_b, b)| {
-			let sum_a: Scalar =
-				a.amounts.iter().map(|(_, money)| *money).sum::<Scalar>();
-			let sum_b: Scalar =
-				b.amounts.iter().map(|(_, money)| *money).sum::<Scalar>();
+			let sum_a: Quant =
+				a.amounts.iter().map(|(_, money)| *money).sum::<Quant>();
+			let sum_b: Quant =
+				b.amounts.iter().map(|(_, money)| *money).sum::<Quant>();
 
 			let abs_sum_a = sum_a.abs();
 			let abs_sum_b = sum_b.abs();
@@ -150,7 +150,7 @@ impl StatementReporter {
 
 	/// Compares two sets of accounts & amounts, and reports true iff they are
 	/// all entirely identical.
-	fn amounts_match(a: &[(String, Scalar)], b: &[(String, Scalar)]) -> bool {
+	fn amounts_match(a: &[(String, Quant)], b: &[(String, Quant)]) -> bool {
 		if a.len() != b.len() {
 			return false;
 		}
@@ -189,7 +189,7 @@ impl StatementReporter {
 	pub fn calculate_column_width(&self) -> usize {
 		let mut max_width = 0;
 
-		let calculate_width = |currency: &String, amount: &Scalar| {
+		let calculate_width = |currency: &String, amount: &Quant| {
 			format!("{} {}", currency, amount).len()
 		};
 

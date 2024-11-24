@@ -17,7 +17,7 @@ use crate::gl::ledger::Ledger;
 use crate::parsing::filesystem::Filesystem;
 use crate::util::amount::Amount;
 use crate::util::date::Date;
-use crate::util::scalar::Scalar;
+use crate::util::quant::Quant;
 use anyhow::{anyhow, bail, Error};
 use regex::Regex;
 use std::collections::{HashMap, VecDeque};
@@ -144,7 +144,7 @@ impl Parser {
 							date,
 							from,
 							to,
-							Scalar::from_str(rate)
+							Quant::from_str(rate)
 								.map_err(|e| anyhow!("{} (line {})", e, i))?,
 						)
 						.map_err(|e| anyhow!("{} (line {})", e, i))?;
@@ -243,7 +243,7 @@ impl Parser {
 			}
 
 			let account = parts[0].to_string();
-			let amount = Amount::new(Scalar::from_str(&parts[1])?, &parts[2]);
+			let amount = Amount::new(Quant::from_str(&parts[1])?, &parts[2]);
 			parse_result
 				.note_precision(&amount.currency, amount.value.resolution());
 
@@ -260,7 +260,7 @@ impl Parser {
 						_ => bail!("Invalid format (line {})", i),
 					};
 
-					let mut ic_amount = Scalar::from_str(parts[4].as_str())
+					let mut ic_amount = Quant::from_str(parts[4].as_str())
 						.map_err(|_| anyhow!("Invalid value (line {})", i))?;
 					let ic_currency = parts[5].to_string();
 
@@ -288,7 +288,7 @@ impl Parser {
 					}
 
 					// Grab cost basis
-					let cb_amount = Scalar::from_str(parts[4].as_str())
+					let cb_amount = Quant::from_str(parts[4].as_str())
 						.map_err(|_| anyhow!("Invalid value (line {})", i))?;
 					let cb_currency = parts[5].to_string();
 

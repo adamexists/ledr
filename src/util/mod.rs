@@ -17,4 +17,4 @@
 pub mod amount;
 pub mod date;
 pub mod graph;
-pub mod scalar;
+pub mod quant;

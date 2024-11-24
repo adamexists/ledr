@@ -16,7 +16,7 @@
 
 use crate::gl::entry::Detail;
 use crate::gl::ledger::Ledger;
-use crate::util::scalar::Scalar;
+use crate::util::quant::Quant;
 use std::collections::HashMap;
 
 /// Each total represents one account or segment, one position on the hierarchy,
@@ -38,7 +38,7 @@ use std::collections::HashMap;
 #[derive(Default)]
 pub struct Total {
 	pub account: String,
-	pub amounts: HashMap<String, Scalar>, // currency -> balance held
+	pub amounts: HashMap<String, Quant>, // currency -> balance held
 	pub subtotals: HashMap<String, Total>, // account name -> next total
 	pub depth: u32, // top level total is depth 0; Income/Expenses is 1, etc.
 }
@@ -70,7 +70,7 @@ impl Total {
 				*current
 					.amounts
 					.entry(detail.currency().to_string())
-					.or_insert_with(Scalar::zero) += detail.value();
+					.or_insert_with(Quant::zero) += detail.value();
 
 				current = current
 					.subtotals
@@ -87,7 +87,7 @@ impl Total {
 			*current
 				.amounts
 				.entry(detail.currency().to_string())
-				.or_insert_with(Scalar::zero) += detail.value();
+				.or_insert_with(Quant::zero) += detail.value();
 		}
 	}
 
@@ -102,7 +102,7 @@ impl Total {
 		self.subtotals
 			.retain(|name, _| strs.contains(&name.as_str()));
 
-		let mut currency_totals: HashMap<String, Scalar> = HashMap::new();
+		let mut currency_totals: HashMap<String, Quant> = HashMap::new();
 
 		// Sum subtotals; doesn't need to be recursive because we only
 		// dropped some top-level branches of the hierarchy; what
@@ -130,7 +130,7 @@ impl Total {
 		}
 	}
 
-	/// Invert the signs of every Scalar in the hierarchy
+	/// Invert the signs of every Quant in the hierarchy
 	pub fn invert(&mut self) {
 		for scalar in self.amounts.values_mut() {
 			scalar.negate();
@@ -147,7 +147,7 @@ mod tests {
 	use super::*;
 	use crate::gl::entry::Detail;
 	use crate::util::amount::Amount;
-	use crate::util::scalar::Scalar;
+	use crate::util::quant::Quant;
 
 	#[test]
 	fn test_total_initialization() {
@@ -163,7 +163,7 @@ mod tests {
 		let mut total = Total::new();
 		let detail = Detail::new(
 			"Assets:Cash",
-			Amount::new(Scalar::new(1000, 1), "USD"),
+			Amount::new(Quant::new(1000, 1), "USD"),
 			false,
 		);
 		total.ingest_details(&vec![detail]);
@@ -174,7 +174,7 @@ mod tests {
 		assert!(total.subtotals["Assets"].subtotals.contains_key("Cash"));
 
 		let cash_total = &total.subtotals["Assets"].subtotals["Cash"];
-		assert_eq!(cash_total.amounts.get("USD"), Some(&Scalar::new(1000, 1)));
+		assert_eq!(cash_total.amounts.get("USD"), Some(&Quant::new(1000, 1)));
 	}
 
 	#[test]
@@ -183,12 +183,12 @@ mod tests {
 		let details = vec![
 			Detail::new(
 				"Assets:Cash",
-				Amount::new(Scalar::new(1000, 1), "USD"),
+				Amount::new(Quant::new(1000, 1), "USD"),
 				false,
 			),
 			Detail::new(
 				"Assets:AR",
-				Amount::new(Scalar::new(2000, 1), "USD"),
+				Amount::new(Quant::new(2000, 1), "USD"),
 				false,
 			),
 		];
@@ -204,8 +204,8 @@ mod tests {
 
 		let cash_total = &assets_total.subtotals["Cash"];
 		let ar_total = &assets_total.subtotals["AR"];
-		assert_eq!(cash_total.amounts.get("USD"), Some(&Scalar::new(1000, 1)));
-		assert_eq!(ar_total.amounts.get("USD"), Some(&Scalar::new(2000, 1)));
+		assert_eq!(cash_total.amounts.get("USD"), Some(&Quant::new(1000, 1)));
+		assert_eq!(ar_total.amounts.get("USD"), Some(&Quant::new(2000, 1)));
 	}
 
 	#[test]
@@ -213,7 +213,7 @@ mod tests {
 		let mut total = Total::new();
 		let detail = Detail::new(
 			"Liabilities:Short-Term:CreditCard",
-			Amount::new(Scalar::new(500, 1), "EUR"),
+			Amount::new(Quant::new(500, 1), "EUR"),
 			false,
 		);
 		total.ingest_details(&vec![detail]);
@@ -230,7 +230,7 @@ mod tests {
 		let credit_card_total = &short_term_total.subtotals["CreditCard"];
 		assert_eq!(
 			credit_card_total.amounts.get("EUR"),
-			Some(&Scalar::new(500, 1))
+			Some(&Quant::new(500, 1))
 		);
 	}
 
@@ -240,12 +240,12 @@ mod tests {
 		total.ingest_details(&vec![
 			Detail::new(
 				"Assets:Cash",
-				Amount::new(Scalar::new(1000, 1), "USD"),
+				Amount::new(Quant::new(1000, 1), "USD"),
 				false,
 			),
 			Detail::new(
 				"Liabilities:CreditCard",
-				Amount::new(Scalar::new(500, 1), "USD"),
+				Amount::new(Quant::new(500, 1), "USD"),
 				false,
 			),
 		]);
@@ -256,10 +256,7 @@ mod tests {
 		assert!(!total.subtotals.contains_key("Liabilities"));
 
 		let assets_total = &total.subtotals["Assets"];
-		assert_eq!(
-			assets_total.amounts.get("USD"),
-			Some(&Scalar::new(1000, 1))
-		);
+		assert_eq!(assets_total.amounts.get("USD"), Some(&Quant::new(1000, 1)));
 	}
 
 	#[test]
@@ -268,12 +265,12 @@ mod tests {
 		total.ingest_details(&vec![
 			Detail::new(
 				"Income:Sales",
-				Amount::new(Scalar::new(3000, 1), "USD"),
+				Amount::new(Quant::new(3000, 1), "USD"),
 				false,
 			),
 			Detail::new(
 				"Expenses:Rent",
-				Amount::new(Scalar::new(1000, 1), "USD"),
+				Amount::new(Quant::new(1000, 1), "USD"),
 				false,
 			),
 		]);
@@ -283,11 +280,8 @@ mod tests {
 		let sales_total = &total.subtotals["Income"].subtotals["Sales"];
 		let rent_total = &total.subtotals["Expenses"].subtotals["Rent"];
 
-		assert_eq!(
-			sales_total.amounts.get("USD"),
-			Some(&Scalar::new(-3000, 1))
-		);
-		assert_eq!(rent_total.amounts.get("USD"), Some(&Scalar::new(-1000, 1)));
+		assert_eq!(sales_total.amounts.get("USD"), Some(&Quant::new(-3000, 1)));
+		assert_eq!(rent_total.amounts.get("USD"), Some(&Quant::new(-1000, 1)));
 	}
 
 	#[test]
@@ -302,12 +296,12 @@ mod tests {
 		total.ingest_details(&vec![
 			Detail::new(
 				"Assets:Cash",
-				Amount::new(Scalar::new(1000, 1), "USD"),
+				Amount::new(Quant::new(1000, 1), "USD"),
 				false,
 			),
 			Detail::new(
 				"Liabilities:CreditCard",
-				Amount::new(Scalar::new(500, 1), "USD"),
+				Amount::new(Quant::new(500, 1), "USD"),
 				false,
 			),
 		]);
