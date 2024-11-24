@@ -54,13 +54,7 @@ impl OrderedEntry {
 		}
 
 		table.add_partial_separator(vec![2]);
-		table.add_row(vec![
-			"",
-			"",
-			&total.to_string(),
-			&currency,
-			"",
-		]);
+		table.add_row(vec!["", "", &total.to_string(), &currency, ""]);
 
 		table.print();
 	}

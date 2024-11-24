@@ -130,7 +130,9 @@ impl Table {
 								"",
 								width = max_widths[i]
 							);
-							if i < data_sep.len() - 1 {
+							if i < data_sep.len()
+								- 1
+							{
 								print!("  ");
 							}
 						}

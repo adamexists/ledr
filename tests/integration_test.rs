@@ -143,8 +143,8 @@ fn execute(
 			expected_output.trim(),
 			"Output did not match for {}; expected:\n{}\ngot:\n{}",
 			input_file,
-			expected_output,
-			stdout
+			expected_output.trim(),
+			stdout.trim()
 		);
 	}
 }

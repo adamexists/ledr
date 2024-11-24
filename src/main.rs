@@ -94,14 +94,14 @@ struct Cli {
 
 #[derive(ValueEnum, Clone)]
 enum Directive {
-	BS, // balance sheet
-	IS, // income statement
-	TB, // trial balance
+	Bs, // balance sheet
+	Is, // income statement
+	Tb, // trial balance
 
-	AS, // account summary
+	As, // account summary
 
-	LOTS, // open lots report
-	PNL,  // profit / loss lots report
+	Lots, // open lots report
+	Pnl,  // profit / loss lots report
 }
 
 fn main() -> Result<(), Error> {
@@ -116,22 +116,22 @@ fn main() -> Result<(), Error> {
 	let lot_state = finalize_ledger(&args, &mut ledger, &parse_result)?;
 
 	match args.command {
-		Directive::BS => financial_statement(
+		Directive::Bs => financial_statement(
 			ledger,
 			args,
 			vec!["Assets", "Liabilities"],
 		)?,
-		Directive::IS => financial_statement(
+		Directive::Is => financial_statement(
 			ledger,
 			args,
 			vec!["Income, Expenses"],
 		)?,
-		Directive::TB => financial_statement(
+		Directive::Tb => financial_statement(
 			ledger,
 			args,
 			vec!["Assets", "Liabilities", "Income", "Expenses"],
 		)?,
-		Directive::AS => {
+		Directive::As => {
 			// Ensure the search term is provided for the AS command
 			if let Some(account) = &args.term {
 				let currency = match &args.currency {
@@ -147,7 +147,7 @@ fn main() -> Result<(), Error> {
 				bail!("No account specified");
 			}
 		},
-		Directive::LOTS => {
+		Directive::Lots => {
 			// TODO: Add customization for this directive.
 			let ordered_lots = OrderedLots::new(
 				lot_state.take_lots(vec![LotFilter::Status(
@@ -158,7 +158,7 @@ fn main() -> Result<(), Error> {
 			);
 			ordered_lots.print_open_lots(&end.min(today()))
 		},
-		Directive::PNL => {
+		Directive::Pnl => {
 			// TODO: Add customization for this directive.
 			let ordered_lots = OrderedLots::new(
 				lot_state.take_lots(vec![LotFilter::HasSales(
