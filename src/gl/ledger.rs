@@ -15,7 +15,7 @@
  */
 
 use crate::gl::entry::{Entry, VIRTUAL_CONVERSION_ACCOUNT};
-use crate::gl::exchange_rate::ExchangeRates;
+use crate::gl::exchange_rates::ExchangeRates;
 use crate::investment::action::Action;
 use crate::investment::action_buffer::ActionBuffer;
 use crate::util::amount::Amount;

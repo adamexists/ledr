@@ -13,7 +13,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-use crate::gl::exchange_rate::ExchangeRates;
+use crate::gl::exchange_rates::ExchangeRates;
 use crate::investment::action::{Action, Direction};
 use crate::util::amount::Amount;
 use crate::util::date::Date;
@@ -465,7 +465,7 @@ impl Detail {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::gl::exchange_rate::ExchangeRates;
+	use crate::gl::exchange_rates::ExchangeRates;
 	use crate::util::date::Date;
 	use crate::util::quant::Quant;
 

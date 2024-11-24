@@ -15,6 +15,6 @@
  */
 
 pub mod entry;
-pub mod exchange_rate;
+pub mod exchange_rates;
 pub mod ledger;
 pub mod total;

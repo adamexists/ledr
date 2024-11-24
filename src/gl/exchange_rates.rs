@@ -154,10 +154,14 @@ impl ExchangeRates {
 	///
 	/// Ignores and drops all data outside the bounds defined by the
 	/// relevant arguments.
+	///
+	/// TODO: I think there is a general problem with base/quote syntax
+	///  consistency in this project. Should audit all that sometime.
 	pub fn finalize(
 		&mut self,
 		drop_before: &Date,
 		drop_after: &Date,
+		max_precision_by_currency: &HashMap<String, u32>,
 	) -> Result<(), Error> {
 		let mut resolved = HashMap::new();
 
@@ -168,7 +172,21 @@ impl ExchangeRates {
 			if graph.has_inconsistent_cycle() {
 				bail!("Exchange rates on {} are incoherent", date)
 			}
-			for (base, quote, rate) in graph.get_all_rates() {
+
+			// Make sure exchange rates inherit desired precision from user
+			for (base, quote, mut rate) in graph.get_all_rates() {
+				match (
+					max_precision_by_currency.get(&base),
+					max_precision_by_currency.get(&quote),
+				) {
+					(Some(bmp), Some(qmp)) => {
+						rate.set_render_precision(*bmp.max(qmp))
+					},
+					(Some(bmp), None) => rate.set_render_precision(*bmp),
+					(None, Some(qmp)) => rate.set_render_precision(*qmp),
+					(None, None) => {},
+				}
+
 				resolved
 					.entry((base.clone(), quote.clone()))
 					.or_insert_with(Vec::new)
@@ -183,6 +201,23 @@ impl ExchangeRates {
 
 		self.resolved_rates = resolved;
 		Ok(())
+	}
+
+	/// Retrieves the most recent rate, if any, at or before the given date
+	pub fn get_rate_as_of(
+		&self,
+		base: &str,
+		quote: &str,
+		as_of: &Date,
+	) -> Option<Quant> {
+		self.resolved_rates
+			.get(&(base.to_string(), quote.to_string()))
+			.and_then(|rates| {
+				rates
+					.iter()
+					.find(|(d, _)| d <= as_of)
+					.map(|(_, rate)| *rate)
+			})
 	}
 
 	/// Retrieves the most recent rate available, if any
@@ -322,7 +357,7 @@ mod tests {
 			.unwrap();
 
 		exchange_rates
-			.finalize(&Date::min(), &Date::max())
+			.finalize(&Date::min(), &Date::max(), &HashMap::new())
 			.expect("finalize failed");
 
 		assert_eq!(exchange_rates.get_latest_rate(&base, &quote), Some(rate2));
@@ -334,7 +369,7 @@ mod tests {
 			.unwrap();
 
 		exchange_rates
-			.finalize(&Date::min(), &Date::max())
+			.finalize(&Date::min(), &Date::max(), &HashMap::new())
 			.expect("finalize failed");
 
 		assert_eq!(exchange_rates.get_latest_rate(&base, &quote), Some(rate3));

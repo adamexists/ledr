@@ -107,7 +107,7 @@ fn test_integration_bounded_range() {
 
 #[test]
 fn test_integration_rgl() {
-	let test_cases = vec![("1_in.txt", "1_out.txt")];
+	let test_cases = vec![("1_in.txt", "1_out.txt"), ("2_in.txt", "2_out.txt")];
 
 	execute("rgl", test_cases, true, "rgl", vec!["-e", "2024-11-23"])
 }

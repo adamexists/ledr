@@ -168,7 +168,11 @@ fn main() -> Result<(), Error> {
 				parse_result.max_precision_by_currency,
 				args.precision.unwrap_or(u32::MAX),
 			);
-			ordered_lots.print_realized_gain_loss(&begin, &end.min(today()))
+			ordered_lots.print_realized_gain_loss(
+				&begin,
+				&end.min(today()),
+				&ledger.exchange_rates,
+			)
 		},
 		Directive::Ugl => {
 			let ordered_lots = PortfolioReporter::new(
@@ -197,7 +201,11 @@ fn finalize_ledger(
 	end: &Date,
 	portfolio_ignore_after_end: bool,
 ) -> Result<Portfolio, Error> {
-	ledger.exchange_rates.finalize(begin, end)?;
+	ledger.exchange_rates.finalize(
+		begin,
+		end,
+		&parse_result.max_precision_by_currency,
+	)?;
 
 	let portfolio_end = match portfolio_ignore_after_end {
 		true => end,

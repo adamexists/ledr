@@ -167,11 +167,8 @@ impl Graph {
 
 	/// Reports the rate between two currencies, with base-quote semantics. None if no path
 	/// exists in the graph between the currencies, else there will always be a result.
-	///
-	/// If there is a direct rate between currencies, we use Quant math. If at least one
-	/// indirect hop is required, we fall back to f64 math at a precision higher than the
-	/// maximum supported by Quant. This TODO should be documented extensively.
 	pub fn convert(&self, base: &str, quote: &str) -> Option<Quant> {
+		// TODO: Remove this as it is no longer needed with no fallback, probably?
 		if let Some(direct) = self.get_direct_rate(base, quote, false) {
 			return Some(direct);
 		}

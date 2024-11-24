@@ -13,7 +13,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-use crate::gl::exchange_rate::ExchangeRates;
+use crate::gl::exchange_rates::ExchangeRates;
 use crate::investment::lot::Lot;
 use crate::reports::table::Table;
 use crate::util::amount::Amount;
@@ -121,13 +121,18 @@ impl PortfolioReporter {
 	}
 
 	/// Prints a realized gain/loss report.
-	pub fn print_realized_gain_loss(&self, begin: &Date, end: &Date) {
+	pub fn print_realized_gain_loss(
+		&self,
+		begin: &Date,
+		end: &Date,
+		exchange_rates: &ExchangeRates,
+	) {
 		if self.lots.is_empty() {
 			println!("No applicable lots");
 			return;
 		}
 
-		let mut table = Table::new(10);
+		let mut table = Table::new(11);
 		table.right_align(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
 		table.add_header(vec![
@@ -141,6 +146,7 @@ impl PortfolioReporter {
 			"Proceeds",
 			"Unit G/L",
 			"Total G/L",
+			"Notes",
 		]);
 
 		table.add_separator();
@@ -156,38 +162,62 @@ impl PortfolioReporter {
 				}
 
 				let cb = l.commodity.cost_basis();
+				let mut proceeds_str = "UNK".to_string();
+				let mut notes = "".to_string();
 
-				// TODO: Simplify this.
-				let (pr, unit_gl, total_gl) = if let Some(pr) = &s.unit_proceeds
-				{
+				let pr = if let Some(pr) = &s.unit_proceeds {
+					proceeds_str = pr.to_string();
+
 					if cb.currency == pr.currency {
+						Some(Amount::new(pr.value - cb.value, &cb.currency))
+					} else {
+						match exchange_rates.get_rate_as_of(
+							&pr.currency,
+							&cb.currency,
+							end,
+						) {
+							Some(amt) => {
+								notes = format!(
+									"Unit G/L est. from rate of {} {}/{}",
+									amt, cb.currency, pr.currency
+								);
+								Some(Amount::new(amt * pr.value, &cb.currency))
+							},
+							None => {
+								has_any_unknown_gl = true;
+								Some(Amount::new(pr.value, &pr.currency))
+							},
+						}
+					}
+				} else {
+					None
+				};
+
+				let (mut unit_gl_str, mut total_gl_str) =
+					("UNK".to_string(), "UNK".to_string());
+
+				if let Some(pr) = pr {
+					if pr.currency == cb.currency {
 						let unit_gl =
 							Amount::new(pr.value - cb.value, &cb.currency);
+						unit_gl_str = unit_gl.to_string();
 
 						let total_gl = Amount::new(
 							unit_gl.value * s.quantity,
 							&cb.currency,
 						);
+						total_gl_str = total_gl.to_string();
 
 						totals
-							.entry(unit_gl.clone().currency)
-							.or_insert(Amount::zero(&total_gl.currency))
+							.entry(cb.currency.clone())
+							.or_insert(Amount::zero(&cb.currency))
 							.value += total_gl.value;
-
-						(
-							pr.to_string(),
-							unit_gl.to_string(),
-							total_gl.to_string(),
-						)
 					} else {
 						has_any_unknown_gl = true;
-						// TODO: Could reduce the unknowns by pulling currency conversions in here.
-						(pr.to_string(), "UNK".to_string(), "UNK".to_string())
 					}
 				} else {
 					has_any_unknown_gl = true;
-					("UNK".to_string(), "UNK".to_string(), "UNK".to_string())
-				};
+				}
 
 				table.add_row(vec![
 					&l.id,
@@ -197,35 +227,36 @@ impl PortfolioReporter {
 					l.commodity.symbol(),
 					&s.quantity.to_string(),
 					&l.commodity.cost_basis().to_string(),
-					&pr,
-					&unit_gl,
-					&total_gl,
+					&proceeds_str,
+					&unit_gl_str,
+					&total_gl_str,
+					&notes,
 				])
 			}
 		}
 
 		table.add_partial_separator(vec![9]);
 
-		// One line of totals per currency. TODO needs to be deterministically sorted.
-		for total_gl in totals.values() {
-			let final_total_gl = if has_any_unknown_gl {
-				"UNK".to_string()
-			} else {
-				total_gl.to_string()
-			};
-
-			table.add_row(vec![
-				"",
-				"",
-				"",
-				"",
-				"",
-				"",
-				"",
-				"",
-				"",
-				&final_total_gl,
-			]);
+		// Summing up full total is unknown if any proceeds can't be determined
+		if has_any_unknown_gl {
+			table.add_row(vec!["", "", "", "", "", "", "", "", "", "UNK", ""]);
+		} else {
+			// One line of totals per currency. TODO needs to be deterministically sorted.
+			for total_gl in totals.values() {
+				table.add_row(vec![
+					"",
+					"",
+					"",
+					"",
+					"",
+					"",
+					"",
+					"",
+					"",
+					&total_gl.to_string(),
+					"",
+				]);
+			}
 		}
 
 		table.print()

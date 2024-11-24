@@ -159,6 +159,10 @@ impl Quant {
 		self.render_precision
 	}
 
+	pub fn set_render_precision(&mut self, precision: u32) {
+		self.render_precision = precision;
+	}
+
 	pub fn abs(&self) -> Self {
 		Self {
 			is_negative: false,
@@ -277,14 +281,10 @@ impl Add for Quant {
 				},
 			};
 
-		let denominator = self.denominator * rhs.denominator;
-
-		let render_precision = self.render_precision.max(rhs.render_precision);
-
 		let mut out = Self {
 			numerator,
-			denominator,
-			render_precision,
+			denominator: self.denominator * rhs.denominator,
+			render_precision: self.render_precision.max(rhs.render_precision),
 			is_negative: result_is_negative && numerator > 0,
 		};
 		out.reduce();
@@ -334,12 +334,10 @@ impl Sub for Quant {
 
 		let denominator = self.denominator * rhs.denominator;
 
-		let render_precision = self.render_precision.max(rhs.render_precision);
-
 		let mut out = Self {
 			numerator,
 			denominator,
-			render_precision,
+			render_precision: self.render_precision.max(rhs.render_precision),
 			is_negative: result_is_negative && numerator > 0,
 		};
 		out.reduce();
@@ -362,13 +360,11 @@ impl Mul for Quant {
 		let is_negative =
 			numerator != 0 && (self.is_negative ^ rhs.is_negative);
 
-		let render_precision = self.render_precision.max(rhs.render_precision);
-
 		let mut out = Self {
 			numerator,
 			denominator,
 			is_negative,
-			render_precision,
+			render_precision: self.render_precision.max(rhs.render_precision),
 		};
 		out.reduce();
 		out
@@ -428,7 +424,7 @@ impl Div for Quant {
 			numerator,
 			denominator,
 			is_negative,
-			render_precision: self.render_precision,
+			render_precision: self.render_precision.max(rhs.render_precision),
 		};
 		out.reduce();
 		out

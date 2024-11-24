@@ -301,11 +301,20 @@ impl Parser {
 						None
 					};
 
+					// The purchase of a lot implies an exchange rate for that
+					// lot on that date, with its cost basis. The sale of a
+					// lot does not.
+					let implied_conversion = if amount.value > 0 {
+						Some(Amount::new(cb_amount, &cb_currency))
+					} else {
+						None
+					};
+
 					ledger
 						.add_detail(
 							account,
 							amount,
-							Some(Amount::new(cb_amount, &cb_currency)),
+							implied_conversion,
 							Some(Amount {
 								value: cb_amount,
 								currency: cb_currency,
