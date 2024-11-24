@@ -241,8 +241,11 @@ impl PortfolioReporter {
 		if has_any_unknown_gl {
 			table.add_row(vec!["", "", "", "", "", "", "", "", "", "UNK", ""]);
 		} else {
-			// One line of totals per currency. TODO needs to be deterministically sorted.
-			for total_gl in totals.values() {
+			let mut sorted_totals: Vec<_> = totals.values().collect();
+			sorted_totals.sort_by(|a, b| a.currency.cmp(&b.currency));
+
+			// One line of totals per currency
+			for total_gl in sorted_totals {
 				table.add_row(vec![
 					"",
 					"",
@@ -327,8 +330,11 @@ impl PortfolioReporter {
 
 		table.add_partial_separator(vec![8]);
 
-		// One line of totals per currency. TODO needs to be deterministically sorted.
-		for (_, total_gl) in totals {
+		let mut sorted_totals: Vec<_> = totals.values().collect();
+		sorted_totals.sort_by(|a, b| a.currency.cmp(&b.currency));
+
+		// One line of totals per currency
+		for total_gl in sorted_totals {
 			table.add_row(vec![
 				"",
 				"",
