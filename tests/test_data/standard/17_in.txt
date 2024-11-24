@@ -18,10 +18,10 @@
     Assets:A     5 TSLA { 477.00 USD }
     Assets:C
 
-2024-11-19 Sell AAPL at a Profit
+2024-11-20 Sell AAPL at a Profit
     Assets:A      -9 AAPL { 234.00 USD }
     Assets:B       3000.00 USD
 
-2024-11-19 Sell TSLA at a Loss
+2024-11-21 Sell TSLA at a Loss
     Assets:A     -4 TSLA { 477.00 USD }
     Assets:C     1800.00 USD

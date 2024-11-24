@@ -13,9 +13,22 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-pub mod action;
-pub mod commodity;
-pub mod lot;
-pub mod lot_buffer;
-pub mod lot_state;
-mod sale;
+use crate::util::amount::Amount;
+use crate::util::date::{Date, Duration};
+use crate::util::scalar::Scalar;
+
+#[derive(Debug, PartialEq, Eq, PartialOrd)]
+pub struct Sale {
+	pub date: Date,
+	pub quantity: Scalar,
+
+	/// Always conceptually exists, but only present if known;
+	/// not necessarily the currency of acquisition
+	pub unit_proceeds: Option<Amount>,
+}
+
+impl Sale {
+	pub fn time_held(&self, acquisition_date: &Date) -> Duration {
+		acquisition_date.until(&self.date)
+	}
+}

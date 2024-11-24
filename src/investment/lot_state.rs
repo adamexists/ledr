@@ -15,7 +15,8 @@
  */
 use crate::investment::action::Action;
 use crate::investment::commodity::Commodity;
-use crate::investment::lot::{Lot, LotStatus, Sale};
+use crate::investment::lot::{Lot, LotStatus};
+use crate::investment::sale::Sale;
 use crate::util::amount::Amount;
 use anyhow::{bail, Error};
 use std::collections::HashMap;
@@ -23,12 +24,15 @@ use std::collections::HashMap;
 /// TODO rename this and write a proper description
 pub struct LotState {
 	state: HashMap<Commodity, Vec<Lot>>, // commodity -> its lots
+	/// The ID number that will be assigned to the next lot
+	next_id: u64,
 }
 
 impl LotState {
 	pub fn new() -> Self {
 		Self {
 			state: Default::default(),
+			next_id: 1,
 		}
 	}
 
@@ -37,6 +41,7 @@ impl LotState {
 			.entry(action.commodity.clone())
 			.or_default()
 			.push(Lot {
+				id: self.next_id, // TODO: Make certain this is deterministic
 				status: LotStatus::Open,
 				account: action.account.clone(),
 				commodity: action.commodity.clone(),
@@ -44,7 +49,9 @@ impl LotState {
 				acquisition_date: action.date,
 				closed_date: None,
 				sales: vec![],
-			})
+			});
+
+		self.next_id += 1;
 	}
 
 	// TODO: Currently we use FIFO only; we could expand this to
@@ -113,16 +120,38 @@ impl LotState {
 		}
 	}
 
-	/// Flattens the set of lots into one Vec, and returns it.
+	/// Flattens the set of lots into one Vec, applies filters, and returns it.
 	/// Consumes this.
-	pub fn take_lots(self, only_open: bool) -> Vec<Lot> {
-		let lots_iter = self.state.into_values().flatten();
-		if only_open {
-			lots_iter
-				.filter(|lot| lot.status == LotStatus::Open)
-				.collect()
-		} else {
-			lots_iter.collect()
+	pub fn take_lots(
+		self,
+		filters: impl IntoIterator<Item = LotFilter>,
+	) -> Vec<Lot> {
+		// First assign IDs to all lots
+
+		let mut lots_iter: Box<dyn Iterator<Item = Lot>> =
+			Box::new(self.state.into_values().flatten());
+
+		for filter in filters {
+			lots_iter = match filter {
+				LotFilter::Status(status) => {
+					Box::new(lots_iter.filter(move |lot| {
+						lot.status == status
+					}))
+				},
+				LotFilter::HasSales(has_sales) => {
+					Box::new(lots_iter.filter(move |lot| {
+						lot.sales.is_empty()
+							!= has_sales
+					}))
+				},
+			};
 		}
+
+		lots_iter.collect()
 	}
+}
+
+pub enum LotFilter {
+	Status(LotStatus),
+	HasSales(bool),
 }

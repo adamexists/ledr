@@ -28,6 +28,7 @@ pub struct Table {
 pub enum Row {
 	Data(Vec<String>),
 	Separator,
+	// TODO: Total rows and separators should be a row type.
 }
 
 impl Table {
@@ -57,13 +58,15 @@ impl Table {
 		self.right_align[col] = true;
 	}
 
+	// TODO: This could also use a refactor.
 	pub fn print(
 		&self,
-		total_column_index: usize,
-		total: &String,
-		currency_index: Option<usize>, // TODO: Refactor.
-		currency: &String,
+		total_col: Option<usize>,
+		total: Option<String>,
+		cur_index: Option<usize>, // TODO: Refactor.
+		currency: Option<String>,
 	) {
+		println!();
 		let mut max_widths = vec![0; self.column_count];
 
 		// Determine maximum widths for each column
@@ -110,21 +113,28 @@ impl Table {
 			}
 		}
 
+		if total_col.is_none() || total.is_none() {
+			return;
+		}
+
+		let total_col_index = total_col.unwrap();
+		let total_val = total.unwrap();
+
 		// Print the footer
 		for (_, width) in
-			max_widths.iter().enumerate().take(total_column_index)
+			max_widths.iter().enumerate().take(total_col_index)
 		{
 			print!("{:width$}  ", "", width = width);
 		}
 
-		let mut separator_width = match currency_index {
+		let mut separator_width = match cur_index {
 			Some(index) => {
-				max_widths[total_column_index]
+				max_widths[total_col_index]
 					+ max_widths[index] + 2
 			},
-			None => max_widths[total_column_index] + 2,
+			None => max_widths[total_col_index] + 2,
 		};
-		if total_column_index + 1 == self.column_count {
+		if total_col_index + 1 == self.column_count {
 			separator_width -= 2;
 		}
 
@@ -137,24 +147,28 @@ impl Table {
 		for (i, width) in
 			max_widths.iter().enumerate().take(self.column_count)
 		{
-			if i == total_column_index {
+			if i == total_col_index {
 				if self.right_align[i] {
 					print!(
 						"{:>width$}",
-						total,
+						total_val,
 						width = width
 					);
 				} else {
 					print!(
 						"{:<width$}",
-						total,
+						total_val,
 						width = width
 					);
 				}
-			} else if currency_index.is_some()
-				&& i == currency_index.unwrap()
+			} else if cur_index.is_some() && i == cur_index.unwrap()
 			{
-				print!("{:<width$}", currency, width = width);
+				print!(
+					"{:<width$}",
+					currency.clone()
+						.unwrap_or("".to_string()),
+					width = width
+				);
 			} else {
 				print!("{:width$}", "", width = width);
 			}

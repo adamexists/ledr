@@ -15,13 +15,15 @@
  */
 
 use crate::gl::total::Total;
-use crate::investment::lot_state::LotState;
+use crate::investment::lot::LotStatus;
+use crate::investment::lot_state::{LotFilter, LotState};
 use crate::parsing::parser::{parse, ParseResult};
 use crate::reports::ordered_entry::OrderedEntry;
 use crate::reports::ordered_lots::OrderedLots;
 use crate::reports::ordered_total::OrderedTotal;
 use crate::util::date::Date;
 use anyhow::{bail, Error};
+use chrono::Local;
 use clap::{Parser, ValueEnum};
 use gl::ledger::Ledger;
 
@@ -98,7 +100,8 @@ enum Directive {
 
 	AS, // account summary
 
-	OpenLots, // TODO: Need other lot reports.
+	LOTS, // open lots report
+	PNL,  // profit / loss lots report
 }
 
 fn main() -> Result<(), Error> {
@@ -144,14 +147,27 @@ fn main() -> Result<(), Error> {
 				bail!("No account specified");
 			}
 		},
-		Directive::OpenLots => {
+		Directive::LOTS => {
 			// TODO: Add customization for this directive.
-
-			let ordered_lots =
-				OrderedLots::new(lot_state.take_lots(true));
-			ordered_lots.print_open_lots(
-				&parse_result.latest_date.min(end),
-			)
+			let ordered_lots = OrderedLots::new(
+				lot_state.take_lots(vec![LotFilter::Status(
+					LotStatus::Open,
+				)]),
+				parse_result.max_precision_by_currency,
+				args.precision.unwrap_or(99), // TODO
+			);
+			ordered_lots.print_open_lots(&end.min(today()))
+		},
+		Directive::PNL => {
+			// TODO: Add customization for this directive.
+			let ordered_lots = OrderedLots::new(
+				lot_state.take_lots(vec![LotFilter::HasSales(
+					true,
+				)]),
+				parse_result.max_precision_by_currency,
+				args.precision.unwrap_or(99), // TODO
+			);
+			ordered_lots.print_profit_loss()
 		},
 	}
 
@@ -224,4 +240,8 @@ fn get_range(args: &Cli) -> Result<(Date, Date), Error> {
 	)?;
 
 	Ok((begin, end))
+}
+
+fn today() -> Date {
+	Date::from_str(&Local::now().date_naive().to_string()).unwrap()
 }

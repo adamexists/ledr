@@ -14,13 +14,15 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::investment::commodity::Commodity;
-use crate::util::amount::Amount;
+use crate::investment::sale::Sale;
 use crate::util::date::{Date, Duration};
 use crate::util::scalar::Scalar;
 use std::cmp::Ordering;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Lot {
+	pub id: u64,
+
 	pub status: LotStatus,
 	pub account: String,
 
@@ -37,16 +39,6 @@ pub struct Lot {
 pub enum LotStatus {
 	Open,
 	Closed,
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd)]
-pub struct Sale {
-	pub date: Date,
-	pub quantity: Scalar,
-
-	/// Always conceptually exists, but only present if known;
-	/// not necessarily the currency of acquisition
-	pub unit_proceeds: Option<Amount>,
 }
 
 impl PartialOrd for LotStatus {
@@ -101,18 +93,20 @@ impl PartialOrd for Lot {
 }
 
 impl Ord for Lot {
+	// TODO: This should be maximally deterministic, and thus be made to
+	//  use every field on the Lot.
 	fn cmp(&self, other: &Self) -> Ordering {
-		// First: Compare by status (Open < Closed)
-		let status_cmp = self.status.cmp(&other.status);
-		if status_cmp != Ordering::Equal {
-			return status_cmp;
-		}
-
-		// Second: Compare by acquisition_date (ascending)
+		// First: Compare by acquisition_date (ascending)
 		let acquisition_cmp =
 			self.acquisition_date.cmp(&other.acquisition_date);
 		if acquisition_cmp != Ordering::Equal {
 			return acquisition_cmp;
+		}
+
+		// Second: Compare by status (Open < Closed)
+		let status_cmp = self.status.cmp(&other.status);
+		if status_cmp != Ordering::Equal {
+			return status_cmp;
 		}
 
 		// Third: Compare by commodity (lexicographically)

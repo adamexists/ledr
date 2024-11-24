@@ -53,6 +53,11 @@ impl OrderedEntry {
 			}
 		}
 
-		table.print(2, &total.to_string(), Some(3), currency)
+		table.print(
+			Some(2),
+			Some(total.to_string()),
+			Some(3),
+			Some(currency.clone()),
+		)
 	}
 }

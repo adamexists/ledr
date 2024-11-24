@@ -60,9 +60,9 @@ impl LotBuffer {
 	}
 
 	fn sort_actions(&mut self, as_of: &Date) {
+		self.actions.retain(|m| &m.date <= as_of);
 		self.actions.sort_by(|a, b| {
 			a.partial_cmp(b).unwrap_or(Ordering::Equal)
 		});
-		self.actions.retain(|m| &m.date <= as_of);
 	}
 }
