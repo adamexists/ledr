@@ -32,7 +32,6 @@ pub struct Parser {
 
 impl Parser {
 	pub fn new() -> Self {
-		// TODO: Expand the use and sophistication of regexes within!
 		let re = Regex::new(r#""([^"]*)"|(\S+)"#).unwrap();
 		Self {
 			detail_regex: re,
@@ -230,11 +229,10 @@ impl Parser {
 				bail!("Orphaned date (line {}): {}", i, l);
 			}
 
-			// Handle entry detail lines
+			// Handle entry detail lines, which all have different numbers of
+			// terms; with the below regex we split all by whitespace except
+			// terms surrounded by quotations, which are for lot naming
 			let parts = self.parse_entry_detail(&l);
-
-			// The rest of the things this line can be all have different
-			// numbers of terms
 			if parts.len() == 1 {
 				let account = parts[0].clone();
 				ledger
@@ -245,8 +243,10 @@ impl Parser {
 
 			let account = parts[0].to_string();
 			let amount = Amount::new(Quant::from_str(&parts[1])?, &parts[2]);
-			parse_result
-				.note_precision(&amount.currency, amount.value.resolution());
+			parse_result.note_precision(
+				&amount.currency,
+				amount.value.render_precision(),
+			);
 
 			match parts.len() {
 				// no inline conversion
@@ -265,8 +265,10 @@ impl Parser {
 						.map_err(|_| anyhow!("Invalid value (line {})", i))?;
 					let ic_currency = parts[5].to_string();
 
-					parse_result
-						.note_precision(&ic_currency, ic_amount.resolution());
+					parse_result.note_precision(
+						&ic_currency,
+						ic_amount.render_precision(),
+					);
 
 					if is_total_cost {
 						ic_amount /= amount.value
@@ -293,8 +295,10 @@ impl Parser {
 						.map_err(|_| anyhow!("Invalid value (line {})", i))?;
 					let cb_currency = parts[5].to_string();
 
-					parse_result
-						.note_precision(&cb_currency, cb_amount.resolution());
+					parse_result.note_precision(
+						&cb_currency,
+						cb_amount.render_precision(),
+					);
 
 					let lot_name = if parts.len() == 8 {
 						Some(parts[6].to_string())

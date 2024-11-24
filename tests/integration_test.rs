@@ -13,115 +13,111 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-
 use std::fs;
 use std::process::Command;
 
-// TODO: Automate picking up these file lists.
+/// Dynamically collects test cases from a given directory.
+fn collect_test_cases(subfolder: &str) -> Vec<(String, String)> {
+	let dir_path = format!("tests/test_data/{}", subfolder);
+
+	// Gather input and output files.
+	let mut test_cases = vec![];
+
+	if let Ok(entries) = fs::read_dir(&dir_path) {
+		let mut inputs = vec![];
+		let mut outputs = vec![];
+
+		for entry in entries {
+			if let Ok(entry) = entry {
+				let file_name =
+					entry.file_name().into_string().unwrap_or_default();
+				if file_name.ends_with("_in.txt") {
+					inputs.push(file_name);
+				} else if file_name.ends_with("_out.txt") {
+					outputs.push(file_name);
+				}
+			}
+		}
+
+		// Sort to ensure consistent pairing.
+		inputs.sort();
+		outputs.sort();
+
+		// Pair inputs with corresponding outputs.
+		for input_file in inputs {
+			let output_file = input_file.replace("_in.txt", "_out.txt");
+			if outputs.contains(&output_file) {
+				test_cases.push((input_file, output_file));
+			}
+		}
+	}
+
+	test_cases
+}
 
 #[test]
 fn test_integration_standard() {
-	let test_cases = vec![
-		("1_in.txt", "1_out.txt"),
-		("2_in.txt", "2_out.txt"),
-		("3_in.txt", "3_out.txt"),
-		("4_in.txt", "4_out.txt"),
-		("5_in.txt", "5_out.txt"),
-		("6_in.txt", "6_out.txt"),
-		("7_in.txt", "7_out.txt"),
-		("8_in.txt", "8_out.txt"),
-		("9_in.txt", "9_out.txt"),
-		("10_in.txt", "10_out.txt"),
-		("11_in.txt", "11_out.txt"),
-		("12_in.txt", "12_out.txt"),
-		("13_in.txt", "13_out.txt"),
-		("14_in.txt", "14_out.txt"),
-		("15_in.txt", "15_out.txt"),
-		("16_in.txt", "16_out.txt"),
-		("17_in.txt", "17_out.txt"),
-		("18_in.txt", "18_out.txt"),
-	];
-
-	execute("standard", test_cases, true, "tb", vec![])
+	let test_cases = collect_test_cases("standard");
+	execute("standard", test_cases, true, "tb", vec![]);
 }
 
 #[test]
 fn test_integration_collapse_currency() {
-	let test_cases = vec![
-		("1_in.txt", "1_out.txt"),
-		("2_in.txt", "2_out.txt"),
-		("3_in.txt", "3_out.txt"),
-		("4_in.txt", "4_out.txt"),
-		("5_in.txt", "5_out.txt"),
-		("6_in.txt", "6_out.txt"),
-	];
-
-	execute("collapse", test_cases, true, "tb", vec!["-c", "USD"])
+	let test_cases = collect_test_cases("collapse");
+	execute("collapse", test_cases, true, "tb", vec!["-c", "USD"]);
 }
 
 #[test]
 fn test_integration_max_depth() {
-	let test_cases = vec![("1_in.txt", "1_out.txt"), ("2_in.txt", "2_out.txt")];
-
-	execute("maxdepth", test_cases, true, "bs", vec!["-d", "2"])
+	let test_cases = collect_test_cases("maxdepth");
+	execute("maxdepth", test_cases, true, "bs", vec!["-d", "2"]);
 }
 
 #[test]
 fn test_integration_should_fail() {
-	let test_cases = vec![
-		("1_in.txt", ""),
-		("2_in.txt", ""),
-		("3_in.txt", ""),
-		("4_in.txt", ""),
-		("5_in.txt", ""),
-	];
-
-	execute("failures", test_cases, false, "tb", vec![])
+	let test_cases = collect_test_cases("failures");
+	execute("failures", test_cases, false, "tb", vec![]);
 }
 
 #[test]
 fn test_integration_account_summary() {
-	let test_cases = vec![("1_in.txt", "1_out.txt")];
-
+	let test_cases = collect_test_cases("acctsummary");
 	execute(
 		"acctsummary",
 		test_cases,
 		true,
 		"as",
 		vec!["Assets:A", "-c", "USD"],
-	)
+	);
 }
 
 #[test]
 fn test_integration_bounded_range() {
-	let test_cases = vec![("1_in.txt", "1_out.txt")];
-
+	let test_cases = collect_test_cases("bounded");
 	execute(
 		"bounded",
 		test_cases,
 		true,
 		"tb",
 		vec!["-b", "2024-11-13", "-e", "2024-11-17"],
-	)
+	);
 }
 
 #[test]
 fn test_integration_rgl() {
-	let test_cases = vec![("1_in.txt", "1_out.txt"), ("2_in.txt", "2_out.txt")];
-
-	execute("rgl", test_cases, true, "rgl", vec!["-e", "2024-11-23"])
+	let test_cases = collect_test_cases("rgl");
+	execute("rgl", test_cases, true, "rgl", vec!["-e", "2024-11-23"]);
 }
 
 #[test]
 fn test_integration_ugl() {
-	let test_cases = vec![("1_in.txt", "1_out.txt")];
-
-	execute("ugl", test_cases, true, "ugl", vec!["-e", "2024-11-23"])
+	let test_cases = collect_test_cases("ugl");
+	execute("ugl", test_cases, true, "ugl", vec!["-e", "2024-11-23"]);
 }
 
 fn execute(
 	subfolder: &str,
-	test_cases: Vec<(&str, &str)>,
+	test_cases: Vec<(String, String)>,
 	should_succeed: bool,
 	cmd: &str,
 	args: Vec<&str>,

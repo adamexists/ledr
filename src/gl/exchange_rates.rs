@@ -30,7 +30,7 @@ pub struct ExchangeRates {
 	/// finalize() has been called on this
 	resolved_rates: HashMap<(String, String), Vec<(Date, Quant)>>,
 
-	/// Skip consistency checks on price graphs TODO document
+	/// Skip consistency checks on price graphs if enabled
 	lenient_mode: bool,
 }
 

@@ -168,18 +168,18 @@ impl Entry {
 		})
 	}
 
-	/// Rounds all Details for a certain currency to a certain resolution.
+	/// Rounds all Details for a certain currency to a certain precision.
 	/// In doing so, precision may be lost, but not gained (because the
 	/// extra decimal places will just fill in with zeroes). This is more
 	/// about the clean display of currency amounts for reporting.
 	pub fn round_for_currency(
 		&mut self,
 		currency: &str,
-		resolution: u32,
+		decimal_places: u32,
 	) -> Result<(), Error> {
 		for detail in &mut self.details {
 			if detail.amount.currency == *currency {
-				detail.amount.value.round(resolution)
+				detail.amount.value.round(decimal_places)
 			}
 		}
 

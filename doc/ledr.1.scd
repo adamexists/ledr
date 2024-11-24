@@ -29,3 +29,6 @@ Here's what this doc should contain in the future:
   precision using the -p command line flag. Internal math is never rounded;
   just the visible results. Rounding is done using banker's rounding.
 - If you want to short something, then that's a lot with a negative cost basis
+- Should document the details of what lenient mode does, from making account
+  and currency declarations optional to skipping coherence checks on currency
+  conversion graphs.

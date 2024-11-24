@@ -55,14 +55,14 @@ impl Quant {
 		}
 	}
 
-	// TODO: This format of new() method is carried over from a prior Quant
-	//  implementation, and it should be overhauled at some point.
-	pub fn new(number: i128, resolution: u32) -> Self {
+	/// Creates a new Quant with the given numerator and the denominator
+	/// set at 10^exp where exp is the function argument of that name.
+	pub fn new(numerator: i128, exp: u32) -> Self {
 		let mut out = Self {
-			numerator: number.unsigned_abs(),
-			denominator: 10u128.pow(resolution),
-			render_precision: resolution,
-			is_negative: number < 0,
+			numerator: numerator.unsigned_abs(),
+			denominator: 10u128.pow(exp),
+			render_precision: exp,
+			is_negative: numerator < 0,
 		};
 		out.reduce();
 		out
@@ -128,8 +128,8 @@ impl Quant {
 	/// Modifies the underlying fraction to represent a value that is rounded
 	/// off to the given number of decimal places when rendered as a decimal.
 	/// Uses Banker's rounding (rounds to nearest, ties to even).
-	pub fn round(&mut self, resolution: u32) {
-		let scale = 10u128.pow(resolution);
+	pub fn round(&mut self, decimal_places: u32) {
+		let scale = 10u128.pow(decimal_places);
 		let scaled_numerator = self.numerator * scale;
 		let quotient = scaled_numerator / self.denominator;
 		let remainder = scaled_numerator % self.denominator;
@@ -146,13 +146,13 @@ impl Quant {
 
 		self.numerator = rounded_quotient;
 		self.denominator = scale;
-		self.render_precision = resolution;
+		self.render_precision = decimal_places;
 		self.is_negative = self.is_negative && rounded_quotient > 0;
 
 		self.reduce();
 	}
 
-	pub fn resolution(&self) -> u32 {
+	pub fn render_precision(&self) -> u32 {
 		self.render_precision
 	}
 
@@ -1585,7 +1585,7 @@ mod tests {
 		}
 
 		#[test]
-		fn test_round_resolution_0() {
+		fn test_round_precision_0() {
 			let mut scalar = Quant {
 				numerator: 7,
 				denominator: 3,
