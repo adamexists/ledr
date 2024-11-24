@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,8 +25,20 @@ pub struct Amount {
 }
 
 impl Amount {
-	pub fn new(value: Scalar, currency: String) -> Self {
-		Self { value, currency }
+	// TODO: Clean up calls to this and make currency take a ref,
+	//  to make the call sites cleaner on average.
+	pub fn new(value: Scalar, currency: &str) -> Self {
+		Self {
+			value,
+			currency: currency.to_string(),
+		}
+	}
+
+	pub fn zero(currency: &str) -> Self {
+		Self {
+			value: Scalar::zero(),
+			currency: currency.to_string(),
+		}
 	}
 
 	pub fn convert_to(&mut self, currency: &str, rate: Scalar) {

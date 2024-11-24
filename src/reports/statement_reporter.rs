@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,13 +20,13 @@ use crate::util::scalar::Scalar;
 
 /// When using this to display something, you should instantiate it, then sort
 /// it, then display it. Filters should be handled in the Total struct.
-pub struct OrderedTotal {
+pub struct StatementReporter {
 	account: String,
 	amounts: Vec<(String, Scalar)>, // currency -> balance held
-	subtotals: Vec<(String, OrderedTotal)>, // account name -> next total
+	subtotals: Vec<(String, StatementReporter)>, // account name -> next total
 }
 
-impl OrderedTotal {
+impl StatementReporter {
 	pub fn from_total(t: Total) -> Self {
 		Self {
 			account: t.account,
@@ -34,7 +34,7 @@ impl OrderedTotal {
 			subtotals: t
 				.subtotals
 				.into_iter()
-				.map(|(k, v)| (k, OrderedTotal::from_total(v)))
+				.map(|(k, v)| (k, StatementReporter::from_total(v)))
 				.collect(),
 		}
 	}
@@ -76,16 +76,10 @@ impl OrderedTotal {
 		// components,then by sign (positive first), and finally alphabetically
 		// by account name
 		self.subtotals.sort_by(|(name_a, a), (name_b, b)| {
-			let sum_a: Scalar = a
-				.amounts
-				.iter()
-				.map(|(_, money)| *money)
-				.sum::<Scalar>();
-			let sum_b: Scalar = b
-				.amounts
-				.iter()
-				.map(|(_, money)| *money)
-				.sum::<Scalar>();
+			let sum_a: Scalar =
+				a.amounts.iter().map(|(_, money)| *money).sum::<Scalar>();
+			let sum_b: Scalar =
+				b.amounts.iter().map(|(_, money)| *money).sum::<Scalar>();
 
 			let abs_sum_a = sum_a.abs();
 			let abs_sum_b = sum_b.abs();
@@ -96,9 +90,7 @@ impl OrderedTotal {
 			{
 				std::cmp::Ordering::Equal => {
 					match (sum_b > 0).cmp(&(sum_a > 0)) {
-						std::cmp::Ordering::Equal => {
-							name_a.cmp(name_b)
-						},
+						std::cmp::Ordering::Equal => name_a.cmp(name_b),
 						other => other,
 					}
 				},
@@ -147,10 +139,8 @@ impl OrderedTotal {
 				return false;
 			}
 
-			if !OrderedTotal::amounts_match(
-				expected_amounts,
-				&ot.amounts,
-			) {
+			if !StatementReporter::amounts_match(expected_amounts, &ot.amounts)
+			{
 				return false;
 			}
 		}
@@ -160,18 +150,13 @@ impl OrderedTotal {
 
 	/// Compares two sets of accounts & amounts, and reports true iff they are
 	/// all entirely identical.
-	fn amounts_match(
-		a: &[(String, Scalar)],
-		b: &[(String, Scalar)],
-	) -> bool {
+	fn amounts_match(a: &[(String, Scalar)], b: &[(String, Scalar)]) -> bool {
 		if a.len() != b.len() {
 			return false;
 		}
 
 		for (currency, amount) in a {
-			if let Some((_, other)) =
-				b.iter().find(|(c, _)| c == currency)
-			{
+			if let Some((_, other)) = b.iter().find(|(c, _)| c == currency) {
 				if amount != other {
 					return false;
 				}
@@ -241,11 +226,7 @@ impl OrderedTotal {
 		self.ledger_fmt_recursive(0, column_width, max_depth);
 
 		// Display the totals for each currency
-		println!(
-			"{:>width$}",
-			"------------------",
-			width = column_width
-		);
+		println!("{:>width$}", "------------------", width = column_width);
 		for (currency, amount) in &self.amounts {
 			println!(
 				"{:>width$}",
@@ -278,10 +259,7 @@ impl OrderedTotal {
 			while let Some((currency, amount)) = amts.next() {
 				// when the same account name would appear on
 				// consecutive lines, replace it with a symbol
-				let acct = match (
-					has_printed_acct,
-					amts.peek().is_some(),
-				) {
+				let acct = match (has_printed_acct, amts.peek().is_some()) {
 					(true, _) => " ↩",
 					_ => &*format!(" {}", account_name),
 				};
@@ -307,11 +285,7 @@ impl OrderedTotal {
 		if !can_condense {
 			// Recursively display each subtotal
 			for (_, subtotal) in &self.subtotals {
-				subtotal.ledger_fmt_recursive(
-					indent + 1,
-					width,
-					max_depth,
-				);
+				subtotal.ledger_fmt_recursive(indent + 1, width, max_depth);
 			}
 		}
 	}

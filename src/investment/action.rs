@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@ use std::cmp::Ordering;
 /// Represents a buy or sell that was recorded by the user. Aggregated into a
 /// series of lots. We gather all actions before tabulating them into lots,
 /// because we do not require ledger input to be in order.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 pub struct Action {
 	pub direction: Direction,
 	pub date: Date,
@@ -84,6 +84,31 @@ pub enum Direction {
 	Sell(Option<Amount>),
 }
 
+impl PartialOrd for Direction {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for Direction {
+	fn cmp(&self, other: &Self) -> Ordering {
+		match (self, other) {
+			(Direction::Buy, Direction::Buy) => Ordering::Equal,
+			(Direction::Buy, Direction::Sell(_)) => Ordering::Less, // Buy comes before Sell
+			(Direction::Sell(_), Direction::Buy) => Ordering::Greater, // Sell comes after Buy
+			(Direction::Sell(a), Direction::Sell(b)) => {
+				// Compare unit proceeds if both are Sell
+				match (a, b) {
+					(Some(a_amount), Some(b_amount)) => a_amount.cmp(b_amount),
+					(None, Some(_)) => Ordering::Greater, // Sell with no proceeds sorts higher
+					(Some(_), None) => Ordering::Less,
+					(None, None) => Ordering::Equal,
+				}
+			},
+		}
+	}
+}
+
 impl PartialEq for Action {
 	fn eq(&self, other: &Self) -> bool {
 		self.date == other.date
@@ -94,28 +119,29 @@ impl PartialEq for Action {
 
 impl PartialOrd for Action {
 	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-		// Compare by date first
-		match self.date.partial_cmp(&other.date) {
-			Some(Ordering::Equal) => {
-				// If dates are equal, sort buys before sells
-				match (&self.direction, &other.direction) {
-					(
-						Direction::Buy,
-						Direction::Sell(_),
-					) => Some(Ordering::Less),
-					(
-						Direction::Sell(_),
-						Direction::Buy,
-					) => Some(Ordering::Greater),
-					_ => {
-						// Lastly, use commodity string
-						self.commodity.partial_cmp(
-							&other.commodity,
-						)
-					},
-				}
-			},
-			non_equal => non_equal,
-		}
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for Action {
+	fn cmp(&self, other: &Self) -> Ordering {
+		// Sort by date (ascending)
+		self.date
+			.cmp(&other.date)
+			// Then by direction: buys first
+			.then_with(|| self.direction.cmp(&other.direction))
+			// Then by quantity (descending)
+			.then_with(|| other.quantity.cmp(&self.quantity))
+			// Then by commodity (alphabetical)
+			.then_with(|| self.commodity.cmp(&other.commodity))
+			// Then by account (alphabetical)
+			.then_with(|| self.account.cmp(&other.account))
+			// Finally, by lot_name: present sorts lower than absent
+			.then_with(|| match (&self.lot_name, &other.lot_name) {
+				(Some(a), Some(b)) => a.cmp(b), // Compare alphabetically if both present
+				(None, Some(_)) => Ordering::Greater, // Absent sorts higher
+				(Some(_), None) => Ordering::Less,
+				(None, None) => Ordering::Equal,
+			})
 	}
 }

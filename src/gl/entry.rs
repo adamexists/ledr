@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -63,15 +63,12 @@ impl Entry {
 			bail!("Account is empty")
 		}
 
-		*self.totals
+		*self
+			.totals
 			.entry(amount.currency.clone())
 			.or_insert(Scalar::zero()) += amount.value;
 
-		self.details.push(Detail::new(
-			account.to_owned(),
-			amount,
-			false,
-		));
+		self.details.push(Detail::new(account, amount, false));
 
 		Ok(())
 	}
@@ -85,15 +82,12 @@ impl Entry {
 			bail!("Account is empty")
 		}
 
-		*self.totals
+		*self
+			.totals
 			.entry(amount.currency.clone())
 			.or_insert(Scalar::zero()) += amount.value;
 
-		self.details.push(Detail::new(
-			account.to_owned(),
-			amount,
-			true,
-		));
+		self.details.push(Detail::new(account, amount, true));
 
 		Ok(())
 	}
@@ -102,10 +96,7 @@ impl Entry {
 		self.actions.push(action);
 	}
 
-	pub fn set_virtual_detail(
-		&mut self,
-		account: String,
-	) -> Result<(), Error> {
+	pub fn set_virtual_detail(&mut self, account: String) -> Result<(), Error> {
 		if self.virtual_detail.is_some() {
 			bail!("Only one line per entry may omit amount and currency")
 		}
@@ -131,8 +122,7 @@ impl Entry {
 				existing_note.push_str(reference.trim());
 			},
 			None => {
-				self.reference =
-					Some(reference.trim().to_string());
+				self.reference = Some(reference.trim().to_string());
 			},
 		}
 	}
@@ -141,8 +131,8 @@ impl Entry {
 		&self.desc
 	}
 
-	pub fn get_date(&self) -> Date {
-		self.date
+	pub fn get_date(&self) -> &Date {
+		&self.date
 	}
 
 	pub fn get_reference(&self) -> String {
@@ -171,9 +161,7 @@ impl Entry {
 		currency: &String,
 	) -> Scalar {
 		self.details.iter().fold(Scalar::zero(), |mut acc, x| {
-			if x.account.contains(account)
-				&& x.amount.currency == *currency
-			{
+			if x.account.contains(account) && x.amount.currency == *currency {
 				acc += x.amount.value
 			}
 			acc
@@ -186,7 +174,7 @@ impl Entry {
 	/// about the clean display of currency amounts for reporting.
 	pub fn round_for_currency(
 		&mut self,
-		currency: &String,
+		currency: &str,
 		resolution: u32,
 	) -> Result<(), Error> {
 		for detail in &mut self.details {
@@ -229,12 +217,8 @@ impl Entry {
 			self.add_system_detail(
 				VIRTUAL_CONVERSION_ACCOUNT,
 				Amount::new(
-					action.commodity.cost_basis().value
-						* actual_detail.value(),
-					action.commodity
-						.cost_basis()
-						.currency
-						.clone(),
+					action.commodity.cost_basis().value * actual_detail.value(),
+					&action.commodity.cost_basis().currency,
 				),
 			)?;
 		}
@@ -258,8 +242,8 @@ impl Entry {
 		while let Some((currency, value)) = imbalances.pop() {
 			if let Some(vd) = &self.virtual_detail {
 				self.details.push(Detail::new(
-					vd.clone(),
-					Amount::new(-value, currency),
+					vd,
+					Amount::new(-value, &currency),
 					true,
 				));
 			} else {
@@ -283,13 +267,13 @@ impl Entry {
 		let (currency2, amount2) = imbalances.remove(0);
 
 		self.details.push(Detail::new(
-			VIRTUAL_CONVERSION_ACCOUNT.to_string(),
-			Amount::new(-amount1, currency1.clone()),
+			VIRTUAL_CONVERSION_ACCOUNT,
+			Amount::new(-amount1, &currency1),
 			true,
 		));
 		self.details.push(Detail::new(
-			VIRTUAL_CONVERSION_ACCOUNT.to_string(),
-			Amount::new(-amount2, currency2.clone()),
+			VIRTUAL_CONVERSION_ACCOUNT,
+			Amount::new(-amount2, &currency2),
 			true,
 		));
 
@@ -306,10 +290,7 @@ impl Entry {
 
 	/// Adds proceeds to applicable Sell lot actions iff they can be
 	/// inferred from user input.
-	fn resolve_sell_action_proceeds(
-		&mut self,
-		actual_details: Vec<Detail>,
-	) {
+	fn resolve_sell_action_proceeds(&mut self, actual_details: Vec<Detail>) {
 		let actions_copy = self.actions.clone();
 		for sale in &mut self.actions {
 			if sale.direction == Direction::Buy {
@@ -317,56 +298,38 @@ impl Entry {
 			}
 
 			if actual_details.len() > 2
-				|| (actual_details.len() == 2
-					&& self.virtual_detail.is_some())
+				|| (actual_details.len() == 2 && self.virtual_detail.is_some())
 			{
 				return;
 			}
 
 			if self.virtual_detail.is_some() {
 				// Perfectly netted out against the cost basis
-				sale.add_unit_proceeds(
-					sale.commodity.cost_basis().clone(),
-				);
+				sale.add_unit_proceeds(sale.commodity.cost_basis().clone());
 				return;
 			}
 
-			if let Some(other_action) =
-				actions_copy.iter().find(|a| *a != sale)
+			if let Some(other_action) = actions_copy.iter().find(|a| *a != sale)
 			{
-				let other_quantity = match &other_action
-					.direction
-				{
+				let other_quantity = match &other_action.direction {
 					Direction::Buy => other_action.quantity,
-					Direction::Sell(_) => {
-						-other_action.quantity
-					},
+					Direction::Sell(_) => -other_action.quantity,
 				};
 
 				sale.add_unit_proceeds(Amount::new(
-					other_quantity
-						* other_action
-							.commodity
-							.cost_basis()
-							.value / sale.quantity,
-					other_action
-						.commodity
-						.cost_basis()
-						.currency
-						.clone(),
+					other_quantity * other_action.commodity.cost_basis().value
+						/ sale.quantity,
+					&other_action.commodity.cost_basis().currency,
 				));
 			} else {
-				let detail_opt =
-					actual_details.iter().find(|&a| {
-						a.amount.currency
-							!= sale.commodity
-								.symbol() || a.amount.value
-							!= -sale.quantity
-					});
+				let detail_opt = actual_details.iter().find(|&a| {
+					a.amount.currency != sale.commodity.symbol()
+						|| a.amount.value != -sale.quantity
+				});
 				if let Some(detail) = detail_opt {
 					sale.add_unit_proceeds(Amount::new(
 						detail.value() / sale.quantity,
-						detail.currency(),
+						&detail.currency(),
 					));
 				}
 			}
@@ -379,7 +342,7 @@ impl Entry {
 		let system_details: Vec<_> = self
 			.details
 			.iter()
-			.filter(|d| d.is_system && &d.account == account)
+			.filter(|d| d.is_system && d.account == account)
 			.collect();
 
 		let mut all_other_details: Vec<_> = self
@@ -389,8 +352,7 @@ impl Entry {
 			.cloned()
 			.collect();
 
-		let mut balances_by_currency: HashMap<String, Scalar> =
-			HashMap::new();
+		let mut balances_by_currency: HashMap<String, Scalar> = HashMap::new();
 		for detail in system_details {
 			*balances_by_currency
 				.entry(detail.currency().clone())
@@ -402,11 +364,8 @@ impl Entry {
 			.filter_map(|(currency, balance)| {
 				if balance != 0 {
 					Some(Detail::new(
-						account.to_string(),
-						Amount::new(
-							balance,
-							currency.clone(),
-						),
+						account,
+						Amount::new(balance, &currency),
 						true,
 					))
 				} else {
@@ -423,13 +382,15 @@ impl Entry {
 	fn get_imbalances(&self) -> Vec<(String, Scalar)> {
 		self.totals
 			.iter()
-			.filter_map(|(k, &v)| {
-				if v != 0 {
-					Some((k.clone(), v))
-				} else {
-					None
-				}
-			})
+			.filter_map(
+				|(k, &v)| {
+					if v != 0 {
+						Some((k.clone(), v))
+					} else {
+						None
+					}
+				},
+			)
 			.collect()
 	}
 
@@ -477,9 +438,9 @@ pub struct Detail {
 }
 
 impl Detail {
-	pub fn new(account: String, amount: Amount, is_system: bool) -> Self {
+	pub fn new(account: &str, amount: Amount, is_system: bool) -> Self {
 		Self {
-			account,
+			account: account.to_string(),
 			amount,
 			is_system,
 		}
@@ -520,10 +481,7 @@ mod tests {
 	#[test]
 	fn test_entry_creation() {
 		let entry = create_entry();
-		assert_eq!(
-			entry.get_date(),
-			Date::from_str("2024-1-1").unwrap()
-		);
+		assert_eq!(entry.get_date(), &Date::from_str("2024-1-1").unwrap());
 		assert!(entry.details.is_empty());
 	}
 
@@ -532,7 +490,7 @@ mod tests {
 		let mut entry = create_entry();
 		let result = entry.add_detail(
 			"Assets:Cash",
-			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
+			Amount::new(Scalar::new(1000, 1), "USD"),
 		);
 
 		assert!(result.is_ok());
@@ -547,10 +505,8 @@ mod tests {
 	#[test]
 	fn test_add_detail_empty_account() {
 		let mut entry = create_entry();
-		let result = entry.add_detail(
-			"",
-			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
-		);
+		let result =
+			entry.add_detail("", Amount::new(Scalar::new(1000, 1), "USD"));
 
 		assert!(result.is_err());
 	}
@@ -558,36 +514,31 @@ mod tests {
 	#[test]
 	fn test_add_detail_multiple_same_currency() {
 		let mut entry = create_entry();
-		entry.add_detail(
-			"Assets:Cash",
-			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
-		)
-		.unwrap();
-		entry.add_detail(
-			"Assets:Savings",
-			Amount::new(Scalar::new(500, 1), "USD".to_string()),
-		)
-		.unwrap();
+		entry
+			.add_detail("Assets:Cash", Amount::new(Scalar::new(1000, 1), "USD"))
+			.unwrap();
+		entry
+			.add_detail(
+				"Assets:Savings",
+				Amount::new(Scalar::new(500, 1), "USD"),
+			)
+			.unwrap();
 
-		assert_eq!(
-			entry.totals.get("USD"),
-			Some(&Scalar::new(1500, 1))
-		);
+		assert_eq!(entry.totals.get("USD"), Some(&Scalar::new(1500, 1)));
 	}
 
 	#[test]
 	fn test_finalize_unbalanced_entry() {
 		let mut entry = create_entry();
-		entry.add_detail(
-			"Assets:Cash",
-			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
-		)
-		.unwrap();
-		entry.add_detail(
-			"Expenses:Food",
-			Amount::new(Scalar::new(-500, 1), "USD".to_string()),
-		)
-		.unwrap();
+		entry
+			.add_detail("Assets:Cash", Amount::new(Scalar::new(1000, 1), "USD"))
+			.unwrap();
+		entry
+			.add_detail(
+				"Expenses:Food",
+				Amount::new(Scalar::new(-500, 1), "USD"),
+			)
+			.unwrap();
 
 		let mut rates = ExchangeRates::default();
 		let result = entry.finalize(&mut rates);
@@ -599,16 +550,15 @@ mod tests {
 	#[test]
 	fn test_finalize_balanced_entry() {
 		let mut entry = create_entry();
-		entry.add_detail(
-			"Assets:Cash",
-			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
-		)
-		.unwrap();
-		entry.add_detail(
-			"Expenses:Food",
-			Amount::new(Scalar::new(-1000, 1), "USD".to_string()),
-		)
-		.unwrap();
+		entry
+			.add_detail("Assets:Cash", Amount::new(Scalar::new(1000, 1), "USD"))
+			.unwrap();
+		entry
+			.add_detail(
+				"Expenses:Food",
+				Amount::new(Scalar::new(-1000, 1), "USD"),
+			)
+			.unwrap();
 
 		let mut rates = ExchangeRates::default();
 		let result = entry.finalize(&mut rates);
@@ -620,8 +570,7 @@ mod tests {
 	#[test]
 	fn test_set_virtual_detail() {
 		let mut entry = create_entry();
-		let result =
-			entry.set_virtual_detail("Assets:Virtual".to_string());
+		let result = entry.set_virtual_detail("Assets:Virtual".to_string());
 
 		assert!(result.is_ok());
 		assert!(entry.virtual_detail.is_some());
@@ -631,10 +580,10 @@ mod tests {
 	#[test]
 	fn test_set_virtual_detail_twice() {
 		let mut entry = create_entry();
-		entry.set_virtual_detail("Assets:Virtual".to_string())
+		entry
+			.set_virtual_detail("Assets:Virtual".to_string())
 			.unwrap();
-		let result =
-			entry.set_virtual_detail("Assets:Another".to_string());
+		let result = entry.set_virtual_detail("Assets:Another".to_string());
 
 		assert!(result.is_err());
 	}
@@ -650,13 +599,14 @@ mod tests {
 	#[test]
 	fn test_set_resolution_for_currency() {
 		let mut entry = create_entry();
-		entry.add_detail(
-			"Assets:Cash",
-			Amount::new(Scalar::new(1234567, 4), "USD".to_string()),
-		)
-		.unwrap();
+		entry
+			.add_detail(
+				"Assets:Cash",
+				Amount::new(Scalar::new(1234567, 4), "USD"),
+			)
+			.unwrap();
 
-		let result = entry.round_for_currency(&"USD".to_string(), 2);
+		let result = entry.round_for_currency("USD", 2);
 		assert!(result.is_ok());
 
 		let detail = &entry.details[0];
@@ -667,18 +617,20 @@ mod tests {
 	#[test]
 	fn test_set_resolution_for_currency_different_currency() {
 		let mut entry = create_entry();
-		entry.add_detail(
-			"Assets:Cash",
-			Amount::new(Scalar::new(1234567, 4), "USD".to_string()),
-		)
-		.unwrap();
-		entry.add_detail(
-			"Assets:Cash",
-			Amount::new(Scalar::new(9876543, 4), "EUR".to_string()),
-		)
-		.unwrap();
+		entry
+			.add_detail(
+				"Assets:Cash",
+				Amount::new(Scalar::new(1234567, 4), "USD"),
+			)
+			.unwrap();
+		entry
+			.add_detail(
+				"Assets:Cash",
+				Amount::new(Scalar::new(9876543, 4), "EUR"),
+			)
+			.unwrap();
 
-		let result = entry.round_for_currency(&"USD".to_string(), 2);
+		let result = entry.round_for_currency("USD", 2);
 		assert!(result.is_ok());
 
 		let usd_detail = &entry.details[0];
@@ -693,16 +645,15 @@ mod tests {
 	#[test]
 	fn test_multiline_implicit_currency_conversion() {
 		let mut entry = create_entry();
-		entry.add_detail(
-			"Assets:Cash",
-			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
-		)
-		.unwrap();
-		entry.add_detail(
-			"Assets:Bank",
-			Amount::new(Scalar::new(-2000, 1), "EUR".to_string()),
-		)
-		.unwrap();
+		entry
+			.add_detail("Assets:Cash", Amount::new(Scalar::new(1000, 1), "USD"))
+			.unwrap();
+		entry
+			.add_detail(
+				"Assets:Bank",
+				Amount::new(Scalar::new(-2000, 1), &"EUR".to_string()),
+			)
+			.unwrap();
 
 		let mut rates = ExchangeRates::default();
 		let mut imbalances = entry.get_imbalances();
@@ -721,19 +672,13 @@ mod tests {
 
 		entry.details = vec![
 			Detail::new(
-				"account1".to_string(),
-				Amount::new(
-					Scalar::from_i128(100),
-					"USD".to_string(),
-				),
+				"account1",
+				Amount::new(Scalar::from_i128(100), "USD"),
 				true,
 			),
 			Detail::new(
-				"account1".to_string(),
-				Amount::new(
-					Scalar::from_i128(-100),
-					"USD".to_string(),
-				),
+				"account1",
+				Amount::new(Scalar::from_i128(-100), "USD"),
 				true,
 			),
 		];
@@ -749,19 +694,13 @@ mod tests {
 
 		entry.details = vec![
 			Detail::new(
-				"account1".to_string(),
-				Amount::new(
-					Scalar::from_i128(100),
-					"USD".to_string(),
-				),
+				"account1",
+				Amount::new(Scalar::from_i128(100), "USD"),
 				true,
 			),
 			Detail::new(
-				"account1".to_string(),
-				Amount::new(
-					Scalar::from_i128(50),
-					"USD".to_string(),
-				),
+				"account1",
+				Amount::new(Scalar::from_i128(50), "USD"),
 				true,
 			),
 		];
@@ -780,19 +719,13 @@ mod tests {
 
 		entry.details = vec![
 			Detail::new(
-				"account1".to_string(),
-				Amount::new(
-					Scalar::from_i128(100),
-					"USD".to_string(),
-				),
+				"account1",
+				Amount::new(Scalar::from_i128(100), "USD"),
 				false,
 			),
 			Detail::new(
-				"account1".to_string(),
-				Amount::new(
-					Scalar::from_i128(-100),
-					"USD".to_string(),
-				),
+				"account1",
+				Amount::new(Scalar::from_i128(-100), "USD"),
 				true,
 			),
 		];
@@ -808,19 +741,13 @@ mod tests {
 
 		entry.details = vec![
 			Detail::new(
-				"account1".to_string(),
-				Amount::new(
-					Scalar::from_i128(100),
-					"USD".to_string(),
-				),
+				"account1",
+				Amount::new(Scalar::from_i128(100), "USD"),
 				true,
 			),
 			Detail::new(
-				"account2".to_string(),
-				Amount::new(
-					Scalar::from_i128(200),
-					"USD".to_string(),
-				),
+				"account2",
+				Amount::new(Scalar::from_i128(200), "USD"),
 				true,
 			),
 		];
@@ -843,27 +770,18 @@ mod tests {
 
 		entry.details = vec![
 			Detail::new(
-				"account1".to_string(),
-				Amount::new(
-					Scalar::from_i128(100),
-					"USD".to_string(),
-				),
+				"account1",
+				Amount::new(Scalar::from_i128(100), "USD"),
 				true,
 			),
 			Detail::new(
-				"account1".to_string(),
-				Amount::new(
-					Scalar::from_i128(200),
-					"EUR".to_string(),
-				),
+				"account1",
+				Amount::new(Scalar::from_i128(200), "EUR"),
 				true,
 			),
 			Detail::new(
-				"account1".to_string(),
-				Amount::new(
-					Scalar::from_i128(-200),
-					"GBP".to_string(),
-				),
+				"account1",
+				Amount::new(Scalar::from_i128(-200), "GBP"),
 				true,
 			),
 		];

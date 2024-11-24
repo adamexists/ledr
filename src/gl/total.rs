@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -65,13 +65,10 @@ impl Total {
 		for detail in details {
 			let mut current = &mut *self;
 
-			for segment in detail
-				.account()
-				.split(":")
-				.collect::<Vec<&str>>()
-			{
+			for segment in detail.account().split(":").collect::<Vec<&str>>() {
 				// Update each total along the hierarchy
-				*current.amounts
+				*current
+					.amounts
 					.entry(detail.currency())
 					.or_insert_with(Scalar::zero) += detail.value();
 
@@ -87,7 +84,8 @@ impl Total {
 			}
 
 			// Update the leaf node with the final amount
-			*current.amounts
+			*current
+				.amounts
 				.entry(detail.currency())
 				.or_insert_with(Scalar::zero) += detail.value();
 		}
@@ -104,8 +102,7 @@ impl Total {
 		self.subtotals
 			.retain(|name, _| strs.contains(&name.as_str()));
 
-		let mut currency_totals: HashMap<String, Scalar> =
-			HashMap::new();
+		let mut currency_totals: HashMap<String, Scalar> = HashMap::new();
 
 		// Sum subtotals; doesn't need to be recursive because we only
 		// dropped some top-level branches of the hierarchy; what
@@ -165,8 +162,8 @@ mod tests {
 	fn test_ingest_details_single_detail() {
 		let mut total = Total::new();
 		let detail = Detail::new(
-			"Assets:Cash".to_string(),
-			Amount::new(Scalar::new(1000, 1), "USD".to_string()),
+			"Assets:Cash",
+			Amount::new(Scalar::new(1000, 1), "USD"),
 			false,
 		);
 		total.ingest_details(&vec![detail]);
@@ -174,15 +171,10 @@ mod tests {
 		assert_eq!(total.subtotals.len(), 1);
 		assert!(total.subtotals.contains_key("Assets"));
 		assert_eq!(total.subtotals["Assets"].subtotals.len(), 1);
-		assert!(total.subtotals["Assets"]
-			.subtotals
-			.contains_key("Cash"));
+		assert!(total.subtotals["Assets"].subtotals.contains_key("Cash"));
 
 		let cash_total = &total.subtotals["Assets"].subtotals["Cash"];
-		assert_eq!(
-			cash_total.amounts.get("USD"),
-			Some(&Scalar::new(1000, 1))
-		);
+		assert_eq!(cash_total.amounts.get("USD"), Some(&Scalar::new(1000, 1)));
 	}
 
 	#[test]
@@ -190,19 +182,13 @@ mod tests {
 		let mut total = Total::new();
 		let details = vec![
 			Detail::new(
-				"Assets:Cash".to_string(),
-				Amount::new(
-					Scalar::new(1000, 1),
-					"USD".to_string(),
-				),
+				"Assets:Cash",
+				Amount::new(Scalar::new(1000, 1), "USD"),
 				false,
 			),
 			Detail::new(
-				"Assets:AR".to_string(),
-				Amount::new(
-					Scalar::new(2000, 1),
-					"USD".to_string(),
-				),
+				"Assets:AR",
+				Amount::new(Scalar::new(2000, 1), "USD"),
 				false,
 			),
 		];
@@ -218,22 +204,16 @@ mod tests {
 
 		let cash_total = &assets_total.subtotals["Cash"];
 		let ar_total = &assets_total.subtotals["AR"];
-		assert_eq!(
-			cash_total.amounts.get("USD"),
-			Some(&Scalar::new(1000, 1))
-		);
-		assert_eq!(
-			ar_total.amounts.get("USD"),
-			Some(&Scalar::new(2000, 1))
-		);
+		assert_eq!(cash_total.amounts.get("USD"), Some(&Scalar::new(1000, 1)));
+		assert_eq!(ar_total.amounts.get("USD"), Some(&Scalar::new(2000, 1)));
 	}
 
 	#[test]
 	fn test_ingest_details_hierarchy() {
 		let mut total = Total::new();
 		let detail = Detail::new(
-			"Liabilities:Short-Term:CreditCard".to_string(),
-			Amount::new(Scalar::new(500, 1), "EUR".to_string()),
+			"Liabilities:Short-Term:CreditCard",
+			Amount::new(Scalar::new(500, 1), "EUR"),
 			false,
 		);
 		total.ingest_details(&vec![detail]);
@@ -244,12 +224,10 @@ mod tests {
 		let liabilities_total = &total.subtotals["Liabilities"];
 		assert!(liabilities_total.subtotals.contains_key("Short-Term"));
 
-		let short_term_total =
-			&liabilities_total.subtotals["Short-Term"];
+		let short_term_total = &liabilities_total.subtotals["Short-Term"];
 		assert!(short_term_total.subtotals.contains_key("CreditCard"));
 
-		let credit_card_total =
-			&short_term_total.subtotals["CreditCard"];
+		let credit_card_total = &short_term_total.subtotals["CreditCard"];
 		assert_eq!(
 			credit_card_total.amounts.get("EUR"),
 			Some(&Scalar::new(500, 1))
@@ -261,19 +239,13 @@ mod tests {
 		let mut total = Total::new();
 		total.ingest_details(&vec![
 			Detail::new(
-				"Assets:Cash".to_string(),
-				Amount::new(
-					Scalar::new(1000, 1),
-					"USD".to_string(),
-				),
+				"Assets:Cash",
+				Amount::new(Scalar::new(1000, 1), "USD"),
 				false,
 			),
 			Detail::new(
-				"Liabilities:CreditCard".to_string(),
-				Amount::new(
-					Scalar::new(500, 1),
-					"USD".to_string(),
-				),
+				"Liabilities:CreditCard",
+				Amount::new(Scalar::new(500, 1), "USD"),
 				false,
 			),
 		]);
@@ -295,19 +267,13 @@ mod tests {
 		let mut total = Total::new();
 		total.ingest_details(&vec![
 			Detail::new(
-				"Income:Sales".to_string(),
-				Amount::new(
-					Scalar::new(3000, 1),
-					"USD".to_string(),
-				),
+				"Income:Sales",
+				Amount::new(Scalar::new(3000, 1), "USD"),
 				false,
 			),
 			Detail::new(
-				"Expenses:Rent".to_string(),
-				Amount::new(
-					Scalar::new(1000, 1),
-					"USD".to_string(),
-				),
+				"Expenses:Rent",
+				Amount::new(Scalar::new(1000, 1), "USD"),
 				false,
 			),
 		]);
@@ -321,10 +287,7 @@ mod tests {
 			sales_total.amounts.get("USD"),
 			Some(&Scalar::new(-3000, 1))
 		);
-		assert_eq!(
-			rent_total.amounts.get("USD"),
-			Some(&Scalar::new(-1000, 1))
-		);
+		assert_eq!(rent_total.amounts.get("USD"), Some(&Scalar::new(-1000, 1)));
 	}
 
 	#[test]
@@ -338,19 +301,13 @@ mod tests {
 		let mut total = Total::new();
 		total.ingest_details(&vec![
 			Detail::new(
-				"Assets:Cash".to_string(),
-				Amount::new(
-					Scalar::new(1000, 1),
-					"USD".to_string(),
-				),
+				"Assets:Cash",
+				Amount::new(Scalar::new(1000, 1), "USD"),
 				false,
 			),
 			Detail::new(
-				"Liabilities:CreditCard".to_string(),
-				Amount::new(
-					Scalar::new(500, 1),
-					"USD".to_string(),
-				),
+				"Liabilities:CreditCard",
+				Amount::new(Scalar::new(500, 1), "USD"),
 				false,
 			),
 		]);

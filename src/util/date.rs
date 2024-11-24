@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -78,6 +78,22 @@ impl Date {
 		Ok(Date { year, month, day })
 	}
 
+	pub fn min() -> Date {
+		Date {
+			year: 1,
+			month: 1,
+			day: 1,
+		}
+	}
+
+	pub fn max() -> Date {
+		Date {
+			year: 9999,
+			month: 12,
+			day: 31,
+		}
+	}
+
 	/// Calculate the duration in calendar years, months, and days, and the
 	/// total number of days, between two dates
 	pub fn until(&self, other: &Date) -> Duration {
@@ -93,10 +109,8 @@ impl Date {
 
 		if day_diff < 0 {
 			month_diff -= 1;
-			let days_in_prev_month = Date::days_in_month(
-				earlier.year,
-				earlier.month,
-			);
+			let days_in_prev_month =
+				Date::days_in_month(earlier.year, earlier.month);
 			day_diff += days_in_prev_month as i32;
 		}
 
@@ -117,25 +131,14 @@ impl Date {
 
 	/// Calculate the total number of days between two dates
 	fn days_between(start: &Date, end: &Date) -> u32 {
-		let days_in_start_year = Date::days_since_year_start(
-			start.year,
-			start.month,
-			start.day,
-		);
-		let days_in_end_year = Date::days_since_year_start(
-			end.year, end.month, end.day,
-		);
+		let days_in_start_year =
+			Date::days_since_year_start(start.year, start.month, start.day);
+		let days_in_end_year =
+			Date::days_since_year_start(end.year, end.month, end.day);
 
-		let days_in_full_years =
-			(start.year..end.year)
-				.map(|year| {
-					if Date::is_leap_year(year) {
-						366
-					} else {
-						365
-					}
-				})
-				.sum::<u32>();
+		let days_in_full_years = (start.year..end.year)
+			.map(|year| if Date::is_leap_year(year) { 366 } else { 365 })
+			.sum::<u32>();
 
 		days_in_full_years + days_in_end_year - days_in_start_year
 	}
@@ -211,12 +214,7 @@ mod tests {
 		let date2 = Date::from_str("2024-11-15").unwrap();
 		let result = date1.until(&date2);
 		assert_eq!(
-			(
-				result.years,
-				result.months,
-				result.days,
-				result.total_days
-			),
+			(result.years, result.months, result.days, result.total_days),
 			(0, 0, 0, 0)
 		);
 	}
@@ -227,12 +225,7 @@ mod tests {
 		let date2 = Date::from_str("2024-11-16").unwrap();
 		let result = date1.until(&date2);
 		assert_eq!(
-			(
-				result.years,
-				result.months,
-				result.days,
-				result.total_days
-			),
+			(result.years, result.months, result.days, result.total_days),
 			(0, 0, 1, 1)
 		);
 	}
@@ -243,12 +236,7 @@ mod tests {
 		let date2 = Date::from_str("2024-12-15").unwrap();
 		let result = date1.until(&date2);
 		assert_eq!(
-			(
-				result.years,
-				result.months,
-				result.days,
-				result.total_days
-			),
+			(result.years, result.months, result.days, result.total_days),
 			(0, 1, 0, 30)
 		);
 	}
@@ -259,12 +247,7 @@ mod tests {
 		let date2 = Date::from_str("2025-11-15").unwrap();
 		let result = date1.until(&date2);
 		assert_eq!(
-			(
-				result.years,
-				result.months,
-				result.days,
-				result.total_days
-			),
+			(result.years, result.months, result.days, result.total_days),
 			(1, 0, 0, 365)
 		);
 	}
@@ -275,12 +258,7 @@ mod tests {
 		let date2 = Date::from_str("2024-03-01").unwrap();
 		let result = date1.until(&date2);
 		assert_eq!(
-			(
-				result.years,
-				result.months,
-				result.days,
-				result.total_days
-			),
+			(result.years, result.months, result.days, result.total_days),
 			(0, 0, 2, 2)
 		);
 	}
@@ -291,12 +269,7 @@ mod tests {
 		let date2 = Date::from_str("2024-01-02").unwrap();
 		let result = date1.until(&date2);
 		assert_eq!(
-			(
-				result.years,
-				result.months,
-				result.days,
-				result.total_days
-			),
+			(result.years, result.months, result.days, result.total_days),
 			(0, 0, 3, 3)
 		);
 	}
@@ -307,12 +280,7 @@ mod tests {
 		let date2 = Date::from_str("2024-11-15").unwrap();
 		let result = date1.until(&date2);
 		assert_eq!(
-			(
-				result.years,
-				result.months,
-				result.days,
-				result.total_days
-			),
+			(result.years, result.months, result.days, result.total_days),
 			(24, 10, 14, 9085)
 		);
 	}
@@ -323,12 +291,7 @@ mod tests {
 		let date2 = Date::from_str("2024-11-15").unwrap();
 		let result = date1.until(&date2);
 		assert_eq!(
-			(
-				result.years,
-				result.months,
-				result.days,
-				result.total_days
-			),
+			(result.years, result.months, result.days, result.total_days),
 			(1, 0, 2, 367)
 		);
 	}
@@ -340,12 +303,7 @@ mod tests {
 		let date2 = Date::from_str("2024-02-29").unwrap();
 		let result = date1.until(&date2);
 		assert_eq!(
-			(
-				result.years,
-				result.months,
-				result.days,
-				result.total_days
-			),
+			(result.years, result.months, result.days, result.total_days),
 			(0, 0, 29, 29)
 		);
 	}

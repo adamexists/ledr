@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -49,8 +49,6 @@ impl Parser {
 	pub fn parse(
 		&mut self,
 		file_path: &str,
-		begin: &Date,
-		end: &Date,
 		ledger: &mut Ledger,
 	) -> Result<ParseResult, Error> {
 		let mut file = self.fs.open(file_path)?;
@@ -61,7 +59,7 @@ impl Parser {
 		// Second pass is responsible for assembling the ParseResult object,
 		// which we pass in this way so it can be passed recursively within.
 		let mut output: ParseResult = Default::default();
-		self.second_pass(&file, ledger, &mut output, begin, end)?;
+		self.second_pass(&file, ledger, &mut output)?;
 
 		Ok(output)
 	}
@@ -100,8 +98,7 @@ impl Parser {
 
 			// Handle includes, which recursively first_passes when seen
 			if l.starts_with("include") {
-				let include: Vec<&str> =
-					l.split_whitespace().collect();
+				let include: Vec<&str> = l.split_whitespace().collect();
 				if include.len() != 2 {
 					bail!("Invalid include (line {})", i)
 				}
@@ -111,19 +108,13 @@ impl Parser {
 				continue;
 			}
 
-			let mut directive: VecDeque<&str> = match l
-				.strip_prefix("!")
-			{
+			let mut directive: VecDeque<&str> = match l.strip_prefix("!") {
 				None => continue,
 				Some(d) => d.split_whitespace().collect(),
 			};
 
 			if directive.len() < 2 {
-				bail!(
-					"Invalid directive (line {}): {}",
-					i + 1,
-					l
-				);
+				bail!("Invalid directive (line {}): {}", i + 1, l);
 			}
 
 			let date_str = directive.pop_front().unwrap();
@@ -133,51 +124,32 @@ impl Parser {
 			match directive[0] {
 				"account" if directive.len() == 2 => {
 					let account = directive[1].to_string();
-					ledger.declare_account(account, date)
-						.map_err(|e| {
-						anyhow!("{} (line {})", e, i)
-					})?;
+					ledger
+						.declare_account(account, date)
+						.map_err(|e| anyhow!("{} (line {})", e, i))?;
 				},
 				"currency" if directive.len() == 2 => {
 					let currency = directive[1].to_string();
-					ledger.declare_currency(currency, date)
-						.map_err(|e| {
-							anyhow!(
-								"{} (line {})",
-								e,
-								i
-							)
-						})?;
+					ledger
+						.declare_currency(&currency, date)
+						.map_err(|e| anyhow!("{} (line {})", e, i))?;
 				},
 				"rate" if directive.len() == 4 => {
 					let from = directive[1].to_string();
 					let to = directive[2].to_string();
 					let rate = directive[3];
-					ledger.exchange_rates
+					ledger
+						.exchange_rates
 						.declare(
 							date,
 							from,
 							to,
 							Scalar::from_str(rate)
-								.map_err(
-									|e| {
-										anyhow!("{} (line {})", e, i)
-									},
-								)?,
+								.map_err(|e| anyhow!("{} (line {})", e, i))?,
 						)
-						.map_err(|e| {
-							anyhow!(
-								"{} (line {})",
-								e,
-								i
-							)
-						})?;
+						.map_err(|e| anyhow!("{} (line {})", e, i))?;
 				},
-				_ => bail!(
-					"Invalid directive (line {}): {}",
-					i + 1,
-					l
-				),
+				_ => bail!("Invalid directive (line {}): {}", i + 1, l),
 			}
 		}
 
@@ -193,12 +165,8 @@ impl Parser {
 		file: &File,
 		ledger: &mut Ledger,
 		parse_result: &mut ParseResult,
-		begin: &Date,
-		end: &Date,
 	) -> Result<(), Error> {
 		let reader = io::BufReader::new(file);
-
-		let mut ignore_until_next_entry = false;
 
 		for (i, line) in reader.lines().enumerate() {
 			// Chop comments out
@@ -212,9 +180,9 @@ impl Parser {
 
 			// If a line is blank, this entry is over (or we are not in one)
 			if l.is_empty() {
-				ledger.finish_entry().map_err(|e| {
-					anyhow!("{} (line {})", e, i)
-				})?;
+				ledger
+					.finish_entry()
+					.map_err(|e| anyhow!("{} (line {})", e, i))?;
 				continue;
 			}
 
@@ -222,17 +190,10 @@ impl Parser {
 			// No need to check the structure of the include because the
 			// first pass would've failed by now if it were invalid.
 			if l.starts_with("include") {
-				let include: Vec<&str> =
-					l.split_whitespace().collect();
+				let include: Vec<&str> = l.split_whitespace().collect();
 
 				let file = self.fs.open(include[1])?;
-				self.second_pass(
-					&file,
-					ledger,
-					parse_result,
-					begin,
-					end,
-				)?;
+				self.second_pass(&file, ledger, parse_result)?;
 				continue;
 			}
 
@@ -246,32 +207,17 @@ impl Parser {
 			if l.starts_with("//") && l.len() > 2 {
 				let content = l[2..].trim();
 				if !content.is_empty() {
-					ledger.add_reference(
-						content.to_string(),
-					)?;
+					ledger.add_reference(content.to_string())?;
 				}
 				continue;
 			}
 
 			// Handle entry declaration lines with a date and description
 			if let Some((date_str, desc)) = l.split_once(' ') {
-				if let Ok(date) =
-					Date::from_str(date_str.trim())
-				{
-					if &date < begin || &date > end {
-						ignore_until_next_entry = true;
-						continue;
-					}
-
-					ignore_until_next_entry = false;
-
-					ledger.new_entry(
-						date,
-						desc.trim().to_string(),
-					)
-					.map_err(|e| {
-						anyhow!("{} (line {})", e, i)
-					})?;
+				if let Ok(date) = Date::from_str(date_str.trim()) {
+					ledger
+						.new_entry(date, desc.trim().to_string())
+						.map_err(|e| anyhow!("{} (line {})", e, i))?;
 
 					parse_result.note_date(date);
 					continue;
@@ -283,10 +229,6 @@ impl Parser {
 				bail!("Orphaned date (line {}): {}", i, l);
 			}
 
-			if ignore_until_next_entry {
-				continue;
-			}
-
 			// Handle entry detail lines
 			let parts = self.parse_entry_detail(&l);
 
@@ -294,96 +236,64 @@ impl Parser {
 			// numbers of terms
 			if parts.len() == 1 {
 				let account = parts[0].clone();
-				ledger.set_virtual_detail(account).map_err(
-					|e| anyhow!("{} (line {})", e, i),
-				)?;
+				ledger
+					.set_virtual_detail(account)
+					.map_err(|e| anyhow!("{} (line {})", e, i))?;
 				continue;
 			}
 
 			let account = parts[0].to_string();
-			let amount = Amount::new(
-				Scalar::from_str(&parts[1])?,
-				parts[2].to_string(),
-			);
-			parse_result.note_precision(
-				&amount.currency,
-				amount.value.resolution(),
-			);
+			let amount = Amount::new(Scalar::from_str(&parts[1])?, &parts[2]);
+			parse_result
+				.note_precision(&amount.currency, amount.value.resolution());
 
 			match parts.len() {
 				// no inline conversion
 				3 => ledger
-					.add_detail(
-						account, amount, None, None,
-						None,
-					)
-					.map_err(|e| {
-						anyhow!("{} (line {})", e, i)
-					})?,
+					.add_detail(account, amount, None, None, None)
+					.map_err(|e| anyhow!("{} (line {})", e, i))?,
 				6 => {
 					// inline conversion, i.e. `@ 20.00 USD`
-					let is_total_cost =
-						match parts[3].as_str() {
-							"@" => false,
-							"@@" => true,
-							_ => bail!(
-						"Invalid format (line {})",
-						i
-					),
-						};
+					let is_total_cost = match parts[3].as_str() {
+						"@" => false,
+						"@@" => true,
+						_ => bail!("Invalid format (line {})", i),
+					};
 
-					let mut ic_amount = Scalar::from_str(
-						parts[4].as_str(),
-					)
-					.map_err(|_| {
-						anyhow!("Invalid value (line {})", i)
-					})?;
+					let mut ic_amount = Scalar::from_str(parts[4].as_str())
+						.map_err(|_| anyhow!("Invalid value (line {})", i))?;
 					let ic_currency = parts[5].to_string();
 
-					parse_result.note_precision(
-						&ic_currency,
-						ic_amount.resolution(),
-					);
+					parse_result
+						.note_precision(&ic_currency, ic_amount.resolution());
 
 					if is_total_cost {
 						ic_amount /= amount.value
 					};
 
-					ledger.add_detail(
-						account,
-						amount,
-						Some(Amount::new(
-							ic_amount,
-							ic_currency,
-						)),
-						None,
-						None,
-					)
-					.map_err(|e| {
-						anyhow!("{} (line {})", e, i)
-					})?
+					ledger
+						.add_detail(
+							account,
+							amount,
+							Some(Amount::new(ic_amount, &ic_currency)),
+							None,
+							None,
+						)
+						.map_err(|e| anyhow!("{} (line {})", e, i))?
 				},
 				7 | 8 => {
 					// lot declaration, i.e. `{ 20.00 USD }`
-					if parts[3] != "{"
-						|| parts.last().unwrap() != "}"
-					{
+					if parts[3] != "{" || parts.last().unwrap() != "}" {
 						bail!("Invalid format (line {})", i);
 					}
 
 					// Grab cost basis
-					let cb_amount = Scalar::from_str(
-						parts[4].as_str(),
-					)
-					.map_err(|_| {
-						anyhow!("Invalid value (line {})", i)
-					})?;
+					let cb_amount = Scalar::from_str(parts[4].as_str())
+						.map_err(|_| anyhow!("Invalid value (line {})", i))?;
 					let cb_currency = parts[5].to_string();
 
-					parse_result.note_precision(
-						&cb_currency,
-						cb_amount.resolution(),
-					);
+					parse_result
+						.note_precision(&cb_currency, cb_amount.resolution());
 
 					let lot_name = if parts.len() == 8 {
 						Some(parts[6].to_string())
@@ -391,29 +301,26 @@ impl Parser {
 						None
 					};
 
-					ledger.add_detail(
-						account,
-						amount,
-						Some(Amount::new(
-							cb_amount,
-							cb_currency.clone(),
-						)),
-						Some(Amount {
-							value: cb_amount,
-							currency: cb_currency,
-						}),
-						lot_name,
-					)
-					.map_err(|e| {
-						anyhow!("{} (line {})", e, i)
-					})?
+					ledger
+						.add_detail(
+							account,
+							amount,
+							Some(Amount::new(cb_amount, &cb_currency)),
+							Some(Amount {
+								value: cb_amount,
+								currency: cb_currency,
+							}),
+							lot_name,
+						)
+						.map_err(|e| anyhow!("{} (line {})", e, i))?
 				},
 				_ => bail!("Invalid format (line {})", i),
 			}
 		}
 
 		// Make sure to finish the last entry if the file ends without an empty line
-		ledger.finish_entry()
+		ledger
+			.finish_entry()
 			.map_err(|e| anyhow!("{} (line eof)", e))?;
 
 		Ok(())

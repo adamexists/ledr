@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -143,8 +143,7 @@ impl Graph {
 
 		if let Some(node) = self.nodes.get(current) {
 			for (neighbor, rate) in &node.edges {
-				let new_rate_product =
-					rate_product * rate.ratio.as_f64();
+				let new_rate_product = rate_product * rate.ratio.as_f64();
 
 				// Recursive call for the neighbor
 				if self.detect_inconsistent_cycle(
@@ -183,21 +182,14 @@ impl Graph {
 			if let Some(node) = self.nodes.get(&current_currency) {
 				for (neighbor, rate) in &node.edges {
 					if !visited.contains_key(neighbor) {
-						let new_rate = current_rate
-							* rate.ratio.as_f64();
+						let new_rate = current_rate * rate.ratio.as_f64();
 
 						if neighbor == quote {
 							return Some(Scalar::from_f64(new_rate));
 						}
 
-						visited.insert(
-							neighbor.clone(),
-							new_rate,
-						);
-						queue.push((
-							neighbor.clone(),
-							new_rate,
-						));
+						visited.insert(neighbor.clone(), new_rate);
+						queue.push((neighbor.clone(), new_rate));
 					}
 				}
 			}
@@ -243,14 +235,8 @@ impl Graph {
 		for base in self.nodes.keys() {
 			for quote in self.nodes.keys() {
 				if base != quote {
-					if let Some(rate) =
-						self.convert(base, quote)
-					{
-						rates.push((
-							base.clone(),
-							quote.clone(),
-							rate,
-						));
+					if let Some(rate) = self.convert(base, quote) {
+						rates.push((base.clone(), quote.clone(), rate));
 					}
 				}
 			}
@@ -276,8 +262,8 @@ mod tests {
 	#[test]
 	fn test_direct_conversion() {
 		let mut graph = Graph::new();
-		let a = Amount::new(Scalar::new(2, 0), "USD".to_string());
-		let b = Amount::new(Scalar::new(1, 0), "EUR".to_string());
+		let a = Amount::new(Scalar::new(2, 0), "USD");
+		let b = Amount::new(Scalar::new(1, 0), "EUR");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
 
 		let expected_output = Scalar::new(5, 1);
@@ -291,8 +277,8 @@ mod tests {
 	#[test]
 	fn test_reverse_conversion() {
 		let mut graph = Graph::new();
-		let a = Amount::new(Scalar::new(2, 0), "USD".to_string());
-		let b = Amount::new(Scalar::new(1, 0), "EUR".to_string());
+		let a = Amount::new(Scalar::new(2, 0), "USD");
+		let b = Amount::new(Scalar::new(1, 0), "EUR");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
 
 		let expected_output = Scalar::new(2, 0);
@@ -305,12 +291,12 @@ mod tests {
 	#[test]
 	fn test_indirect_conversion() {
 		let mut graph = Graph::new();
-		let a = Amount::new(Scalar::new(2, 0), "USD".to_string());
-		let b = Amount::new(Scalar::new(1, 0), "EUR".to_string());
+		let a = Amount::new(Scalar::new(2, 0), "USD");
+		let b = Amount::new(Scalar::new(1, 0), "EUR");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
 
-		let c = Amount::new(Scalar::new(5, 0), "EUR".to_string());
-		let d = Amount::new(Scalar::new(1, 0), "GBP".to_string());
+		let c = Amount::new(Scalar::new(5, 0), "EUR");
+		let d = Amount::new(Scalar::new(1, 0), "GBP");
 		graph.add_rate(&c, &d, true).expect("Could not add rate");
 
 		let expected_output = Scalar::new(10, 0);
@@ -323,12 +309,12 @@ mod tests {
 	#[test]
 	fn test_reverse_indirect_conversion() {
 		let mut graph = Graph::new();
-		let a = Amount::new(Scalar::new(2, 0), "USD".to_string());
-		let b = Amount::new(Scalar::new(1, 0), "EUR".to_string());
+		let a = Amount::new(Scalar::new(2, 0), "USD");
+		let b = Amount::new(Scalar::new(1, 0), "EUR");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
 
-		let c = Amount::new(Scalar::new(5, 0), "EUR".to_string());
-		let d = Amount::new(Scalar::new(1, 0), "GBP".to_string());
+		let c = Amount::new(Scalar::new(5, 0), "EUR");
+		let d = Amount::new(Scalar::new(1, 0), "GBP");
 		graph.add_rate(&c, &d, true).expect("Could not add rate");
 
 		let expected_output = Scalar::new(1, 1);
@@ -350,12 +336,12 @@ mod tests {
 	#[test]
 	fn test_no_conversion_path() {
 		let mut graph = Graph::new();
-		let a = Amount::new(Scalar::new(2, 0), "USD".to_string());
-		let b = Amount::new(Scalar::new(1, 0), "EUR".to_string());
+		let a = Amount::new(Scalar::new(2, 0), "USD");
+		let b = Amount::new(Scalar::new(1, 0), "EUR");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
 
-		let c = Amount::new(Scalar::new(3, 0), "JPY".to_string());
-		let d = Amount::new(Scalar::new(1, 0), "INR".to_string());
+		let c = Amount::new(Scalar::new(3, 0), "JPY");
+		let d = Amount::new(Scalar::new(1, 0), "INR");
 		graph.add_rate(&c, &d, true).expect("Could not add rate");
 
 		let result = graph.convert("USD", "JPY");
@@ -367,26 +353,25 @@ mod tests {
 	#[test]
 	fn test_large_graph_conversion() {
 		let mut graph = Graph::new();
-		let a = Amount::new(Scalar::new(2, 0), "USD".to_string());
-		let b = Amount::new(Scalar::new(1, 0), "EUR".to_string());
+		let a = Amount::new(Scalar::new(2, 0), "USD");
+		let b = Amount::new(Scalar::new(1, 0), "EUR");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
 
-		let c = Amount::new(Scalar::new(5, 0), "EUR".to_string());
-		let d = Amount::new(Scalar::new(1, 0), "GBP".to_string());
+		let c = Amount::new(Scalar::new(5, 0), "EUR");
+		let d = Amount::new(Scalar::new(1, 0), "GBP");
 		graph.add_rate(&c, &d, true).expect("Could not add rate");
 
-		let e = Amount::new(Scalar::new(10, 0), "GBP".to_string());
-		let f = Amount::new(Scalar::new(1, 0), "JPY".to_string());
+		let e = Amount::new(Scalar::new(10, 0), "GBP");
+		let f = Amount::new(Scalar::new(1, 0), "JPY");
 		graph.add_rate(&e, &f, true).expect("Could not add rate");
 
-		let g = Amount::new(Scalar::new(3, 0), "JPY".to_string());
-		let h = Amount::new(Scalar::new(1, 0), "INR".to_string());
+		let g = Amount::new(Scalar::new(3, 0), "JPY");
+		let h = Amount::new(Scalar::new(1, 0), "INR");
 		graph.add_rate(&g, &h, true).expect("Could not add rate");
 
 		let expected_output = Scalar::new(300, 0);
 		let result = graph.convert("USD", "INR");
-		let direct_rate =
-			graph.get_direct_rate("GBP", "EUR", false).unwrap();
+		let direct_rate = graph.get_direct_rate("GBP", "EUR", false).unwrap();
 
 		assert_eq!(result.unwrap(), expected_output);
 		assert!(!graph.has_inconsistent_cycle());
@@ -407,18 +392,18 @@ mod tests {
 		let mut graph = Graph::new();
 
 		// Add USD <-> EUR rate
-		let a = Amount::new(Scalar::new(2, 0), "USD".to_string());
-		let b = Amount::new(Scalar::new(1, 0), "EUR".to_string());
+		let a = Amount::new(Scalar::new(2, 0), "USD");
+		let b = Amount::new(Scalar::new(1, 0), "EUR");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
 
 		// Add EUR <-> GBP rate
-		let c = Amount::new(Scalar::new(5, 0), "EUR".to_string());
-		let d = Amount::new(Scalar::new(1, 0), "GBP".to_string());
+		let c = Amount::new(Scalar::new(5, 0), "EUR");
+		let d = Amount::new(Scalar::new(1, 0), "GBP");
 		graph.add_rate(&c, &d, true).expect("Could not add rate");
 
 		// Add GBP <-> USD rate that creates an inconsistent cycle
-		let e = Amount::new(Scalar::new(1, 0), "GBP".to_string());
-		let f = Amount::new(Scalar::new(1, 0), "USD".to_string());
+		let e = Amount::new(Scalar::new(1, 0), "GBP");
+		let f = Amount::new(Scalar::new(1, 0), "USD");
 		let _result = graph.add_rate(&e, &f, true);
 
 		// Assert that the inconsistent cycle is detected
@@ -438,16 +423,9 @@ mod tests {
 			for j in i + 1..currencies.len() {
 				let rate1 = Scalar::from_i128((i + 1) as i128);
 				let rate2 = Scalar::from_i128((j + 1) as i128);
-				let a = Amount::new(
-					rate1,
-					currencies[i].to_string(),
-				);
-				let b = Amount::new(
-					rate2,
-					currencies[j].to_string(),
-				);
-				graph.add_rate(&a, &b, true)
-					.expect("Could not add rate");
+				let a = Amount::new(rate1, &currencies[i]);
+				let b = Amount::new(rate2, &currencies[j]);
+				graph.add_rate(&a, &b, true).expect("Could not add rate");
 			}
 		}
 
@@ -478,12 +456,10 @@ mod tests {
 
 		// Add all bidirectional rates
 		for (from, to, rate) in pairs {
-			let amount_from = Amount::new(
-				Scalar::new(100, 0),
-				from.to_string(),
-			);
-			let amount_to = Amount::new(rate, to.to_string());
-			graph.add_rate(&amount_from, &amount_to, true)
+			let amount_from = Amount::new(Scalar::new(100, 0), from);
+			let amount_to = Amount::new(rate, to);
+			graph
+				.add_rate(&amount_from, &amount_to, true)
 				.expect("Could not add rate");
 		}
 
@@ -517,30 +493,24 @@ mod tests {
 
 		// Add rates for each segment
 		for (from, to, rate) in segment1 {
-			let amount_from = Amount::new(
-				Scalar::new(100, 0),
-				from.to_string(),
-			);
-			let amount_to = Amount::new(rate, to.to_string());
-			graph.add_rate(&amount_from, &amount_to, true)
+			let amount_from = Amount::new(Scalar::new(100, 0), from);
+			let amount_to = Amount::new(rate, to);
+			graph
+				.add_rate(&amount_from, &amount_to, true)
 				.expect("Could not add rate");
 		}
 		for (from, to, rate) in segment2 {
-			let amount_from = Amount::new(
-				Scalar::new(100, 0),
-				from.to_string(),
-			);
-			let amount_to = Amount::new(rate, to.to_string());
-			graph.add_rate(&amount_from, &amount_to, true)
+			let amount_from = Amount::new(Scalar::new(100, 0), from);
+			let amount_to = Amount::new(rate, to);
+			graph
+				.add_rate(&amount_from, &amount_to, true)
 				.expect("Could not add rate");
 		}
 		for (from, to, rate) in segment3 {
-			let amount_from = Amount::new(
-				Scalar::new(100, 0),
-				from.to_string(),
-			);
-			let amount_to = Amount::new(rate, to.to_string());
-			graph.add_rate(&amount_from, &amount_to, true)
+			let amount_from = Amount::new(Scalar::new(100, 0), from);
+			let amount_to = Amount::new(rate, to);
+			graph
+				.add_rate(&amount_from, &amount_to, true)
 				.expect("Could not add rate");
 		}
 
@@ -559,16 +529,11 @@ mod tests {
 		let seg1 = ["USD", "EUR", "GBP"];
 		for i in 0..seg1.len() {
 			for j in i + 1..seg1.len() {
-				let a = Amount::new(
-					Scalar::from_i128((i + 1) as i128),
-					seg1[i].to_string(),
-				);
-				let b = Amount::new(
-					Scalar::from_i128((j + 1) as i128),
-					seg1[j].to_string(),
-				);
-				graph.add_rate(&a, &b, true)
-					.expect("Could not add rate");
+				let a =
+					Amount::new(Scalar::from_i128((i + 1) as i128), seg1[i]);
+				let b =
+					Amount::new(Scalar::from_i128((j + 1) as i128), seg1[j]);
+				graph.add_rate(&a, &b, true).expect("Could not add rate");
 			}
 		}
 
@@ -576,16 +541,11 @@ mod tests {
 		let seg2 = ["JPY", "AUD", "CAD"];
 		for i in 0..seg2.len() {
 			for j in i + 1..seg2.len() {
-				let a = Amount::new(
-					Scalar::from_i128((i + 1) as i128),
-					seg2[i].to_string(),
-				);
-				let b = Amount::new(
-					Scalar::from_i128((j + 1) as i128),
-					seg2[j].to_string(),
-				);
-				graph.add_rate(&a, &b, true)
-					.expect("Could not add rate");
+				let a =
+					Amount::new(Scalar::from_i128((i + 1) as i128), seg2[i]);
+				let b =
+					Amount::new(Scalar::from_i128((j + 1) as i128), seg2[j]);
+				graph.add_rate(&a, &b, true).expect("Could not add rate");
 			}
 		}
 
@@ -593,16 +553,11 @@ mod tests {
 		let seg3 = ["CHF", "CNY", "INR"];
 		for i in 0..seg3.len() {
 			for j in i + 1..seg3.len() {
-				let a = Amount::new(
-					Scalar::from_i128((i + 1) as i128),
-					seg3[i].to_string(),
-				);
-				let b = Amount::new(
-					Scalar::from_i128((j + 1) as i128),
-					seg3[j].to_string(),
-				);
-				graph.add_rate(&a, &b, true)
-					.expect("Could not add rate");
+				let a =
+					Amount::new(Scalar::from_i128((i + 1) as i128), seg3[i]);
+				let b =
+					Amount::new(Scalar::from_i128((j + 1) as i128), seg3[j]);
+				graph.add_rate(&a, &b, true).expect("Could not add rate");
 			}
 		}
 

@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,11 +18,11 @@ use crate::gl::entry::Entry;
 use crate::reports::table::Table;
 use crate::util::scalar::Scalar;
 
-pub struct OrderedEntry {
+pub struct LedgerReporter {
 	entries: Vec<Entry>,
 }
 
-impl OrderedEntry {
+impl LedgerReporter {
 	pub fn new(mut entries: Vec<Entry>) -> Self {
 		entries.sort();
 

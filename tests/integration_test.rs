@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -58,8 +58,7 @@ fn test_integration_collapse_currency() {
 
 #[test]
 fn test_integration_max_depth() {
-	let test_cases =
-		vec![("1_in.txt", "1_out.txt"), ("2_in.txt", "2_out.txt")];
+	let test_cases = vec![("1_in.txt", "1_out.txt"), ("2_in.txt", "2_out.txt")];
 
 	execute("maxdepth", test_cases, true, "bs", vec!["-d", "2"])
 }
@@ -107,7 +106,7 @@ fn test_integration_bounded_range() {
 fn test_integration_lots() {
 	let test_cases = vec![("1_in.txt", "1_out.txt")];
 
-	execute("lots", test_cases, true, "pnl", vec![])
+	execute("lots", test_cases, true, "rgl", vec![])
 }
 
 fn execute(
@@ -120,16 +119,10 @@ fn execute(
 	for (input_file, expected_output_file) in test_cases {
 		println!("running for {}...", input_file);
 
-		let loc = format!(
-			"{}/{}/{}",
-			"tests/test_data", subfolder, input_file
-		);
+		let loc = format!("{}/{}/{}", "tests/test_data", subfolder, input_file);
 
-		let all_args = [
-			vec!["run", "--", "-f", loc.as_str(), cmd],
-			args.clone(),
-		]
-		.concat();
+		let all_args =
+			[vec!["run", "--", "-f", loc.as_str(), cmd], args.clone()].concat();
 
 		let output = Command::new("cargo")
 			.args(all_args)
@@ -145,11 +138,7 @@ fn execute(
 			continue;
 		}
 
-		assert!(
-			output.status.success(),
-			"{} failed processing!",
-			input_file
-		);
+		assert!(output.status.success(), "{} failed processing!", input_file);
 
 		let stdout = String::from_utf8_lossy(&output.stdout);
 

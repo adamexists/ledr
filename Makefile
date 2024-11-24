@@ -30,3 +30,11 @@ install:
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/ledr
 	rm -f $(DESTDIR)$(MANDIR)/man1/ledr.1
+
+check-gpl:
+	@violations=$$(find . -name '*.rs' -exec sh -c 'head -n 1 "{}" | grep -q "©" || echo "{}"' \;); \
+	if [ -n "$$violations" ]; then \
+		echo "$$violations"; \
+		exit 1; \
+	fi
+	@echo "All good"

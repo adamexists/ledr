@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,19 +15,19 @@
  */
 
 use crate::investment::action::{Action, Direction};
-use crate::investment::lot_state::LotState;
+use crate::investment::portfolio::Portfolio;
 use crate::util::date::Date;
 use anyhow::Error;
 use std::cmp::Ordering;
 
 /// Stores actions related to lots until they are all in, at which time this
-/// sorts them and assembles a LotState for inspection. TODO rename this
+/// sorts them and assembles a Portfolio for inspection.
 #[derive(Debug, Default)]
-pub struct LotBuffer {
+pub struct ActionBuffer {
 	actions: Vec<Action>, // all actions, unordered
 }
 
-impl LotBuffer {
+impl ActionBuffer {
 	/// Adds an action to the lot buffer.
 	pub fn add_action(&mut self, action: Action) {
 		self.actions.push(action);
@@ -37,11 +37,17 @@ impl LotBuffer {
 	/// On the same date, all buys come before all sells, to account for
 	/// order of appearance not being guaranteed. Fails if a Sell action
 	/// has no corresponding lot from which to sell, else succeeds and
-	/// results in a set of lots.
-	pub fn tabulate(&mut self, as_of: &Date) -> Result<LotState, Error> {
-		self.sort_actions(as_of);
+	/// results in a portfolio.
+	///
+	/// All actions after the given ignore_after date are ignored.
+	pub fn tabulate(
+		&mut self,
+		ignore_after: &Date,
+	) -> Result<Portfolio, Error> {
+		self.sort_actions();
+		self.actions.retain(|a| &a.date <= ignore_after);
 
-		let mut state = LotState::new();
+		let mut state = Portfolio::new();
 
 		for action in &mut self.actions {
 			match &action.direction {
@@ -49,20 +55,15 @@ impl LotBuffer {
 					state.buy_lot(action);
 				},
 				Direction::Sell(proceeds) => {
-					state.sell_lot(
-						action,
-						proceeds.clone(),
-					)?;
+					state.sell_lot(action, proceeds.clone())?;
 				},
 			}
 		}
 		Ok(state)
 	}
 
-	fn sort_actions(&mut self, as_of: &Date) {
-		self.actions.retain(|m| &m.date <= as_of);
-		self.actions.sort_by(|a, b| {
-			a.partial_cmp(b).unwrap_or(Ordering::Equal)
-		});
+	fn sort_actions(&mut self) {
+		self.actions
+			.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
 	}
 }

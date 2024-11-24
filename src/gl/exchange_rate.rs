@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@ use std::collections::HashMap;
 #[derive(Debug, Default)]
 pub struct ExchangeRates {
 	/// Stores a set of Graphs, one per date
-	rates: HashMap<Date, Graph>,
+	rate_graphs: HashMap<Date, Graph>,
 
 	/// Preprocessed data for constant-time lookups, only available after
 	/// finalize() has been called on this
@@ -53,13 +53,13 @@ impl ExchangeRates {
 			return Ok(());
 		}
 
-		let b_amt = Amount::new(Scalar::from_i128(1), base.clone());
-		let q_amt = Amount::new(rate, quote.clone());
+		let b_amt = Amount::new(Scalar::from_i128(1), &base);
+		let q_amt = Amount::new(rate, &quote);
 
 		// We do not need to check for existing inferred rates, because
 		// all directives are handled first, so one cannot exist.
 
-		let entry = self.rates.entry(date).or_insert_with(Graph::new);
+		let entry = self.rate_graphs.entry(date).or_insert_with(Graph::new);
 
 		if entry.get_direct_rate(&base, &quote, true).is_some() {
 			bail!("Cannot declare multiple rates on same date")
@@ -92,27 +92,21 @@ impl ExchangeRates {
 			return Ok(());
 		}
 
-		let b_amt = Amount::new(Scalar::from_i128(1), base.clone());
-		let q_amt = Amount::new(rate, quote.clone());
+		let b_amt = Amount::new(Scalar::from_i128(1), base);
+		let q_amt = Amount::new(rate, quote);
 
 		// We do not need to check for existing inferred rates, because
 		// all directives are handled first, so one cannot exist.
 
-		let entry = self.rates.entry(date).or_insert_with(Graph::new);
+		let entry = self.rate_graphs.entry(date).or_insert_with(Graph::new);
 
-		if let Some(existing_rate) =
-			entry.get_direct_rate(base, quote, true)
-		{
+		if let Some(existing_rate) = entry.get_direct_rate(base, quote, true) {
 			// Check if the inferred rate is within 1% of the
 			// declared rate. If it is, ignore this inferred rate
 			// and use the declared; if not, then the declared rate
 			// is too far from reality on this date to be accurate,
 			// so we should error to stop tabulation here.
-			if !within_tolerance_of(
-				Scalar::new(1, 2),
-				existing_rate,
-				rate,
-			) {
+			if !within_tolerance_of(Scalar::new(1, 2), existing_rate, rate) {
 				bail!("Inferred exchange rate deviates >1% from declared rate")
 			}
 
@@ -127,19 +121,27 @@ impl ExchangeRates {
 	/// Finalizes the rates into a resolved form for efficient lookups,
 	/// after which the methods to retrieve rates from here will work.
 	/// Prior to that, they will not work. Finalization can fail if any
-	/// of the underlying Graphs are incoherent. All are checked.
-	pub fn finalize(&mut self) -> Result<(), Error> {
+	/// of the underlying Graphs are incoherent.
+	///
+	/// Ignores and drops all data outside the bounds defined by the
+	/// relevant arguments.
+	pub fn finalize(
+		&mut self,
+		drop_before: &Date,
+		drop_after: &Date,
+	) -> Result<(), Error> {
 		let mut resolved = HashMap::new();
 
-		for (date, graph) in &self.rates {
+		self.rate_graphs
+			.retain(|date, _| date >= drop_before && date <= drop_after);
+
+		for (date, graph) in &self.rate_graphs {
 			if graph.has_inconsistent_cycle() {
-				bail!(
-					"Exchange rates on {} are incoherent",
-					date
-				)
+				bail!("Exchange rates on {} are incoherent", date)
 			}
 			for (base, quote, rate) in graph.get_all_rates() {
-				resolved.entry((base.clone(), quote.clone()))
+				resolved
+					.entry((base.clone(), quote.clone()))
 					.or_insert_with(Vec::new)
 					.push((*date, rate));
 			}
@@ -225,12 +227,7 @@ mod tests {
 		let quote = "EUR".to_string();
 
 		assert!(exchange_rates
-			.declare(
-				date,
-				base.clone(),
-				quote.clone(),
-				Scalar::new(0, 0)
-			)
+			.declare(date, base.clone(), quote.clone(), Scalar::new(0, 0))
 			.is_ok());
 		assert!(exchange_rates
 			.declare(date, base, quote, Scalar::new(-1, 1))
@@ -246,12 +243,7 @@ mod tests {
 		let declared_rate = Scalar::new(11, 1);
 
 		exchange_rates
-			.declare(
-				date,
-				base.clone(),
-				quote.clone(),
-				declared_rate,
-			)
+			.declare(date, base.clone(), quote.clone(), declared_rate)
 			.unwrap();
 
 		let inferred_rate = Scalar::new(1099, 3);
@@ -274,12 +266,7 @@ mod tests {
 		let declared_rate = Scalar::new(11, 1);
 
 		exchange_rates
-			.declare(
-				date,
-				base.clone(),
-				quote.clone(),
-				declared_rate,
-			)
+			.declare(date, base.clone(), quote.clone(), declared_rate)
 			.unwrap();
 
 		let inferred_rate = Scalar::new(112, 2);
@@ -309,11 +296,12 @@ mod tests {
 			.declare(date2, base.clone(), quote.clone(), rate2)
 			.unwrap();
 
-		exchange_rates.finalize().expect("finalize failed");
+		exchange_rates
+			.finalize(&Date::min(), &Date::max())
+			.expect("finalize failed");
 
 		assert_eq!(
-			exchange_rates
-				.get_latest_rate(base.clone(), quote.clone()),
+			exchange_rates.get_latest_rate(base.clone(), quote.clone()),
 			Some(rate2)
 		);
 
@@ -323,11 +311,10 @@ mod tests {
 			.declare(date3, base.clone(), quote.clone(), rate3)
 			.unwrap();
 
-		exchange_rates.finalize().expect("finalize failed");
+		exchange_rates
+			.finalize(&Date::min(), &Date::max())
+			.expect("finalize failed");
 
-		assert_eq!(
-			exchange_rates.get_latest_rate(base, quote),
-			Some(rate3)
-		);
+		assert_eq!(exchange_rates.get_latest_rate(base, quote), Some(rate3));
 	}
 }

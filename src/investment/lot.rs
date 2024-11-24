@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,13 @@ use crate::util::date::{Date, Duration};
 use crate::util::scalar::Scalar;
 use std::cmp::Ordering;
 
+/// A discrete batch of a commodity that was purchased or acquired in a single
+/// transaction. It may be closed or open, and it may be partially closed with
+/// associated sales. These may differ in date, amount, and proceeds compared
+/// with each other.
+///
+/// Lots have an ID, by default an integer, that can be used to match them.
+/// Otherwise, FIFO is assumed.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Lot {
 	pub id: String,
@@ -54,15 +61,16 @@ impl Ord for LotStatus {
 	fn cmp(&self, other: &Self) -> Ordering {
 		match (self, other) {
 			(LotStatus::Open, LotStatus::Closed) => Ordering::Less,
-			(LotStatus::Closed, LotStatus::Open) => {
-				Ordering::Greater
-			},
+			(LotStatus::Closed, LotStatus::Open) => Ordering::Greater,
 			_ => Ordering::Equal,
 		}
 	}
 }
 
 impl Lot {
+	/// Reports the amount of time the Lot has been held as of a specific
+	/// date. If the lot has been closed prior to the passed date, it will
+	/// report the time held before it closed, not the time to present.
 	pub fn time_held(&self, as_of: &Date) -> Duration {
 		let end = match self.closed_date {
 			Some(date) => {
@@ -85,9 +93,7 @@ impl Lot {
 
 		self.sales
 			.iter()
-			.map(|sale| {
-				format!("{} on {}", sale.quantity, sale.date)
-			})
+			.map(|sale| format!("{} on {}", sale.quantity, sale.date))
 			.collect::<Vec<String>>()
 			.join("; ")
 	}
@@ -100,38 +106,42 @@ impl PartialOrd for Lot {
 }
 
 impl Ord for Lot {
-	// TODO: This should be maximally deterministic, and thus be made to
-	//  use every field on the Lot.
 	fn cmp(&self, other: &Self) -> Ordering {
-		// First: Compare by acquisition_date (ascending)
+		// First: Compare by acquisition_date (thus, FIFO)
 		let acquisition_cmp =
 			self.acquisition_date.cmp(&other.acquisition_date);
 		if acquisition_cmp != Ordering::Equal {
 			return acquisition_cmp;
 		}
 
-		// Second: Compare by status (Open < Closed)
+		// Then: Compare by status (Open < Closed)
 		let status_cmp = self.status.cmp(&other.status);
 		if status_cmp != Ordering::Equal {
 			return status_cmp;
 		}
 
-		// Third: Compare by commodity (lexicographically)
+		// Then: Compare by commodity (lexicographically)
 		let commodity_cmp = self.commodity.cmp(&other.commodity);
 		if commodity_cmp != Ordering::Equal {
 			return commodity_cmp;
 		}
 
-		// Fifth: Compare by account (lexicographically)
-		let account_cmp = self.account.cmp(&other.account);
-		if account_cmp != Ordering::Equal {
-			return account_cmp;
+		// Then: Compare by quantity (ascending)
+		let quantity_cmp = self.quantity.cmp(&other.quantity);
+		if quantity_cmp != Ordering::Equal {
+			return quantity_cmp;
 		}
 
-		// Sixth: Compare by number of sales (descending)
+		// Then: Compare by number of sales (descending)
 		let sales_cmp = other.sales.len().cmp(&self.sales.len());
 		if sales_cmp != Ordering::Equal {
 			return sales_cmp;
+		}
+
+		// Then: Compare by account (lexicographically)
+		let account_cmp = self.account.cmp(&other.account);
+		if account_cmp != Ordering::Equal {
+			return account_cmp;
 		}
 
 		Ordering::Equal

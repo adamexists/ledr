@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,15 +19,21 @@ use crate::investment::sale::Sale;
 use crate::util::amount::Amount;
 use anyhow::{bail, Error};
 
-/// TODO rename this and write a proper description
-pub struct LotState {
-	/// Sorted deterministically, with all buys coming before all sells TODO confirm; very important
+/// A set of lots, reflecting a certain coherent state of an investment
+/// portfolio. When it is being assembled, it will reject states where,
+/// for example, more is sold than one owns. (Negative cost bases and
+/// liability accounts should be sufficient for edge cases in these
+/// areas).
+///
+/// Once assembled, it can filter and ultimately provide its set of
+/// lots to another struct for reporting.
+pub struct Portfolio {
 	state: Vec<Lot>,
 	/// The ID number that will be automatically assigned to the next lot
 	next_id: u64,
 }
 
-impl LotState {
+impl Portfolio {
 	pub fn new() -> Self {
 		Self {
 			state: Default::default(),
@@ -79,8 +85,7 @@ impl LotState {
 			}
 
 			// Determine how much can be sold from this lot
-			let sell_quantity =
-				remaining_quantity.min(lot.quantity);
+			let sell_quantity = remaining_quantity.min(lot.quantity);
 			lot.quantity -= sell_quantity;
 			remaining_quantity -= sell_quantity;
 
@@ -105,11 +110,11 @@ impl LotState {
 
 		if remaining_quantity > 0 {
 			bail!(
-					"No remaining lots for {} of {} (cost basis {})",
-					remaining_quantity,
-					action.commodity.symbol(),
-					action.commodity.cost_basis(),
-				)
+				"No remaining lots for {} of {} (cost basis {})",
+				remaining_quantity,
+				action.commodity.symbol(),
+				action.commodity.cost_basis(),
+			)
 		}
 
 		Ok(())
@@ -129,16 +134,12 @@ impl LotState {
 		for filter in filters {
 			lots_iter = match filter {
 				LotFilter::Status(status) => {
-					Box::new(lots_iter.filter(move |lot| {
-						lot.status == status
-					}))
+					Box::new(lots_iter.filter(move |lot| lot.status == status))
 				},
-				LotFilter::HasSales(has_sales) => {
-					Box::new(lots_iter.filter(move |lot| {
-						lot.sales.is_empty()
-							!= has_sales
-					}))
-				},
+				LotFilter::HasSales(has_sales) => Box::new(
+					lots_iter
+						.filter(move |lot| lot.sales.is_empty() != has_sales),
+				),
 			};
 		}
 

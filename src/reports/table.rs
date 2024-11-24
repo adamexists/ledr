@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -46,9 +46,8 @@ impl Table {
 			panic!("Inconsistent column count");
 		}
 
-		self.rows.push(Row::Data(
-			row.into_iter().map(|s| s.to_string()).collect(),
-		));
+		self.rows
+			.push(Row::Data(row.into_iter().map(|s| s.to_string()).collect()));
 	}
 
 	/// Separator that goes across the entire table without gaps.
@@ -93,39 +92,23 @@ impl Table {
 		// Print each row
 		for row in &self.rows {
 			match row {
-				Row::Data(data_row) => self
-					.print_data_row(&max_widths, data_row),
-				Row::Separator => {
-					self.print_separator(&max_widths)
+				Row::Data(data_row) => {
+					self.print_data_row(&max_widths, data_row)
 				},
-				Row::PartialSeparator(data_sep) => self
-					.print_partial_separator(
-						&max_widths,
-						data_sep,
-					),
+				Row::Separator => self.print_separator(&max_widths),
+				Row::PartialSeparator(data_sep) => {
+					self.print_partial_separator(&max_widths, data_sep)
+				},
 			}
-			println!();
 		}
 	}
 
-	fn print_data_row(
-		&self,
-		max_widths: &Vec<usize>,
-		data_row: &Vec<String>,
-	) {
+	fn print_data_row(&self, max_widths: &[usize], data_row: &[String]) {
 		for (i, value) in data_row.iter().enumerate() {
 			if self.right_align[i] {
-				print!(
-					"{:>width$}",
-					value,
-					width = max_widths[i]
-				);
+				print!("{:>width$}", value, width = max_widths[i]);
 			} else {
-				print!(
-					"{:<width$}",
-					value,
-					width = max_widths[i]
-				);
+				print!("{:<width$}", value, width = max_widths[i]);
 			}
 			if i < data_row.len() - 1 {
 				print!("  ");
@@ -134,30 +117,18 @@ impl Table {
 		println!();
 	}
 
-	fn print_separator(&self, max_widths: &Vec<usize>) {
-		let total_width: usize = max_widths.iter().sum::<usize>()
-			+ (2 * (self.column_count - 1));
+	fn print_separator(&self, max_widths: &[usize]) {
+		let total_width: usize =
+			max_widths.iter().sum::<usize>() + (2 * (self.column_count - 1));
 		println!("{:-<total_width$}", "", total_width = total_width);
 	}
 
-	fn print_partial_separator(
-		&self,
-		max_widths: &Vec<usize>,
-		data_sep: &Vec<bool>,
-	) {
+	fn print_partial_separator(&self, max_widths: &[usize], data_sep: &[bool]) {
 		for (i, draw) in data_sep.iter().enumerate() {
 			if !draw {
-				print!(
-					"{: <width$}",
-					"",
-					width = max_widths[i] + 2
-				);
+				print!("{: <width$}", "", width = max_widths[i] + 2);
 			} else {
-				print!(
-					"{:-<width$}",
-					"",
-					width = max_widths[i]
-				);
+				print!("{:-<width$}", "", width = max_widths[i]);
 				if i < data_sep.len() - 1 {
 					print!("  ");
 				}

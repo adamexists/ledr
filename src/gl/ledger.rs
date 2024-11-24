@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
 use crate::gl::entry::{Entry, VIRTUAL_CONVERSION_ACCOUNT};
 use crate::gl::exchange_rate::ExchangeRates;
 use crate::investment::action::Action;
-use crate::investment::lot_buffer::LotBuffer;
+use crate::investment::action_buffer::ActionBuffer;
 use crate::util::amount::Amount;
 use crate::util::date::Date;
 use anyhow::{bail, Error};
@@ -50,7 +50,7 @@ pub struct Ledger {
 
 	// other modules the ledger must populate or access
 	pub exchange_rates: ExchangeRates,
-	pub lots: LotBuffer,
+	pub lots: ActionBuffer,
 }
 
 impl Ledger {
@@ -72,18 +72,18 @@ impl Ledger {
 
 	pub fn declare_currency(
 		&mut self,
-		currency: String,
+		currency: &str,
 		date: Date,
 	) -> Result<(), Error> {
 		if self.lenient_mode {
 			return Ok(());
 		}
 
-		if self.declared_currencies.contains_key(&currency) {
+		if self.declared_currencies.contains_key(currency) {
 			bail!("Currency {} declared twice", currency)
 		}
 
-		self.declared_currencies.insert(currency.clone(), date);
+		self.declared_currencies.insert(currency.to_string(), date);
 
 		Ok(())
 	}
@@ -106,11 +106,7 @@ impl Ledger {
 		Ok(())
 	}
 
-	pub fn new_entry(
-		&mut self,
-		date: Date,
-		desc: String,
-	) -> Result<(), Error> {
+	pub fn new_entry(&mut self, date: Date, desc: String) -> Result<(), Error> {
 		if self.pending_entry.is_some() {
 			self.finish_entry()?;
 		}
@@ -163,7 +159,7 @@ impl Ledger {
 			// other (as day traders etc. experience all the time),
 			// we must treat them as inferred rates here.
 			self.exchange_rates.infer(
-				pending_entry.get_date(),
+				*pending_entry.get_date(),
 				&amount.currency.clone(),
 				&ica.currency.clone(),
 				ica.value,
@@ -172,25 +168,18 @@ impl Ledger {
 			// Move the imbalance to the cost basis currency via
 			// the virtual conversion account, if this is not a lot
 			if cost_basis.is_none() {
-				let conversion =
-					VIRTUAL_CONVERSION_ACCOUNT.to_string();
+				let conversion = VIRTUAL_CONVERSION_ACCOUNT.to_string();
 				pending_entry.add_detail(
 					&conversion,
-					Amount::new(
-						ica.value * amount.value,
-						ica.currency,
-					),
+					Amount::new(ica.value * amount.value, &ica.currency),
 				)?;
-				pending_entry.add_detail(
-					&conversion,
-					-amount.clone(),
-				)?;
+				pending_entry.add_detail(&conversion, -amount.clone())?;
 			}
 		}
 
 		if let Some(cb) = cost_basis {
 			pending_entry.add_action(Action::new(
-				pending_entry.get_date(),
+				*pending_entry.get_date(),
 				account.clone(),
 				amount,
 				cb,
@@ -201,10 +190,7 @@ impl Ledger {
 		Ok(())
 	}
 
-	pub fn set_virtual_detail(
-		&mut self,
-		account: String,
-	) -> Result<(), Error> {
+	pub fn set_virtual_detail(&mut self, account: String) -> Result<(), Error> {
 		if !self.lenient_mode {
 			self.check_account(&account)?;
 		}
@@ -219,10 +205,7 @@ impl Ledger {
 			.set_virtual_detail(account)
 	}
 
-	pub fn add_reference(
-		&mut self,
-		reference: String,
-	) -> Result<(), Error> {
+	pub fn add_reference(&mut self, reference: String) -> Result<(), Error> {
 		match &mut self.pending_entry {
 			Some(e) => {
 				e.add_reference(reference);
@@ -238,8 +221,7 @@ impl Ledger {
 		match self.pending_entry.take() {
 			None => Ok(()),
 			Some(mut entry) => {
-				let actions = entry
-					.finalize(&mut self.exchange_rates)?;
+				let actions = entry.finalize(&mut self.exchange_rates)?;
 				for action in actions {
 					self.lots.add_action(action);
 				}
@@ -253,19 +235,13 @@ impl Ledger {
 	/// Checks whether a currency has been declared for use, and checks the
 	/// pending entry to make sure the declaration date is not ahead of the
 	/// pending entry where the currency appears.
-	fn check_currency(&self, currency: &String) -> Result<(), Error> {
-		let declaration_date =
-			match self.declared_currencies.get(currency) {
-				Some(d) => d,
-				None => bail!(
-					"Currency {} used without declaration",
-					currency
-				),
-			};
+	fn check_currency(&self, currency: &str) -> Result<(), Error> {
+		let declaration_date = match self.declared_currencies.get(currency) {
+			Some(d) => d,
+			None => bail!("Currency {} used without declaration", currency),
+		};
 
-		if self.pending_entry.as_ref().unwrap().get_date()
-			< *declaration_date
-		{
+		if self.pending_entry.as_ref().unwrap().get_date() < declaration_date {
 			bail!(
 				"Currency {} used prior to declaration on {}",
 				currency,
@@ -280,18 +256,12 @@ impl Ledger {
 	/// pending entry to make sure the declaration date is not ahead of the
 	/// pending entry where the account appears.
 	fn check_account(&self, account: &String) -> Result<(), Error> {
-		let declaration_date = match self.declared_accounts.get(account)
-		{
+		let declaration_date = match self.declared_accounts.get(account) {
 			Some(d) => d,
-			None => bail!(
-				"Account {} used without declaration",
-				account
-			),
+			None => bail!("Account {} used without declaration", account),
 		};
 
-		if self.pending_entry.as_ref().unwrap().get_date()
-			< *declaration_date
-		{
+		if self.pending_entry.as_ref().unwrap().get_date() < declaration_date {
 			bail!(
 				"Account {} used prior to declaration on {}",
 				account,
@@ -311,34 +281,37 @@ impl Ledger {
 	/// then we skip. There is no graph traversal: a direct rate must have
 	/// been observed.
 	pub fn collapse_to(&mut self, currency: String) {
-		self.entries.iter_mut().flat_map(|e| e.details()).for_each(
-			|d| {
-				if let Some(rate) =
-					self.exchange_rates.get_latest_rate(
-						d.currency(),
-						currency.clone(),
-					) {
+		self.entries
+			.iter_mut()
+			.flat_map(|e| e.details())
+			.for_each(|d| {
+				if let Some(rate) = self
+					.exchange_rates
+					.get_latest_rate(d.currency(), currency.clone())
+				{
 					d.convert_to(&currency, rate)
 				}
-			},
-		)
+			})
 	}
 
-	/// Finalizes the entire ledger by standardizing the visible precision
-	/// of each currency.
+	/// Finalizes the entire ledger by standardizing the visible precision of
+	/// each currency, and dropping entries outside the passed date range.
 	pub fn finalize(
 		&mut self,
 		max_reso_by_currency: &HashMap<String, u32>,
 		overall_max_reso: Option<u32>,
+		drop_before: &Date,
+		drop_after: &Date,
 	) -> Result<(), Error> {
 		let max_reso = overall_max_reso.unwrap_or(u32::MAX);
 
+		self.entries.retain(|e| {
+			e.get_date() >= drop_before && e.get_date() <= drop_after
+		});
+
 		for entry in &mut self.entries {
 			for (currency, &reso) in max_reso_by_currency {
-				entry.round_for_currency(
-					currency,
-					min(reso, max_reso),
-				)?
+				entry.round_for_currency(currency, min(reso, max_reso))?
 			}
 		}
 
@@ -371,14 +344,10 @@ mod tests {
 		let mut ledger = Ledger::new(false);
 		let date = Date::from_str("2024-1-1").unwrap();
 
-		assert!(ledger
-			.declare_currency("USD".to_string(), date)
-			.is_ok());
+		assert!(ledger.declare_currency("USD", date).is_ok());
 		assert!(ledger.declared_currencies.contains_key("USD"));
 
-		assert!(ledger
-			.declare_currency("USD".to_string(), date)
-			.is_err());
+		assert!(ledger.declare_currency("USD", date).is_err());
 	}
 
 	#[test]
@@ -401,19 +370,18 @@ mod tests {
 		let mut ledger = Ledger::new(false);
 		let date = Date::from_str("2024-01-01").unwrap();
 
-		assert!(ledger
-			.new_entry(date, "Test Entry".to_string())
-			.is_ok());
+		assert!(ledger.new_entry(date, "Test Entry".to_string()).is_ok());
 		assert!(ledger.pending_entry.is_some());
-		assert_eq!(ledger.pending_entry.unwrap().get_date(), date);
+		assert_eq!(ledger.pending_entry.unwrap().get_date(), &date);
 	}
 
 	#[test]
 	fn test_add_detail_valid() {
 		let mut ledger = Ledger::new(false);
 		let date = Date::from_str("2024-01-01").unwrap();
-		ledger.declare_currency("USD".to_string(), date).unwrap();
-		ledger.declare_account("Assets:Cash".to_string(), date)
+		ledger.declare_currency("USD", date).unwrap();
+		ledger
+			.declare_account("Assets:Cash".to_string(), date)
 			.unwrap();
 
 		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
@@ -421,10 +389,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				Amount::new(
-					Scalar::new(1000, 1),
-					"USD".to_string(),
-				),
+				Amount::new(Scalar::new(1000, 1), "USD",),
 				None,
 				None,
 				None,
@@ -436,7 +401,8 @@ mod tests {
 	fn test_add_detail_invalid_currency() {
 		let mut ledger = Ledger::new(false);
 		let date = Date::from_str("2024-01-01").unwrap();
-		ledger.declare_account("Assets:Cash".to_string(), date)
+		ledger
+			.declare_account("Assets:Cash".to_string(), date)
 			.unwrap();
 
 		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
@@ -444,10 +410,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				Amount::new(
-					Scalar::new(1000, 1),
-					"EUR".to_string(),
-				),
+				Amount::new(Scalar::new(1000, 1), "EUR",),
 				None,
 				None,
 				None
@@ -459,17 +422,14 @@ mod tests {
 	fn test_add_detail_invalid_account() {
 		let mut ledger = Ledger::new(false);
 		let date = Date::from_str("2024-01-01").unwrap();
-		ledger.declare_currency("USD".to_string(), date).unwrap();
+		ledger.declare_currency("USD", date).unwrap();
 
 		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
 
 		assert!(ledger
 			.add_detail(
 				"Liabilities:Loan".to_string(),
-				Amount::new(
-					Scalar::new(1000, 1),
-					"USD".to_string(),
-				),
+				Amount::new(Scalar::new(1000, 1), "USD",),
 				None,
 				None,
 				None
@@ -484,10 +444,7 @@ mod tests {
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				Amount::new(
-					Scalar::new(1000, 1),
-					"USD".to_string(),
-				),
+				Amount::new(Scalar::new(1000, 1), "USD",),
 				None,
 				None,
 				None
@@ -509,14 +466,12 @@ mod tests {
 	fn test_check_currency_before_declaration() {
 		let mut ledger = Ledger::new(false);
 		let date = Date::from_str("2024-01-01").unwrap();
-		ledger.declare_currency(
-			"USD".to_string(),
-			Date::from_str("2024-1-2").unwrap(),
-		)
-		.unwrap();
+		ledger
+			.declare_currency("USD", Date::from_str("2024-1-2").unwrap())
+			.unwrap();
 
 		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
-		let result = ledger.check_currency(&"USD".to_string());
+		let result = ledger.check_currency("USD");
 
 		assert!(result.is_err());
 	}
@@ -525,11 +480,12 @@ mod tests {
 	fn test_check_account_before_declaration() {
 		let mut ledger = Ledger::new(false);
 		let date = Date::from_str("2024-01-01").unwrap();
-		ledger.declare_account(
-			"Assets:Cash".to_string(),
-			Date::from_str("2024-01-02").unwrap(),
-		)
-		.unwrap();
+		ledger
+			.declare_account(
+				"Assets:Cash".to_string(),
+				Date::from_str("2024-01-02").unwrap(),
+			)
+			.unwrap();
 
 		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
 		let result = ledger.check_account(&"Assets:Cash".to_string());
@@ -542,16 +498,14 @@ mod tests {
 		let mut ledger = Ledger::new(true);
 		let date = Date::from_str("2024-01-01").unwrap();
 
-		ledger.new_entry(date, "Lenient Test Entry".to_string())
+		ledger
+			.new_entry(date, "Lenient Test Entry".to_string())
 			.unwrap();
 
 		assert!(ledger
 			.add_detail(
 				"Assets:Cash".to_string(),
-				Amount::new(
-					Scalar::new(500, 1),
-					"EUR".to_string(),
-				),
+				Amount::new(Scalar::new(500, 1), "EUR",),
 				None,
 				None,
 				None
@@ -564,16 +518,14 @@ mod tests {
 		let mut ledger = Ledger::new(true);
 		let date = Date::from_str("2024-01-01").unwrap();
 
-		ledger.new_entry(date, "Lenient Test Entry".to_string())
+		ledger
+			.new_entry(date, "Lenient Test Entry".to_string())
 			.unwrap();
 
 		assert!(ledger
 			.add_detail(
 				"Liabilities:Loan".to_string(),
-				Amount::new(
-					Scalar::new(1000, 1),
-					"USD".to_string(),
-				),
+				Amount::new(Scalar::new(1000, 1), "USD",),
 				None,
 				None,
 				None
@@ -582,16 +534,13 @@ mod tests {
 	}
 
 	#[test]
-	fn test_set_virtual_detail_without_account_declaration_in_lenient_mode()
-	{
+	fn test_set_virtual_detail_without_account_declaration_in_lenient_mode() {
 		let mut ledger = Ledger::new(true);
 		let date = Date::from_str("2024-01-01").unwrap();
 
-		ledger.new_entry(
-			date,
-			"Lenient Virtual Detail Test".to_string(),
-		)
-		.unwrap();
+		ledger
+			.new_entry(date, "Lenient Virtual Detail Test".to_string())
+			.unwrap();
 
 		assert!(ledger
 			.set_virtual_detail("Equity:OpeningBalance".to_string())

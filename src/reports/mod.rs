@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,7 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-pub mod ordered_entry;
-pub mod ordered_lots;
-pub mod ordered_total;
+pub mod ledger_reporter;
+pub mod portfolio_reporter;
+pub mod statement_reporter;
 pub mod table;

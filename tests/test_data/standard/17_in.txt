@@ -8,8 +8,6 @@
 ! 2024-11-19 account Assets:B
 ! 2024-11-19 account Assets:C
 
-# TODO: Implement this special case where the cost basis offsetting
-#  in the other account is implied.
 2024-11-19 Buy AAPL
     Assets:A      10 AAPL { 234.00 USD }
     Assets:B

@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Adam House <adam@adamexists.com>
+/* Copyright © 2024 Adam House <adam@adamexists.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -13,19 +13,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-
 use crate::gl::total::Total;
 use crate::investment::lot::LotStatus;
-use crate::investment::lot_state::{LotFilter, LotState};
+use crate::investment::portfolio::{LotFilter, Portfolio};
 use crate::parsing::parser::ParseResult;
-use crate::reports::ordered_entry::OrderedEntry;
-use crate::reports::ordered_lots::OrderedLots;
-use crate::reports::ordered_total::OrderedTotal;
+use crate::reports::ledger_reporter::LedgerReporter;
+use crate::reports::portfolio_reporter::PortfolioReporter;
+use crate::reports::statement_reporter::StatementReporter;
 use crate::util::date::Date;
 use anyhow::{bail, Error};
 use chrono::Local;
 use clap::{Parser, ValueEnum};
 use gl::ledger::Ledger;
+use std::cmp::PartialEq;
 
 mod gl;
 mod investment;
@@ -90,7 +90,7 @@ struct Cli {
 	precision: Option<u32>,
 }
 
-#[derive(ValueEnum, Clone)]
+#[derive(ValueEnum, Clone, PartialEq)]
 enum Directive {
 	Bs, // balance sheet
 	Is, // income statement
@@ -99,33 +99,41 @@ enum Directive {
 	As, // account summary
 
 	Lots, // open lots report
-	Pnl,  // profit / loss lots report
+	Rgl,  // realized gains/losses report
 }
 
 fn main() -> Result<(), Error> {
 	let args = Cli::parse();
 
-	let (beg, end) = get_range(&args)?;
+	let (begin, end) = get_range(&args)?;
 
 	let mut ledger = Ledger::new(args.lenient);
 
 	let mut parser = parsing::parser::Parser::new();
-	let parse_result = parser.parse(&args.file, &beg, &end, &mut ledger)?;
+	let parse_result = parser.parse(&args.file, &mut ledger)?;
 
-	// TODO: Not a huge fan aesthetically of lot_state being the only output from here.
-	let lot_state = finalize_ledger(&args, &mut ledger, &parse_result)?;
+	// For the open lots report, the end date is an as-of date, so we "rewind"
+	// history if that report is selected by ignoring lot actions after it.
+	// Everything before it is always computed. In other cases, the portfolio
+	// always sees everything, but other date filters may change what we show
+	// about the full up-to-date state.
+	let portfolio = finalize_ledger(
+		&mut ledger,
+		args.precision,
+		&args.currency,
+		&parse_result,
+		&begin,
+		&end,
+		args.command == Directive::Lots,
+	)?;
 
 	match args.command {
-		Directive::Bs => financial_statement(
-			ledger,
-			args,
-			vec!["Assets", "Liabilities"],
-		)?,
-		Directive::Is => financial_statement(
-			ledger,
-			args,
-			vec!["Income, Expenses"],
-		)?,
+		Directive::Bs => {
+			financial_statement(ledger, args, vec!["Assets", "Liabilities"])?
+		},
+		Directive::Is => {
+			financial_statement(ledger, args, vec!["Income, Expenses"])?
+		},
 		Directive::Tb => financial_statement(
 			ledger,
 			args,
@@ -139,9 +147,7 @@ fn main() -> Result<(), Error> {
 					None => bail!("Currency required (-c)"),
 				};
 
-				let entries = OrderedEntry::new(
-					ledger.take_entries(),
-				);
+				let entries = LedgerReporter::new(ledger.take_entries());
 				entries.account_summary(account, currency)
 			} else {
 				bail!("No account specified");
@@ -149,49 +155,59 @@ fn main() -> Result<(), Error> {
 		},
 		Directive::Lots => {
 			// TODO: Add customization for this directive.
-			let ordered_lots = OrderedLots::new(
-				lot_state.take_lots(vec![LotFilter::Status(
-					LotStatus::Open,
-				)]),
+			let ordered_lots = PortfolioReporter::new(
+				portfolio.take_lots(vec![LotFilter::Status(LotStatus::Open)]),
 				parse_result.max_precision_by_currency,
 				args.precision.unwrap_or(u32::MAX),
 			);
 			ordered_lots.print_open_lots(&end.min(today()))
 		},
-		Directive::Pnl => {
+		Directive::Rgl => {
 			// TODO: Add customization for this directive.
-			let ordered_lots = OrderedLots::new(
-				lot_state.take_lots(vec![LotFilter::HasSales(
-					true,
-				)]),
+			let ordered_lots = PortfolioReporter::new(
+				portfolio.take_lots(vec![LotFilter::HasSales(true)]),
 				parse_result.max_precision_by_currency,
 				args.precision.unwrap_or(u32::MAX),
 			);
-			ordered_lots.print_profit_loss()
+			ordered_lots.print_profit_loss(&begin, &end.min(today()))
 		},
 	}
 
 	Ok(())
 }
 
-/// Performs validation of the ledger, and returns the final state of lots.
+/// Performs validation of the ledger, and returns the portfolio representing
+/// the state of lots.
 fn finalize_ledger(
-	args: &Cli,
 	ledger: &mut Ledger,
+	max_precision: Option<u32>,
+	collapse_to: &Option<String>,
 	parse_result: &ParseResult,
-) -> Result<LotState, Error> {
-	ledger.exchange_rates.finalize()?;
-	let lot_state = ledger.lots.tabulate(&parse_result.latest_date)?;
+	begin: &Date,
+	end: &Date,
+	portfolio_ignore_after_end: bool,
+) -> Result<Portfolio, Error> {
+	ledger.exchange_rates.finalize(begin, end)?;
 
-	if let Some(collapse) = &args.currency {
+	let portfolio_end = match portfolio_ignore_after_end {
+		true => end,
+		false => &Date::max(),
+	};
+
+	let portfolio = ledger.lots.tabulate(portfolio_end)?;
+
+	if let Some(collapse) = collapse_to {
 		ledger.collapse_to(collapse.clone());
 	}
 
 	ledger.finalize(
 		&parse_result.max_precision_by_currency,
-		args.precision,
+		max_precision,
+		begin,
+		end,
 	)?;
-	Ok(lot_state)
+
+	Ok(portfolio)
 }
 
 fn financial_statement(
@@ -206,7 +222,7 @@ fn financial_statement(
 		top_levels.push("Equity");
 	}
 	totals.filter_top_level(top_levels);
-	let mut ordered_totals = OrderedTotal::from_total(totals);
+	let mut ordered_totals = StatementReporter::from_total(totals);
 
 	ordered_totals.sort_canonical();
 	ordered_totals.print_ledger_format(args.depth);
@@ -233,11 +249,10 @@ fn ledger_to_totals(
 
 fn get_range(args: &Cli) -> Result<(Date, Date), Error> {
 	let begin = Date::from_str(
-		args.begin.as_ref().unwrap_or(&"0001-01-01".to_string()),
+		args.begin.as_ref().unwrap_or(&Date::min().to_string()),
 	)?;
-	let end = Date::from_str(
-		args.end.as_ref().unwrap_or(&"9999-12-31".to_string()),
-	)?;
+	let end =
+		Date::from_str(args.end.as_ref().unwrap_or(&Date::max().to_string()))?;
 
 	Ok((begin, end))
 }
