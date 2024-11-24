@@ -168,9 +168,8 @@ impl Graph {
 	/// Reports the rate between two currencies, with base-quote semantics. None if no path
 	/// exists in the graph between the currencies, else there will always be a result.
 	pub fn convert(&self, base: &str, quote: &str) -> Option<Quant> {
-		// TODO: Remove this as it is no longer needed with no fallback, probably?
-		if let Some(direct) = self.get_direct_rate(base, quote, false) {
-			return Some(direct);
+		if base == quote {
+			return Some(Quant::from_frac(1, 1));
 		}
 
 		let mut visited = HashMap::new();

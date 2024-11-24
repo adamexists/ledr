@@ -169,12 +169,13 @@ impl Parser {
 		let reader = io::BufReader::new(file);
 
 		for (i, line) in reader.lines().enumerate() {
-			// Chop comments out
+			// Chop comments out and remove all commas regardless of position
 			let l = line?
 				.trim()
 				.split('#')
 				.next()
 				.unwrap_or_default()
+				.replace(',', "")
 				.trim()
 				.to_string();
 

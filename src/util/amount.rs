@@ -25,8 +25,6 @@ pub struct Amount {
 }
 
 impl Amount {
-	// TODO: Clean up calls to this and make currency take a ref,
-	//  to make the call sites cleaner on average.
 	pub fn new(value: Quant, currency: &str) -> Self {
 		Self {
 			value,

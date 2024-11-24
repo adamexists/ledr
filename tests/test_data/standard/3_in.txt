@@ -11,6 +11,6 @@
 ! 2024-11-10 account Assets:Investments:ETH
 
 2024-11-10 ETH Buy Weird Case 0
-    Assets:Investments:ETH  1 ETH @ 3000.00 USD
-    Assets:Investments:BTC -1 BTC @ 3100.00 USD
+    Assets:Investments:ETH  1 ETH @ 3,000.00 USD
+    Assets:Investments:BTC -1 BTC @ 3,100.00 USD
     Assets:Cash

@@ -14,7 +14,7 @@
     Assets:B
 
 2024-11-20 Lot to Sell From
-    Assets:A      54 AAPL { 832.11 USD "sell from here" }
+    Assets:A      54 AAPL { 832.11 USD, "sell from here" }
     Assets:B
 
 2024-11-21 Sell Action

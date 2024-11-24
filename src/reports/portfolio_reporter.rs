@@ -288,7 +288,6 @@ impl PortfolioReporter {
 			"Total UG/L",
 		]);
 
-		// TODO: Rework this heinously nested thing.
 		table.add_separator();
 
 		// currency -> total g/l

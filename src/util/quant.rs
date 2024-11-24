@@ -93,13 +93,10 @@ impl Quant {
 		}
 	}
 
-	pub fn from_str(amount: &str) -> Result<Self, Error> {
-		// Ignore commas; the user can use them if they want
-		let sanitized: String = amount.chars().filter(|c| *c != ',').collect();
-
+	pub fn from_str(input: &str) -> Result<Self, Error> {
 		// Check for negative sign explicitly and removing it for parsing
-		let is_negative = sanitized.starts_with('-');
-		let sanitized = sanitized.trim_start_matches('-');
+		let is_negative = input.starts_with('-');
+		let sanitized = input.trim_start_matches('-');
 
 		let parts: Vec<&str> = sanitized.split('.').collect();
 		let mut precision = 0u32;
@@ -589,6 +586,7 @@ impl Hash for Quant {
 	}
 }
 
+// TODO: This is many tests and that's great, but check for redundancies.
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -844,15 +842,6 @@ mod tests {
 				assert_eq!(scalar.denominator, 125);
 				assert_eq!(scalar.render_precision, 3);
 				assert!(scalar.is_negative);
-			}
-
-			#[test]
-			fn test_from_str_with_commas() {
-				let scalar = Quant::from_str("1,234,567.89").unwrap();
-				assert_eq!(scalar.numerator, 123456789);
-				assert_eq!(scalar.denominator, 100);
-				assert_eq!(scalar.render_precision, 2);
-				assert!(!scalar.is_negative);
 			}
 
 			#[test]
