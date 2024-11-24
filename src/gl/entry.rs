@@ -267,6 +267,7 @@ impl Entry {
 			}
 		}
 
+		self.reduce(VIRTUAL_CONVERSION_ACCOUNT);
 		Ok(self.actions.clone())
 	}
 
@@ -370,6 +371,52 @@ impl Entry {
 				}
 			}
 		}
+	}
+
+	/// Rebuilds the detail set to remove system details that cancel each
+	/// other out in the given account.
+	fn reduce(&mut self, account: &str) {
+		let system_details: Vec<_> = self
+			.details
+			.iter()
+			.filter(|d| d.is_system && &d.account == account)
+			.collect();
+
+		let mut all_other_details: Vec<_> = self
+			.details
+			.iter()
+			.filter(|&d| !d.is_system || d.account != *account)
+			.cloned()
+			.collect();
+
+		let mut balances_by_currency: HashMap<String, Scalar> =
+			HashMap::new();
+		for detail in system_details {
+			*balances_by_currency
+				.entry(detail.currency().clone())
+				.or_insert(Scalar::zero()) += detail.value();
+		}
+
+		let reduced_details: Vec<Detail> = balances_by_currency
+			.into_iter()
+			.filter_map(|(currency, balance)| {
+				if balance != 0 {
+					Some(Detail::new(
+						account.to_string(),
+						Amount::new(
+							balance,
+							currency.clone(),
+						),
+						true,
+					))
+				} else {
+					None
+				}
+			})
+			.collect();
+
+		all_other_details.extend(reduced_details);
+		self.details = all_other_details;
 	}
 
 	/// Find all currencies that don't sum to zero, with amounts
@@ -666,5 +713,163 @@ mod tests {
 
 		assert!(result.is_ok());
 		assert_eq!(entry.details.len(), 4);
+	}
+
+	#[test]
+	fn test_reduce_removes_canceling_system_details() {
+		let mut entry = create_entry();
+
+		entry.details = vec![
+			Detail::new(
+				"account1".to_string(),
+				Amount::new(
+					Scalar::from_i128(100),
+					"USD".to_string(),
+				),
+				true,
+			),
+			Detail::new(
+				"account1".to_string(),
+				Amount::new(
+					Scalar::from_i128(-100),
+					"USD".to_string(),
+				),
+				true,
+			),
+		];
+
+		entry.reduce("account1");
+
+		assert!(entry.details.is_empty());
+	}
+
+	#[test]
+	fn test_reduce_keeps_non_canceling_details() {
+		let mut entry = create_entry();
+
+		entry.details = vec![
+			Detail::new(
+				"account1".to_string(),
+				Amount::new(
+					Scalar::from_i128(100),
+					"USD".to_string(),
+				),
+				true,
+			),
+			Detail::new(
+				"account1".to_string(),
+				Amount::new(
+					Scalar::from_i128(50),
+					"USD".to_string(),
+				),
+				true,
+			),
+		];
+
+		entry.reduce("account1");
+
+		assert_eq!(entry.details.len(), 1);
+		assert_eq!(entry.details[0].account, "account1");
+		assert_eq!(entry.details[0].amount.value, 150);
+		assert_eq!(entry.details[0].amount.currency, "USD");
+	}
+
+	#[test]
+	fn test_reduce_ignores_non_system_details() {
+		let mut entry = create_entry();
+
+		entry.details = vec![
+			Detail::new(
+				"account1".to_string(),
+				Amount::new(
+					Scalar::from_i128(100),
+					"USD".to_string(),
+				),
+				false,
+			),
+			Detail::new(
+				"account1".to_string(),
+				Amount::new(
+					Scalar::from_i128(-100),
+					"USD".to_string(),
+				),
+				true,
+			),
+		];
+
+		entry.reduce("account1");
+
+		assert_eq!(entry.details.len(), 2);
+	}
+
+	#[test]
+	fn test_reduce_preserves_other_account_details() {
+		let mut entry = create_entry();
+
+		entry.details = vec![
+			Detail::new(
+				"account1".to_string(),
+				Amount::new(
+					Scalar::from_i128(100),
+					"USD".to_string(),
+				),
+				true,
+			),
+			Detail::new(
+				"account2".to_string(),
+				Amount::new(
+					Scalar::from_i128(200),
+					"USD".to_string(),
+				),
+				true,
+			),
+		];
+
+		entry.reduce("account1");
+
+		assert_eq!(entry.details.len(), 2);
+
+		assert_eq!(entry.details[0].account, "account2");
+		assert_eq!(entry.details[0].amount.value.amount(), 200);
+		assert_eq!(entry.details[0].amount.currency, "USD");
+		assert_eq!(entry.details[1].account, "account1");
+		assert_eq!(entry.details[1].amount.value.amount(), 100);
+		assert_eq!(entry.details[1].amount.currency, "USD");
+	}
+
+	#[test]
+	fn test_reduce_handles_multiple_currencies() {
+		let mut entry = create_entry();
+
+		entry.details = vec![
+			Detail::new(
+				"account1".to_string(),
+				Amount::new(
+					Scalar::from_i128(100),
+					"USD".to_string(),
+				),
+				true,
+			),
+			Detail::new(
+				"account1".to_string(),
+				Amount::new(
+					Scalar::from_i128(200),
+					"EUR".to_string(),
+				),
+				true,
+			),
+			Detail::new(
+				"account1".to_string(),
+				Amount::new(
+					Scalar::from_i128(-200),
+					"GBP".to_string(),
+				),
+				true,
+			),
+		];
+
+		entry.reduce("account1");
+
+		assert_eq!(entry.details.len(), 3);
 	}
 }

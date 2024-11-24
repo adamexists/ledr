@@ -232,6 +232,8 @@ impl Ledger {
 		}
 	}
 
+	/// Takes the pending entry, finalizes it, processes its lots, and adds
+	/// it to the set of entries on this. No-ops if nothing is pending.
 	pub fn finish_entry(&mut self) -> Result<(), Error> {
 		match self.pending_entry.take() {
 			None => Ok(()),
