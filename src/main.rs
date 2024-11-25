@@ -107,7 +107,7 @@ fn main() -> Result<(), Error> {
 	let mut ledger = Ledger::new(args.lenient);
 
 	let mut parser = parsing::parser::Parser::new();
-	let parse_result = parser.parse(&args.file, &mut ledger)?;
+	let parse_result = parser.parse(&args.file, &mut ledger, &end)?;
 
 	// For some filtered reports, the end date is an as-of date, so we "rewind"
 	// history if that report is selected by ignoring lot actions after it.

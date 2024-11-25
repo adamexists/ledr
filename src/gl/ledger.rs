@@ -34,13 +34,21 @@ use std::collections::HashMap;
 pub const VALID_PREFIXES: [&str; 5] =
 	["Assets", "Liabilities", "Equity", "Income", "Expenses"];
 
+/// The central data structure of this system that takes input from the parser
+/// and assembles it into accounting journal entries. Entries have detail lines
+/// and details contain or imply various metadata, like exchange rates, lot
+/// activity, and so on.
+///
+/// The Ledger is chiefly responsible for assembling this data according to
+/// input. In general, the Ledger will pass one or more of its data sets to
+/// another data structure for further refinement and reporting.
 #[derive(Debug)]
 pub struct Ledger {
 	entries: Vec<Entry>,
-	/// entry currently being assembled, if any
+	/// Entry currently being assembled, if any
 	pending_entry: Option<Entry>,
 
-	/// Ignore currency and account directives
+	/// Skip currency and account validation steps
 	lenient_mode: bool,
 
 	/// currency -> the earliest date currency is allowed to appear
@@ -48,7 +56,7 @@ pub struct Ledger {
 	/// account -> the earliest date account is allowed to appear
 	declared_accounts: HashMap<String, Date>,
 
-	// other modules the ledger must populate or access
+	// conceptually distinct modules the ledger must populate or access
 	pub exchange_rates: ExchangeRates,
 	pub lots: ActionBuffer,
 }
@@ -191,6 +199,12 @@ impl Ledger {
 		Ok(())
 	}
 
+	/// Sets the account name of the entry with no accompanying balance or
+	/// currency. This account is then assumed to be the counterparty to all
+	/// other detail lines in the entry that create any imbalance.
+	///
+	/// In general, setting this forces an entry to balance, one way or
+	/// another.
 	pub fn set_virtual_detail(&mut self, account: String) -> Result<(), Error> {
 		if !self.lenient_mode {
 			self.check_account(&account)?;
@@ -206,6 +220,7 @@ impl Ledger {
 			.set_virtual_detail(account)
 	}
 
+	/// Adds a reference line, which does nothing except appear on some reports
 	pub fn add_reference(&mut self, reference: String) -> Result<(), Error> {
 		match &mut self.pending_entry {
 			Some(e) => {
@@ -278,9 +293,11 @@ impl Ledger {
 	// ----------------
 
 	/// Converts all possible balances to the currency provided, if exchange
-	/// rates are available. If a rate is not available for the given pair,
-	/// then we skip. There is no graph traversal: a direct rate must have
-	/// been observed.
+	/// rates are available. The underlying exchange rate system assembles a
+	/// graph data structure for indirect conversions, so if there is any path
+	/// to an exchange rate, the exchange will be done. Note that all rates
+	/// must have been observed on the same day for this graph traversal to
+	/// take place.
 	pub fn collapse_to(&mut self, currency: String) {
 		self.entries
 			.iter_mut()
@@ -311,9 +328,12 @@ impl Ledger {
 
 		for entry in &mut self.entries {
 			for (currency, &reso) in max_reso_by_currency {
-				entry.round_for_currency(currency, min(reso, max_reso))?
+				entry.round_for_currency(currency, min(reso, max_reso))?;
 			}
 		}
+
+		// TODO: Print and reingest every detail of every entry, sum them, and
+		//  if they do not balance, put the difference in the
 
 		Ok(())
 	}

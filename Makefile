@@ -5,7 +5,7 @@ MANDIR?=$(PREFIX)/share/man
 
 .PHONY: all build fmt test clean doc install uninstall
 
-all: build doc
+all: fmt build doc
 
 build:
 	cargo build --release
@@ -31,6 +31,7 @@ uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/ledr
 	rm -f $(DESTDIR)$(MANDIR)/man1/ledr.1
 
+# Reports .rs files that do not have a GPLv3 header
 check-gpl:
 	@violations=$$(find . -name '*.rs' -exec sh -c 'head -n 1 "{}" | grep -q "©" || echo "{}"' \;); \
 	if [ -n "$$violations" ]; then \

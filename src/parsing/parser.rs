@@ -49,16 +49,17 @@ impl Parser {
 		&mut self,
 		file_path: &str,
 		ledger: &mut Ledger,
+		ignore_after: &Date,
 	) -> Result<ParseResult, Error> {
 		let mut file = self.fs.open(file_path)?;
 
-		self.first_pass(file_path, &file, ledger)?;
+		self.first_pass(file_path, &file, ledger, ignore_after)?;
 		file.rewind()?;
 
 		// Second pass is responsible for assembling the ParseResult object,
 		// which we pass in this way so it can be passed recursively within.
 		let mut output: ParseResult = Default::default();
-		self.second_pass(&file, ledger, &mut output)?;
+		self.second_pass(&file, ledger, &mut output, ignore_after)?;
 
 		Ok(output)
 	}
@@ -75,6 +76,7 @@ impl Parser {
 		path: &str,
 		file: &File,
 		ledger: &mut Ledger,
+		ignore_after: &Date,
 	) -> Result<(), Error> {
 		self.fs.declare_file(path)?;
 
@@ -103,7 +105,7 @@ impl Parser {
 				}
 
 				let file = self.fs.open(include[1])?;
-				self.first_pass(include[1], &file, ledger)?;
+				self.first_pass(include[1], &file, ledger, ignore_after)?;
 				continue;
 			}
 
@@ -119,6 +121,10 @@ impl Parser {
 			let date_str = directive.pop_front().unwrap();
 			let date = Date::from_str(date_str.trim())
 				.map_err(|e| anyhow!("{} (line {})", e, i))?;
+
+			if &date > ignore_after {
+				continue;
+			}
 
 			match directive[0] {
 				"account" if directive.len() == 2 => {
@@ -164,8 +170,11 @@ impl Parser {
 		file: &File,
 		ledger: &mut Ledger,
 		parse_result: &mut ParseResult,
+		ignore_after: &Date,
 	) -> Result<(), Error> {
 		let reader = io::BufReader::new(file);
+
+		let mut ignore_until_next_entry = false;
 
 		for (i, line) in reader.lines().enumerate() {
 			// Chop comments out and remove all commas regardless of position
@@ -193,7 +202,7 @@ impl Parser {
 				let include: Vec<&str> = l.split_whitespace().collect();
 
 				let file = self.fs.open(include[1])?;
-				self.second_pass(&file, ledger, parse_result)?;
+				self.second_pass(&file, ledger, parse_result, ignore_after)?;
 				continue;
 			}
 
@@ -215,6 +224,13 @@ impl Parser {
 			// Handle entry declaration lines with a date and description
 			if let Some((date_str, desc)) = l.split_once(' ') {
 				if let Ok(date) = Date::from_str(date_str.trim()) {
+					if &date > ignore_after {
+						ignore_until_next_entry = true;
+						continue;
+					}
+
+					ignore_until_next_entry = false;
+
 					ledger
 						.new_entry(date, desc.trim().to_string())
 						.map_err(|e| anyhow!("{} (line {})", e, i))?;
@@ -227,6 +243,10 @@ impl Parser {
 			// Make sure the line is not a date by itself
 			if Date::from_str(&l).is_ok() {
 				bail!("Orphaned date (line {}): {}", i, l);
+			}
+
+			if ignore_until_next_entry {
+				continue;
 			}
 
 			// Handle entry detail lines, which all have different numbers of

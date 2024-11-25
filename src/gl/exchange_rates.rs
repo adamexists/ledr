@@ -70,7 +70,7 @@ impl ExchangeRates {
 		// We do not need to check for existing inferred rates, because
 		// all directives are handled first, so one cannot exist.
 
-		let entry = self.rate_graphs.entry(date).or_insert_with(Graph::new);
+		let entry = self.rate_graphs.entry(date).or_default();
 
 		if entry.get_direct_rate(&base, &quote, true).is_some() {
 			bail!("Cannot declare multiple rates on same date")
@@ -82,8 +82,8 @@ impl ExchangeRates {
 	}
 
 	/// Adds a new exchange rate inferred from an entry. Might fail if there
-	/// is an existing declared rate that is outside tolerance from this new
-	/// rate. If there is an existing declared rate at all, this one will
+	/// is already a declared rate that is outside tolerance from this new
+	/// rate. If there is already a declared rate at all, this one will
 	/// definitely be ignored.
 	pub fn infer(
 		&mut self,
@@ -109,7 +109,7 @@ impl ExchangeRates {
 		// We do not need to check for existing inferred rates, because
 		// all directives are handled first, so one cannot exist.
 
-		let entry = self.rate_graphs.entry(date).or_insert_with(Graph::new);
+		let entry = self.rate_graphs.entry(date).or_default();
 
 		if let Some(existing_rate) = entry.get_direct_rate(base, quote, true) {
 			// Check if the inferred rate is within 1% of the
@@ -129,13 +129,13 @@ impl ExchangeRates {
 		Ok(())
 	}
 
-	pub fn infer_equal_amts(
+	pub fn infer_from_equal_amounts(
 		&mut self,
 		date: Date,
 		a: Amount,
 		b: Amount,
 	) -> Result<(), Error> {
-		let entry = self.rate_graphs.entry(date).or_insert_with(Graph::new);
+		let entry = self.rate_graphs.entry(date).or_default();
 
 		if let Some(existing_rate) =
 			entry.get_direct_rate(&a.currency, &b.currency, true)
@@ -210,6 +210,11 @@ impl ExchangeRates {
 		self.resolved_rates = resolved;
 		Ok(())
 	}
+
+	// TODO: There is some detritus in the codebase around drop_after;
+	//  this is now useless because the parser totally ignores lines
+	//  newer than what is requested, so nowhere else in the code has to
+	//  do so anymore.
 
 	/// Retrieves the most recent rate, if any, at or before the given date
 	pub fn get_rate_as_of(

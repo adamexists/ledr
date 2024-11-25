@@ -181,7 +181,7 @@ impl StatementReporter {
 		// Recursively get the name from the next node and concatenate.
 		// The if block handles a special case where the top-line can condense.
 		if self.account.is_empty() {
-			format!("{}", subtotal.condensed_name())
+			subtotal.condensed_name().to_string()
 		} else {
 			format!("{}:{}", self.account, subtotal.condensed_name())
 		}

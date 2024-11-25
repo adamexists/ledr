@@ -32,8 +32,11 @@ pub struct Entry {
 	details: Vec<Detail>,
 
 	virtual_detail: Option<String>,
+
+	/// Never accounts for virtual detail activity or multiline implicit
+	/// currency conversion activity.
 	totals: HashMap<String, Quant>, // Currency -> Amount
-	reference: Option<String>,      // optional string, not inspected
+	reference: Option<String>, // optional string, not inspected
 
 	/// Lot actions related to this entry. Don't read until finalization,
 	/// because we need to associate proceeds with sales, if known, which
@@ -169,8 +172,7 @@ impl Entry {
 	}
 
 	/// Rounds all Details for a certain currency to a certain precision.
-	/// In doing so, precision may be lost, but not gained (because the
-	/// extra decimal places will just fill in with zeroes). This is more
+	/// In doing so, precision may be lost, but not gained. This is more
 	/// about the clean display of currency amounts for reporting.
 	pub fn round_for_currency(
 		&mut self,
@@ -251,13 +253,15 @@ impl Entry {
 			}
 		}
 
-		self.reduce(VIRTUAL_CONVERSION_ACCOUNT);
+		self.reduce(vec![VIRTUAL_CONVERSION_ACCOUNT]);
 		Ok(self.actions.clone())
 	}
 
 	/// This is a special case in which there is no virtual detail, but
-	/// there are exactly two lines that we can net against each other if
-	/// they are cardinally opposed.
+	/// there are exactly two lines that we can net against each other.
+	/// Because we allow negative exchange rates between currencies to
+	/// account for things like shorts, we do not check if the two values
+	/// are cardinally opposed.
 	fn multiline_implicit_currency_conversion(
 		&mut self,
 		imbalances: &mut Vec<(String, Quant)>,
@@ -278,7 +282,7 @@ impl Entry {
 		));
 
 		// This implies an exchange rate between the currencies
-		rates.infer_equal_amts(
+		rates.infer_from_equal_amounts(
 			self.date,
 			Amount::new(amount1, &currency1),
 			Amount::new(-amount2, &currency2),
@@ -336,18 +340,20 @@ impl Entry {
 	}
 
 	/// Rebuilds the detail set to remove system details that cancel each
-	/// other out in the given account.
-	fn reduce(&mut self, account: &str) {
+	/// other out in the given accounts. Entries in other accounts are kept
+	/// unchanged, but in actuality, the whole detail set is reallocated.
+	/// Ideally, only call this once, for the sake of efficiency.
+	pub fn reduce(&mut self, accounts: Vec<&str>) {
 		let system_details: Vec<_> = self
 			.details
 			.iter()
-			.filter(|d| d.is_system && d.account == account)
+			.filter(|d| d.is_system && accounts.contains(&&*d.account))
 			.collect();
 
 		let mut all_other_details: Vec<_> = self
 			.details
 			.iter()
-			.filter(|&d| !d.is_system || d.account != *account)
+			.filter(|&d| !d.is_system || !accounts.contains(&&*d.account))
 			.cloned()
 			.collect();
 
@@ -358,22 +364,24 @@ impl Entry {
 				.or_insert(Quant::zero()) += detail.value();
 		}
 
-		let reduced_details: Vec<Detail> = balances_by_currency
-			.into_iter()
-			.filter_map(|(currency, balance)| {
-				if balance != 0 {
-					Some(Detail::new(
-						account,
-						Amount::new(balance, &currency),
-						true,
-					))
-				} else {
-					None
-				}
-			})
-			.collect();
+		for account in accounts {
+			let reduced_details: Vec<Detail> = balances_by_currency
+				.iter()
+				.filter_map(|(currency, balance)| {
+					if *balance != 0 {
+						Some(Detail::new(
+							account,
+							Amount::new(*balance, currency),
+							true,
+						))
+					} else {
+						None
+					}
+				})
+				.collect();
+			all_other_details.extend(reduced_details);
+		}
 
-		all_other_details.extend(reduced_details);
 		self.details = all_other_details;
 	}
 
@@ -431,7 +439,7 @@ impl Ord for Entry {
 pub struct Detail {
 	account: String,
 	amount: Amount,
-	/// True iff the system inserted this entry and it did not come from
+	/// True iff the system inserted this detail and it did not come from
 	/// user input
 	is_system: bool,
 }
@@ -539,7 +547,6 @@ mod tests {
 		let mut rates = ExchangeRates::default();
 		let result = entry.finalize(&mut rates);
 
-		// Expect an error since the entry is unbalanced
 		assert!(result.is_err());
 	}
 
@@ -559,7 +566,6 @@ mod tests {
 		let mut rates = ExchangeRates::default();
 		let result = entry.finalize(&mut rates);
 
-		// Expect success since the entry is balanced
 		assert!(result.is_ok());
 	}
 
@@ -633,7 +639,7 @@ mod tests {
 			),
 		];
 
-		entry.reduce("account1");
+		entry.reduce(vec!["account1"]);
 
 		assert!(entry.details.is_empty());
 	}
@@ -655,7 +661,7 @@ mod tests {
 			),
 		];
 
-		entry.reduce("account1");
+		entry.reduce(vec!["account1"]);
 
 		assert_eq!(entry.details.len(), 1);
 		assert_eq!(entry.details[0].account, "account1");
@@ -680,7 +686,7 @@ mod tests {
 			),
 		];
 
-		entry.reduce("account1");
+		entry.reduce(vec!["account1"]);
 
 		assert_eq!(entry.details.len(), 2);
 	}
@@ -702,7 +708,7 @@ mod tests {
 			),
 		];
 
-		entry.reduce("account1");
+		entry.reduce(vec!["account1"]);
 
 		assert_eq!(entry.details.len(), 2);
 
@@ -734,7 +740,7 @@ mod tests {
 			),
 		];
 
-		entry.reduce("account1");
+		entry.reduce(vec!["account1"]);
 
 		assert_eq!(entry.details.len(), 3);
 	}

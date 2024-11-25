@@ -17,9 +17,9 @@
 use crate::util::amount::Amount;
 use crate::util::quant::Quant;
 use anyhow::{bail, Error};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Graph {
 	nodes: HashMap<String, Node>, // currency symbol -> its Node
 }
@@ -44,11 +44,6 @@ enum RateType {
 }
 
 impl Graph {
-	pub fn new() -> Self {
-		Graph {
-			nodes: HashMap::new(),
-		}
-	}
 
 	/// Adds a bidirectional exchange rate between two currencies
 	pub fn add_rate(
@@ -165,34 +160,62 @@ impl Graph {
 		false
 	}
 
-	/// Reports the rate between two currencies, with base-quote semantics. None if no path
-	/// exists in the graph between the currencies, else there will always be a result.
+	/// Reports the average rate between two currencies using all shortest paths.
+	/// Returns None if no path exists between the currencies.
 	pub fn convert(&self, base: &str, quote: &str) -> Option<Quant> {
 		if base == quote {
 			return Some(Quant::from_frac(1, 1));
 		}
 
 		let mut visited = HashMap::new();
-		let mut queue = vec![(quote.to_string(), Quant::from_i128(1))];
+		let mut queue = VecDeque::new();
+		let mut shortest_path_length = None;
+		let mut rates = vec![];
 
-		while let Some((current_currency, current_rate)) = queue.pop() {
+		queue.push_back((quote.to_string(), Quant::from_i128(1), 0)); // (currency, rate, depth)
+
+		while let Some((current_currency, current_rate, depth)) =
+			queue.pop_front()
+		{
 			if let Some(node) = self.nodes.get(&current_currency) {
 				for (neighbor, rate) in &node.edges {
-					if !visited.contains_key(neighbor) {
-						let new_rate = current_rate * rate.ratio;
+					let new_rate = current_rate * rate.ratio;
 
-						if neighbor == base {
-							return Some(new_rate);
+					if neighbor == base {
+						// Update shortest path length and collect rates
+						if shortest_path_length.is_none()
+							|| depth + 1 == shortest_path_length.unwrap()
+						{
+							shortest_path_length = Some(depth + 1);
+							rates.push(new_rate);
+						} else if depth + 1 < shortest_path_length.unwrap() {
+							shortest_path_length = Some(depth + 1);
+							rates.clear();
+							rates.push(new_rate);
 						}
+					}
 
-						visited.insert(neighbor.clone(), new_rate);
-						queue.push((neighbor.clone(), new_rate));
+					if !visited.contains_key(neighbor)
+						|| visited[neighbor] > depth + 1
+					{
+						visited.insert(neighbor.clone(), depth + 1);
+						queue.push_back((
+							neighbor.clone(),
+							new_rate,
+							depth + 1,
+						));
 					}
 				}
 			}
 		}
 
-		None
+		// Compute the average of all collected rates
+		if !rates.is_empty() {
+			let total_rate: Quant = rates.iter().cloned().sum();
+			Some(total_rate / Quant::from_i128(rates.len() as i128))
+		} else {
+			None
+		}
 	}
 
 	/// Reports whether two currency nodes are adjacent. If they are, it will still report
@@ -258,7 +281,7 @@ mod tests {
 
 	#[test]
 	fn test_direct_conversion() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
@@ -273,7 +296,7 @@ mod tests {
 
 	#[test]
 	fn test_reverse_conversion() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
@@ -287,7 +310,7 @@ mod tests {
 
 	#[test]
 	fn test_indirect_conversion() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
@@ -305,7 +328,7 @@ mod tests {
 
 	#[test]
 	fn test_reverse_indirect_conversion() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
@@ -323,7 +346,7 @@ mod tests {
 
 	#[test]
 	fn test_self_conversion() {
-		let graph = Graph::new();
+		let graph: Graph = Default::default();
 
 		let result = graph.convert("USD", "USD");
 
@@ -332,7 +355,7 @@ mod tests {
 
 	#[test]
 	fn test_no_conversion_path() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
@@ -349,7 +372,7 @@ mod tests {
 
 	#[test]
 	fn test_large_graph_conversion() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
@@ -377,7 +400,7 @@ mod tests {
 
 	#[test]
 	fn test_nonexistent_currency() {
-		let graph = Graph::new();
+		let graph: Graph = Default::default();
 
 		let result = graph.convert("USD", "XYZ");
 
@@ -386,7 +409,7 @@ mod tests {
 
 	#[test]
 	fn test_inconsistent_cycle_detection() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 
 		// Add USD <-> EUR rate
 		let a = Amount::new(Quant::new(2, 0), "USD");
@@ -409,7 +432,7 @@ mod tests {
 
 	#[test]
 	fn test_large_connected_graph_no_cycles() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 
 		// Generate many currencies
 		let currencies: Vec<String> =
@@ -435,7 +458,7 @@ mod tests {
 
 	#[test]
 	fn test_large_connected_graph_with_contextual_inconsistencies() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 
 		// Add bidirectional rates between some currencies
 		let pairs = vec![
@@ -469,7 +492,7 @@ mod tests {
 
 	#[test]
 	fn test_disconnected_segments_with_contextual_inconsistencies() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 
 		// Define three disconnected segments
 		let segment1 = vec![
@@ -520,7 +543,7 @@ mod tests {
 
 	#[test]
 	fn test_multiple_disconnected_segments_no_cycles() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 
 		// Segment 1
 		let seg1 = ["USD", "EUR", "GBP"];
@@ -561,7 +584,7 @@ mod tests {
 
 	#[test]
 	fn test_extreme_high_rate() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::new(1_000_000_000_000, 0), "BTC"); // 1 USD = 1 trillion BTC
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
@@ -575,7 +598,7 @@ mod tests {
 
 	#[test]
 	fn test_extreme_low_rate() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::from_frac(1, 1_000_000_000_000), "BTC"); // 1 USD = 1e-12 BTC
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
@@ -589,7 +612,7 @@ mod tests {
 
 	#[test]
 	fn test_combined_extreme_rates() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::new(1_000_000_000, 0), "BTC");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
@@ -607,7 +630,7 @@ mod tests {
 
 	#[test]
 	fn test_edge_case_self_loop() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "USD"); // Self-loop
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
@@ -619,7 +642,7 @@ mod tests {
 
 	#[test]
 	fn test_bizarre_fraction_high() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::from_frac(123456789, 987654321), "USD");
 		let b = Amount::new(Quant::from_frac(987654321, 123456789), "EUR");
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
@@ -634,7 +657,7 @@ mod tests {
 
 	#[test]
 	fn test_bizarre_fraction_low() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::from_frac(1, 987654321), "USD"); // 1/987654321 USD
 		let b = Amount::new(Quant::new(1, 0), "JPY"); // 1 JPY
 		graph.add_rate(&a, &b, true).expect("Could not add rate");
@@ -648,7 +671,7 @@ mod tests {
 
 	#[test]
 	fn test_bizarre_fraction_chain() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 
 		// Add several fractions in a chain
 		let a = Amount::new(Quant::from_frac(123456789, 987654321), "USD");
@@ -669,7 +692,7 @@ mod tests {
 
 	#[test]
 	fn test_extreme_bizarre_fraction() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 
 		// Extreme fraction rates
 		let a = Amount::new(Quant::from_frac(1, 1_000_000_000_007), "BTC");
@@ -686,7 +709,7 @@ mod tests {
 
 	#[test]
 	fn test_bizarre_fraction_cascade() {
-		let mut graph = Graph::new();
+		let mut graph: Graph = Default::default();
 
 		// Chain of bizarre fractions
 		let a = Amount::new(Quant::from_frac(987654321, 123456789), "USD");
