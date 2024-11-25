@@ -163,7 +163,7 @@ impl ExchangeRates {
 		entry.add_rate(&date, &a, &b, true)?;
 
 		self.primary_graph
-			.overwrite_rate_if_newer(&date, &a, &a, true)?;
+			.overwrite_rate_if_newer(&date, &a, &b, true)?;
 
 		Ok(())
 	}

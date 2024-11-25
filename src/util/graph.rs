@@ -39,9 +39,20 @@ struct Rate {
 
 impl Rate {
 	/// Reports a single rate to the caller, based on all underlying rate data.
-	/// TODO: Currently takes a simple average. Should be expanded in power.
+	/// Uses only the latest rates by observation date.
 	fn rate(&self) -> Quant {
-		self.quant.iter().cloned().sum::<Quant>() / self.quant.len() as i128
+		let latest_date = self
+			.quant
+			.iter()
+			.zip(std::iter::repeat(self.observation_date))
+			.map(|(rate, date)| (rate, date))
+			.max_by_key(|&(_, date)| date)
+			.map(|(rate, _)| rate);
+
+		match latest_date {
+			Some(rate) => *rate,
+			None => Quant::zero(), // Handle edge case if quant is empty.
+		}
 	}
 }
 
@@ -87,7 +98,7 @@ impl Graph {
 				observation_date: *date,
 			})
 			.quant
-			.push(rate_ba);
+			.push(rate_ab);
 
 		self.nodes
 			.entry(b.currency.clone())
@@ -258,14 +269,10 @@ impl Graph {
 			queue.pop_front()
 		{
 			if let Some(node) = self.nodes.get(&current_currency) {
-				let mut neighbors: Vec<_> = node.edges.iter().collect();
-				neighbors.sort_by(|a, b| a.0.cmp(&b.0)); // Sort neighbors by currency for deterministic traversal
-
-				for (neighbor, rate) in neighbors {
+				for (neighbor, rate) in &node.edges {
 					let new_rate = current_rate * rate.rate();
 
 					if neighbor == base {
-						// Update the shortest path length and collect rates
 						if shortest_path_length.is_none()
 							|| depth + 1 == shortest_path_length.unwrap()
 						{
@@ -292,7 +299,6 @@ impl Graph {
 			}
 		}
 
-		// Compute the average of all collected rates
 		if !rates.is_empty() {
 			let total_rate: Quant = rates.iter().cloned().sum();
 			Some(total_rate / Quant::from_i128(rates.len() as i128))
@@ -927,5 +933,94 @@ mod tests {
 
 		assert_eq!(result.unwrap(), expected_output);
 		assert!(!graph.has_inconsistent_cycle());
+	}
+
+	#[cfg(test)]
+	mod determinism {
+		use super::*;
+		use rand::Rng;
+		use std::ops::Neg;
+
+		#[test]
+		fn test_determinism_of_conversion() {
+			let mut graph: Graph = Default::default();
+			let mut rng = rand::thread_rng();
+			let currencies: Vec<&str> = vec![
+				"USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "CNY", "INR",
+				"BTC",
+			];
+			let num_currencies = currencies.len();
+
+			// Generate random exchange rates between currencies
+			for i in 0..num_currencies {
+				for j in (i + 1)..num_currencies {
+					let mut rate1 = Quant::from_frac(
+						rng.gen_range(1..10_000),
+						rng.gen_range(1..10_000),
+					);
+					let mut rate2 = Quant::from_frac(
+						rng.gen_range(1..10_000),
+						rng.gen_range(1..10_000),
+					);
+
+					if rng.gen_bool(0.5) {
+						rate1 = rate1.neg();
+						rate2 = rate2.neg();
+					}
+
+					let a = Amount::new(rate1, currencies[i]);
+					let b = Amount::new(rate2, currencies[j]);
+
+					graph
+						.add_rate(
+							&Date::from_str("2024-11-12").unwrap(),
+							&a,
+							&b,
+							true,
+						)
+						.expect("Could not add rate");
+				}
+			}
+
+			// Select a fixed set of conversion pairs for testing
+			let test_pairs = vec![
+				("USD", "EUR"),
+				("EUR", "GBP"),
+				("GBP", "JPY"),
+				("JPY", "AUD"),
+				("AUD", "CAD"),
+				("CAD", "CHF"),
+				("CHF", "CNY"),
+				("CNY", "INR"),
+				("INR", "BTC"),
+				("BTC", "USD"),
+			];
+
+			// Execute conversions 1000 times and store results
+			let mut all_results = vec![];
+
+			for _ in 0..1000 {
+				let mut results = vec![];
+
+				for &(base, quote) in &test_pairs {
+					if let Some(rate) = graph.convert(base, quote) {
+						results.push(rate);
+					} else {
+						panic!("Conversion failed for {base} to {quote}");
+					}
+				}
+
+				all_results.push(results);
+			}
+
+			// Check if all results are identical
+			for i in 1..all_results.len() {
+				assert_eq!(
+					all_results[0], all_results[i],
+					"Determinism failed: Results differ in iteration {}",
+					i
+				);
+			}
+		}
 	}
 }

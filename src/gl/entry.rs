@@ -26,7 +26,7 @@ use std::string::ToString;
 pub(crate) const VIRTUAL_CONVERSION_ACCOUNT: &str = "Equity:Conversions";
 pub(crate) const VIRTUAL_ROUNDING_ERROR_ACCOUNT: &str = "Equity:Rounding";
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq)]
 pub struct Entry {
 	date: Date,
 	desc: String,
@@ -430,8 +430,6 @@ impl PartialEq for Entry {
 	}
 }
 
-impl Eq for Entry {}
-
 impl PartialOrd for Entry {
 	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
 		Some(self.cmp(other))
@@ -448,7 +446,7 @@ impl Ord for Entry {
 	}
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Detail {
 	account: String,
 	amount: Amount,
@@ -740,5 +738,77 @@ mod tests {
 		entry.reduce(vec!["account1"]);
 
 		assert_eq!(entry.details.len(), 3);
+	}
+
+	mod determinism {
+		use super::*;
+		use rand::seq::IndexedRandom;
+		use rand::Rng;
+
+		#[test]
+		fn test_rounding_and_conversion_determinism() {
+			let mut rng = rand::thread_rng();
+			let currencies = vec!["USD", "EUR", "GBP", "JPY", "AUD"];
+			let decimal_places = 2;
+
+			// Generate a random Entry with random Details
+			let mut entry = create_entry();
+			for _ in 0..100 {
+				let amount = Amount::new(
+					Quant::from_frac(
+						rng.gen_range(-100..100),
+						rng.gen_range(1..10),
+					),
+					currencies.choose(&mut rng).unwrap(),
+				);
+				entry
+					.add_detail("Random:Account", amount)
+					.expect("Failed to add detail");
+			}
+
+			// Clone the original details for comparison
+			let original_details = entry.details.clone();
+
+			// Apply rounding and conversion multiple times
+
+			for _ in 0..100 {
+				let mut results = vec![];
+				let currency = currencies.choose(&mut rng).unwrap();
+				let random_rate = Quant::from_frac(
+					rng.gen_range(1..100),
+					rng.gen_range(1..10),
+				);
+				for _ in 0..100 {
+					let mut test_entry = entry.clone();
+
+					// Round for a random currency
+					test_entry
+						.round_for_currency(currency, decimal_places)
+						.expect("Rounding failed");
+
+					// Apply a random conversion rate to a random detail
+					for detail in test_entry.details.iter_mut() {
+						if detail.currency() == currency {
+							detail.convert_to("TEST", random_rate);
+						}
+					}
+
+					// Collect results
+					results.push(test_entry.details.clone());
+				}
+
+				// Verify determinism
+				for i in 1..results.len() {
+					assert_eq!(
+						results[0], results[i],
+						"Determinism failed: Details differ in iteration {}",
+						i
+					);
+				}
+			}
+
+			// Verify no modifications to original details
+			assert_eq!(entry.details, original_details);
+		}
 	}
 }
