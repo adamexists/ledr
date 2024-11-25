@@ -20,7 +20,7 @@ use crate::util::date::Date;
 use crate::util::quant::Quant;
 use anyhow::{anyhow, bail, Error};
 use regex::Regex;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, Seek};
@@ -377,7 +377,7 @@ impl Parser {
 #[derive(Debug, Default)]
 pub struct ParseResult {
 	/// Greatest amount of precision indicated for each currency
-	pub max_precision_by_currency: HashMap<String, u32>,
+	pub max_precision_by_currency: BTreeMap<String, u32>,
 	/// Latest date of any entry (ignores directives)
 	pub latest_date: Date,
 }

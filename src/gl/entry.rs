@@ -20,7 +20,7 @@ use crate::util::date::Date;
 use crate::util::quant::Quant;
 use anyhow::{bail, Error};
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::string::ToString;
 
 pub(crate) const VIRTUAL_CONVERSION_ACCOUNT: &str = "Equity:Conversions";
@@ -177,7 +177,7 @@ impl Entry {
 		// precision requirement as everything else. So, it will get reduced
 		// away if it doesn't exceed half of minimum precision, but that's ok!
 		if sum_of_error != 0 {
-			sum_of_error.set_render_precision(decimal_places);
+			sum_of_error.set_render_precision(decimal_places, true);
 			self.add_system_detail(
 				VIRTUAL_ROUNDING_ERROR_ACCOUNT,
 				Amount::new(sum_of_error, currency),
@@ -354,8 +354,8 @@ impl Entry {
 				.filter(|d| d.is_system && *account == d.account)
 				.collect();
 
-			let mut balances_by_currency: HashMap<String, Quant> =
-				HashMap::new();
+			let mut balances_by_currency: BTreeMap<String, Quant> =
+				BTreeMap::new();
 			for detail in system_details {
 				*balances_by_currency
 					.entry(detail.currency().to_string())
@@ -384,7 +384,7 @@ impl Entry {
 
 	/// Find all currencies that don't sum to zero, with amounts
 	fn get_imbalances(&self) -> Vec<(String, Quant)> {
-		let mut balances: HashMap<String, Quant> = HashMap::new();
+		let mut balances: BTreeMap<String, Quant> = BTreeMap::new();
 
 		// Sum up the values for each currency
 		for detail in &self.details {
@@ -430,19 +430,20 @@ impl PartialEq for Entry {
 	}
 }
 
-impl PartialOrd for Entry {
-	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-		Some(self.cmp(other))
+// Entry Ord and PartialOrd Implementation
+impl Ord for Entry {
+	fn cmp(&self, other: &Self) -> Ordering {
+		self.date
+			.cmp(&other.date)
+			.then_with(|| self.desc.cmp(&other.desc))
+			.then_with(|| self.details.len().cmp(&other.details.len()))
+			.then_with(|| self.actions.len().cmp(&other.actions.len()))
 	}
 }
 
-impl Ord for Entry {
-	// Sort by date, then description, both ascending
-	fn cmp(&self, other: &Self) -> Ordering {
-		match self.date.cmp(&other.date) {
-			Ordering::Equal => self.desc.cmp(&other.desc),
-			other => other,
-		}
+impl PartialOrd for Entry {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
 	}
 }
 
@@ -478,6 +479,23 @@ impl Detail {
 
 	pub fn convert_to(&mut self, currency: &str, rate: Quant) {
 		self.amount.convert_to(currency, rate);
+	}
+}
+
+// Detail Ord and PartialOrd Implementation
+impl Ord for Detail {
+	fn cmp(&self, other: &Self) -> Ordering {
+		self.account
+			.cmp(&other.account)
+			.then_with(|| self.amount.currency.cmp(&other.amount.currency))
+			.then_with(|| self.amount.value.cmp(&other.amount.value))
+			.then_with(|| self.is_system.cmp(&other.is_system))
+	}
+}
+
+impl PartialOrd for Detail {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
 	}
 }
 
@@ -770,7 +788,6 @@ mod tests {
 			let original_details = entry.details.clone();
 
 			// Apply rounding and conversion multiple times
-
 			for _ in 0..100 {
 				let mut results = vec![];
 				let currency = currencies.choose(&mut rng).unwrap();

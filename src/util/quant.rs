@@ -167,8 +167,10 @@ impl Quant {
 		self.render_precision
 	}
 
-	pub fn set_render_precision(&mut self, precision: u32) {
-		self.render_precision = precision;
+	pub fn set_render_precision(&mut self, precision: u32, can_decrease: bool) {
+		if self.render_precision < precision || can_decrease {
+			self.render_precision = precision;
+		}
 	}
 
 	pub fn abs(&self) -> Self {

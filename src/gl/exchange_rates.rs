@@ -19,18 +19,18 @@ use crate::util::date::Date;
 use crate::util::graph::Graph;
 use crate::util::quant::Quant;
 use anyhow::{bail, Error};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Default)]
 pub struct ExchangeRates {
 	/// Stores a set of Graphs, one per date
-	daily_graphs: HashMap<Date, Graph>,
+	daily_graphs: BTreeMap<Date, Graph>,
 
 	primary_graph: Graph,
 
 	/// Preprocessed data for constant-time lookups, only available after
 	/// finalize() has been called on this
-	resolved_rates: HashMap<(String, String), Vec<(Date, Quant)>>,
+	resolved_rates: BTreeMap<(String, String), Vec<(Date, Quant)>>,
 }
 
 impl ExchangeRates {
@@ -177,10 +177,10 @@ impl ExchangeRates {
 	pub fn finalize(
 		&mut self,
 		drop_after: &Date,
-		max_precision_by_currency: &HashMap<String, u32>,
+		max_precision_by_currency: &BTreeMap<String, u32>,
 		emit_warnings: bool,
 	) -> Result<(), Error> {
-		let mut resolved = HashMap::new();
+		let mut resolved = BTreeMap::new();
 
 		self.daily_graphs.retain(|date, _| date <= drop_after);
 
@@ -200,10 +200,10 @@ impl ExchangeRates {
 					max_precision_by_currency.get(&quote),
 				) {
 					(Some(bmp), Some(qmp)) => {
-						rate.set_render_precision(*bmp.max(qmp))
+						rate.set_render_precision(*bmp.max(qmp), true)
 					},
-					(Some(bmp), None) => rate.set_render_precision(*bmp),
-					(None, Some(qmp)) => rate.set_render_precision(*qmp),
+					(Some(bmp), None) => rate.set_render_precision(*bmp, true),
+					(None, Some(qmp)) => rate.set_render_precision(*qmp, true),
 					(None, None) => {},
 				}
 
@@ -216,7 +216,7 @@ impl ExchangeRates {
 
 		// Sort rates for each currency pair by date in descending order
 		for rates in resolved.values_mut() {
-			rates.sort_by(|a, b| b.0.cmp(&a.0));
+			rates.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
 		}
 
 		for (base, quote, mut rate) in self.primary_graph.get_all_rates() {
@@ -225,10 +225,10 @@ impl ExchangeRates {
 				max_precision_by_currency.get(&quote),
 			) {
 				(Some(bmp), Some(qmp)) => {
-					rate.set_render_precision(*bmp.max(qmp))
+					rate.set_render_precision(*bmp.max(qmp), false)
 				},
-				(Some(bmp), None) => rate.set_render_precision(*bmp),
-				(None, Some(qmp)) => rate.set_render_precision(*qmp),
+				(Some(bmp), None) => rate.set_render_precision(*bmp, false),
+				(None, Some(qmp)) => rate.set_render_precision(*qmp, false),
 				(None, None) => {},
 			}
 
@@ -406,7 +406,7 @@ mod tests {
 			.unwrap();
 
 		exchange_rates
-			.finalize(&Date::max(), &HashMap::new(), true)
+			.finalize(&Date::max(), &BTreeMap::new(), true)
 			.expect("finalize failed");
 
 		assert_eq!(exchange_rates.get_latest_rate(&base, &quote), Some(rate2));
@@ -418,7 +418,7 @@ mod tests {
 			.unwrap();
 
 		exchange_rates
-			.finalize(&Date::max(), &HashMap::new(), true)
+			.finalize(&Date::max(), &BTreeMap::new(), true)
 			.expect("finalize failed");
 
 		assert_eq!(exchange_rates.get_latest_rate(&base, &quote), Some(rate3));

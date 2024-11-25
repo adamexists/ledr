@@ -19,7 +19,7 @@ use crate::reports::table::Table;
 use crate::util::amount::Amount;
 use crate::util::date::Date;
 use crate::util::quant::Quant;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// Struct for handling and displaying an ordered list of lots, for reports
 pub struct PortfolioReporter {
@@ -31,7 +31,7 @@ impl PortfolioReporter {
 	/// parameters, and then store rounded lots for pretty reporting.
 	pub fn new(
 		mut lots: Vec<Lot>,
-		max_precision_by_currency: HashMap<String, u32>,
+		max_precision_by_currency: BTreeMap<String, u32>,
 		max_precision_allowed: u32,
 	) -> Self {
 		lots.sort();
@@ -152,7 +152,7 @@ impl PortfolioReporter {
 		table.add_separator();
 
 		// currency -> total g/l
-		let mut totals: HashMap<String, Amount> = HashMap::new();
+		let mut totals: BTreeMap<String, Amount> = BTreeMap::new();
 		let mut has_any_unknown_gl = false;
 
 		for l in &self.lots {
@@ -294,7 +294,7 @@ impl PortfolioReporter {
 		table.add_separator();
 
 		// currency -> total g/l
-		let mut totals: HashMap<String, Amount> = HashMap::new();
+		let mut totals: BTreeMap<String, Amount> = BTreeMap::new();
 
 		for l in &self.lots {
 			let cb = l.commodity.cost_basis();
@@ -355,7 +355,7 @@ impl PortfolioReporter {
 fn round_to_precision(
 	value: &mut Quant,
 	symbol: &str,
-	max_precision_by_currency: &HashMap<String, u32>,
+	max_precision_by_currency: &BTreeMap<String, u32>,
 	max_precision: u32,
 ) {
 	if let Some(precision) = max_precision_by_currency.get(symbol) {

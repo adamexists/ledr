@@ -75,7 +75,13 @@ fn test_integration_max_depth() {
 
 fn test_integration_low_precision() {
 	let test_cases = collect_test_cases("precision");
-	execute("precision", test_cases, true, "bs", vec!["-p", "1"]);
+	execute(
+		"precision",
+		test_cases,
+		true,
+		"bs",
+		vec!["-p", "1", "-c", "USD"],
+	);
 }
 
 #[test]

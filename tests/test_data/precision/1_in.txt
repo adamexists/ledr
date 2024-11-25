@@ -10,6 +10,7 @@
 ! 2024-11-10 account Assets:Middle2
 ! 2024-11-10 account Assets:EUR
 ! 2024-11-10 account Equity:OpeningBalances
+# TODO: This test is not passing.
 
 2024-11-10 Test Case
     Assets:USD                 1000.1210 USD

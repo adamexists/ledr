@@ -18,16 +18,16 @@ use crate::util::amount::Amount;
 use crate::util::date::Date;
 use crate::util::quant::Quant;
 use anyhow::{bail, Error};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 #[derive(Debug, Default)]
 pub struct Graph {
-	nodes: HashMap<String, Node>, // currency symbol -> its Node
+	nodes: BTreeMap<String, Node>, // currency symbol -> its Node
 }
 
 #[derive(Debug)]
 struct Node {
-	edges: HashMap<String, Rate>, // currency symbol -> conversion rate
+	edges: BTreeMap<String, Rate>, // currency symbol -> conversion rate
 }
 
 #[derive(Debug)]
@@ -365,7 +365,7 @@ impl Graph {
 impl Node {
 	fn new() -> Self {
 		Node {
-			edges: HashMap::new(),
+			edges: BTreeMap::new(),
 		}
 	}
 }
@@ -943,7 +943,6 @@ mod tests {
 
 		#[test]
 		fn test_determinism_of_conversion() {
-			let mut graph: Graph = Default::default();
 			let mut rng = rand::thread_rng();
 			let currencies: Vec<&str> = vec![
 				"USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "CNY", "INR",
@@ -951,7 +950,8 @@ mod tests {
 			];
 			let num_currencies = currencies.len();
 
-			// Generate random exchange rates between currencies
+			// Generate a single set of exchange rates between currencies
+			let mut rates = vec![];
 			for i in 0..num_currencies {
 				for j in (i + 1)..num_currencies {
 					let mut rate1 = Quant::from_frac(
@@ -968,17 +968,7 @@ mod tests {
 						rate2 = rate2.neg();
 					}
 
-					let a = Amount::new(rate1, currencies[i]);
-					let b = Amount::new(rate2, currencies[j]);
-
-					graph
-						.add_rate(
-							&Date::from_str("2024-11-12").unwrap(),
-							&a,
-							&b,
-							true,
-						)
-						.expect("Could not add rate");
+					rates.push((currencies[i], currencies[j], rate1, rate2));
 				}
 			}
 
@@ -996,10 +986,27 @@ mod tests {
 				("BTC", "USD"),
 			];
 
-			// Execute conversions 1000 times and store results
+			// Execute conversions 1000 times, creating and traversing a new graph each time
 			let mut all_results = vec![];
 
 			for _ in 0..1000 {
+				// Create a new graph and populate it with the same rates
+				let mut graph: Graph = Default::default();
+				for &(base, quote, rate1, rate2) in &rates {
+					let a = Amount::new(rate1, base);
+					let b = Amount::new(rate2, quote);
+
+					graph
+						.add_rate(
+							&Date::from_str("2024-11-12").unwrap(),
+							&a,
+							&b,
+							true,
+						)
+						.expect("Could not add rate");
+				}
+
+				// Traverse the graph for conversions
 				let mut results = vec![];
 
 				for &(base, quote) in &test_pairs {

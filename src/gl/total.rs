@@ -17,7 +17,7 @@
 use crate::gl::entry::Detail;
 use crate::gl::ledger::Ledger;
 use crate::util::quant::Quant;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// Each total represents one account or segment, one position on the hierarchy,
 /// that may have a balance. For example, for the ledger with hierarchy:
@@ -38,8 +38,8 @@ use std::collections::HashMap;
 #[derive(Debug, Default)]
 pub struct Total {
 	pub account: String,
-	pub amounts: HashMap<String, Quant>, // currency -> balance held
-	pub subtotals: HashMap<String, Total>, // account name -> next total
+	pub amounts: BTreeMap<String, Quant>, // currency -> balance held
+	pub subtotals: BTreeMap<String, Total>, // account name -> next total
 	pub depth: u32, // top level total is depth 0; Income/Expenses is 1, etc.
 }
 
@@ -77,8 +77,8 @@ impl Total {
 					.entry(segment.to_string())
 					.or_insert_with(|| Total {
 						account: segment.to_string(),
-						amounts: HashMap::new(),
-						subtotals: HashMap::new(),
+						amounts: BTreeMap::new(),
+						subtotals: BTreeMap::new(),
 						depth: current.depth + 1,
 					});
 			}
@@ -102,7 +102,7 @@ impl Total {
 		self.subtotals
 			.retain(|name, _| strs.contains(&name.as_str()));
 
-		let mut currency_totals: HashMap<String, Quant> = HashMap::new();
+		let mut currency_totals: BTreeMap<String, Quant> = BTreeMap::new();
 
 		// Sum subtotals; doesn't need to be recursive because we only
 		// dropped some top-level branches of the hierarchy; what

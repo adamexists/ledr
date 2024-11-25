@@ -22,9 +22,10 @@ use crate::investment::action::Action;
 use crate::investment::action_buffer::ActionBuffer;
 use crate::util::amount::Amount;
 use crate::util::date::Date;
+use crate::util::graph::Graph;
 use anyhow::{bail, Error};
 use std::cmp::min;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// The only valid top-level account names. This is an accounting system, after
 /// all! Society has rules! Granted, there is no functional reason to have this
@@ -54,9 +55,9 @@ pub struct Ledger {
 	lenient_mode: bool,
 
 	/// currency -> the earliest date currency is allowed to appear
-	declared_currencies: HashMap<String, Date>,
+	declared_currencies: BTreeMap<String, Date>,
 	/// account -> the earliest date account is allowed to appear
-	declared_accounts: HashMap<String, Date>,
+	declared_accounts: BTreeMap<String, Date>,
 
 	// conceptually distinct modules the ledger must populate or access
 	pub exchange_rates: ExchangeRates,
@@ -314,6 +315,7 @@ impl Ledger {
 
 		self.entries.iter_mut().for_each(|e| {
 			e.force_balance(VIRTUAL_CONVERSION_ACCOUNT);
+			e.reduce(vec![VIRTUAL_CONVERSION_ACCOUNT]);
 		})
 	}
 
@@ -321,7 +323,7 @@ impl Ledger {
 	/// each currency, and dropping entries outside the passed date range.
 	pub fn finalize(
 		&mut self,
-		max_reso_by_currency: &HashMap<String, u32>,
+		max_reso_by_currency: &BTreeMap<String, u32>,
 		overall_max_reso: Option<u32>,
 		drop_before: &Date,
 		drop_after: &Date,
@@ -337,11 +339,11 @@ impl Ledger {
 			for (currency, &reso) in max_reso_by_currency {
 				entry.round_for_currency(currency, min(reso, max_reso))?;
 
-				entry.force_balance(VIRTUAL_ROUNDING_ERROR_ACCOUNT);
 				entry.reduce(vec![
 					VIRTUAL_CONVERSION_ACCOUNT,
 					VIRTUAL_ROUNDING_ERROR_ACCOUNT,
 				]);
+				entry.force_balance(VIRTUAL_ROUNDING_ERROR_ACCOUNT);
 			}
 		}
 
