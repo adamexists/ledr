@@ -51,3 +51,6 @@ Here's what this doc should contain in the future:
 - Entries are processed in the order they are written in the file, taking
   account of directives (all processed first) and include statements (which
   halt in the current file and process the next). Describe the control flow.
+- Describe how highly different currency conversions on the same day can yield
+  unexpected results and significant conversion error. Also, describe rounding
+  error in similar form.

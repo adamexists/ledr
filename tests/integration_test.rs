@@ -73,6 +73,11 @@ fn test_integration_max_depth() {
 	execute("maxdepth", test_cases, true, "bs", vec!["-d", "2"]);
 }
 
+fn test_integration_low_precision() {
+	let test_cases = collect_test_cases("precision");
+	execute("precision", test_cases, true, "bs", vec!["-p", "1"]);
+}
+
 #[test]
 fn test_integration_should_fail() {
 	let test_cases = collect_test_cases("failures");

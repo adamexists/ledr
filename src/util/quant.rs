@@ -131,7 +131,14 @@ impl Quant {
 	/// Modifies the underlying fraction to represent a value that is rounded
 	/// off to the given number of decimal places when rendered as a decimal.
 	/// Uses Banker's rounding (rounds to nearest, ties to even).
-	pub fn round(&mut self, decimal_places: u32) {
+	///
+	/// Returns the rounding error, i.e. the amount of difference between
+	/// the rounded and non-rounded total of this entry, in the form such
+	/// that rounded amount + error == original amount. If original is higher,
+	/// returned number will be negative.
+	pub fn round(&mut self, decimal_places: u32) -> Self {
+		let initial = *self;
+
 		let scale = 10u128.pow(decimal_places);
 		let scaled_numerator = self.numerator * scale;
 		let quotient = scaled_numerator / self.denominator;
@@ -153,6 +160,7 @@ impl Quant {
 		self.is_negative = self.is_negative && rounded_quotient > 0;
 
 		self.reduce();
+		initial - *self
 	}
 
 	pub fn render_precision(&self) -> u32 {
@@ -1452,6 +1460,95 @@ mod tests {
 
 				let a = Quant::from_frac(-3, -4);
 				assert_eq!(-a, Quant::from_frac(-3, 4));
+			}
+		}
+
+		mod operation_order {
+			use super::*;
+
+			#[test]
+			fn test_associative_property_with_multiplication_and_division() {
+				let a = Quant::from_frac(123456789, 987654321);
+				let b = Quant::from_frac(987654321, 123456789);
+				let c = Quant::from_frac(246813578, 864197532);
+				let d = Quant::from_frac(1000000, 1000001);
+
+				let result_1 = (a * b) / (c * d);
+				let result_2 = (a / c) * (b / d);
+
+				assert_eq!(
+					result_1, result_2,
+					"Order of operations affected the result"
+				);
+			}
+
+			#[test]
+			fn test_chained_multiplications_consistency() {
+				let a = Quant::from_frac(99999999, 11111111);
+				let b = Quant::from_frac(123456789, 987654321);
+				let c = Quant::from_frac(1, 2);
+				let d = Quant::from_frac(3, 4);
+				let e = Quant::from_frac(5, 6);
+
+				let mut result_1 = e * d * c * b * a;
+				let mut result_2 = a * b * c * d * e;
+
+				result_1.reduce();
+				result_2.reduce();
+
+				assert_eq!(
+					result_1, result_2,
+					"Order of chained multiplications affected the result"
+				);
+			}
+
+			#[test]
+			fn test_large_numbers_multiplication_division_order() {
+				let a = Quant::from_frac(10i128.pow(18), 1);
+				let b = Quant::from_frac(10i128.pow(9), 1);
+				let c = Quant::from_frac(1, 10i128.pow(9));
+				let d = Quant::from_frac(1, 10i128.pow(18));
+
+				let result_1 = ((a / b) * c) / d;
+				let result_2 = a * (c / (b * d));
+
+				assert_eq!(
+					result_1, result_2,
+					"Order of operations with large numbers affected the result"
+				);
+			}
+
+			#[test]
+			fn test_small_numbers_multiplication_division_order() {
+				let a = Quant::from_frac(1, 10i128.pow(12));
+				let b = Quant::from_frac(10i128.pow(6), 1);
+				let c = Quant::from_frac(1, 10i128.pow(6));
+				let d = Quant::from_frac(10i128.pow(3), 10i128.pow(9));
+
+				let result_1 = (a * b / c) * d;
+				let result_2 = ((a * d) / c) * b;
+
+				assert_eq!(
+					result_1, result_2,
+					"Order of operations with small numbers affected the result"
+				);
+			}
+
+			#[test]
+			fn test_mixed_large_and_small_numbers_order() {
+				let a = Quant::from_frac(10i128.pow(18), 1);
+				let b = Quant::from_frac(1, 10i128.pow(12));
+				let c = Quant::from_frac(123456, 987654321);
+				let d = Quant::from_frac(987654321, 123456);
+				let e = Quant::from_frac(10i128.pow(6), 10i128.pow(9));
+
+				let result_1 = (a * b / c) * (d / e);
+				let result_2 = ((a / c) * d / e) * b;
+
+				assert_eq!(
+					result_1, result_2,
+					"Order of operations with mixed large and small numbers affected the result"
+				);
 			}
 		}
 	}

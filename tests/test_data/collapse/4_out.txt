@@ -3,8 +3,6 @@
     USD 50,000.00        Boring
        USD 100.00        Cool
    USD -25,000.50      Cash
-   USD -25,099.50    Equity
-   USD -25,099.50      OpeningBalances
-         USD 0.00      Conversions
+   USD -25,099.50    Equity:OpeningBalances
 ------------------
          USD 0.00

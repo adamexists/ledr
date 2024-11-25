@@ -15,6 +15,7 @@
  */
 
 use crate::util::amount::Amount;
+use crate::util::date::Date;
 use crate::util::quant::Quant;
 use anyhow::{bail, Error};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -31,8 +32,17 @@ struct Node {
 
 #[derive(Debug)]
 struct Rate {
-	pub ratio: Quant,
-	pub rate_type: RateType,
+	quant: Vec<Quant>, // TODO: Only one obs date for many Quants right now
+	rate_type: RateType,
+	observation_date: Date,
+}
+
+impl Rate {
+	/// Reports a single rate to the caller, based on all underlying rate data.
+	/// TODO: Currently takes a simple average. Should be expanded in power.
+	fn rate(&self) -> Quant {
+		self.quant.iter().cloned().sum::<Quant>() / self.quant.len() as i128
+	}
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -44,10 +54,10 @@ enum RateType {
 }
 
 impl Graph {
-
 	/// Adds a bidirectional exchange rate between two currencies
 	pub fn add_rate(
 		&mut self,
+		date: &Date,
 		a: &Amount,
 		b: &Amount,
 		is_inferred: bool,
@@ -65,30 +75,98 @@ impl Graph {
 			RateType::Declared
 		};
 
-		// Update the graph
+		// Update the graph with rates
 		self.nodes
 			.entry(a.currency.clone())
 			.or_insert_with(Node::new)
 			.edges
-			.insert(
-				b.currency.clone(),
-				Rate {
-					ratio: rate_ab,
-					rate_type,
-				},
-			);
+			.entry(b.currency.clone())
+			.or_insert_with(|| Rate {
+				quant: vec![rate_ab],
+				rate_type,
+				observation_date: *date,
+			})
+			.quant
+			.push(rate_ba);
 
 		self.nodes
 			.entry(b.currency.clone())
 			.or_insert_with(Node::new)
 			.edges
-			.insert(
-				a.currency.clone(),
-				Rate {
-					ratio: rate_ba,
-					rate_type,
-				},
-			);
+			.entry(a.currency.clone())
+			.or_insert_with(|| Rate {
+				quant: vec![rate_ba],
+				rate_type,
+				observation_date: *date,
+			})
+			.quant
+			.push(rate_ba);
+
+		Ok(())
+	}
+
+	/// Overwrites any existing rate between the currencies, leaving only this
+	/// one, the most recent entry.
+	pub fn overwrite_rate_if_newer(
+		&mut self,
+		date: &Date,
+		a: &Amount,
+		b: &Amount,
+		is_inferred: bool,
+	) -> Result<(), Error> {
+		let rate_ab = a.value / b.value;
+		let rate_ba = b.value / a.value;
+
+		let rate_type = if is_inferred {
+			RateType::Inferred
+		} else {
+			RateType::Declared
+		};
+
+		// Helper function to update a rate if the date is newer
+		let update_rate_if_newer =
+			|node: &mut Node, target_currency: String, rate: Quant| {
+				node.edges
+					.entry(target_currency)
+					.and_modify(|existing_rate| {
+						if &existing_rate.observation_date < date {
+							existing_rate.quant = vec![rate];
+							existing_rate.observation_date = *date;
+						} else if &existing_rate.observation_date == date {
+							existing_rate.quant.push(rate);
+						}
+					})
+					.or_insert_with(|| Rate {
+						quant: vec![rate],
+						rate_type,
+						observation_date: *date,
+					});
+			};
+
+		// Update or insert rates for both currencies
+		// TODO: Rename update_rate_if_newer and this method to sensible things;
+		//  now we add the rate to the set for averaging if same date.
+		self.nodes
+			.entry(a.currency.clone())
+			.and_modify(|node| {
+				update_rate_if_newer(node, b.currency.clone(), rate_ab)
+			})
+			.or_insert_with(|| {
+				let mut node = Node::new();
+				update_rate_if_newer(&mut node, b.currency.clone(), rate_ab);
+				node
+			});
+
+		self.nodes
+			.entry(b.currency.clone())
+			.and_modify(|node| {
+				update_rate_if_newer(node, a.currency.clone(), rate_ba)
+			})
+			.or_insert_with(|| {
+				let mut node = Node::new();
+				update_rate_if_newer(&mut node, a.currency.clone(), rate_ba);
+				node
+			});
 
 		Ok(())
 	}
@@ -139,7 +217,7 @@ impl Graph {
 
 		if let Some(node) = self.nodes.get(current) {
 			for (neighbor, rate) in &node.edges {
-				let new_rate_product = rate_product * rate.ratio;
+				let new_rate_product = rate_product * rate.rate();
 
 				// Recursive call for the neighbor
 				if self.detect_inconsistent_cycle(
@@ -165,6 +243,8 @@ impl Graph {
 	pub fn convert(&self, base: &str, quote: &str) -> Option<Quant> {
 		if base == quote {
 			return Some(Quant::from_frac(1, 1));
+			// TODO: Implement reciprocal.
+			// TODO: This whole graph traversal thing is not working well.
 		}
 
 		let mut visited = HashMap::new();
@@ -178,11 +258,14 @@ impl Graph {
 			queue.pop_front()
 		{
 			if let Some(node) = self.nodes.get(&current_currency) {
-				for (neighbor, rate) in &node.edges {
-					let new_rate = current_rate * rate.ratio;
+				let mut neighbors: Vec<_> = node.edges.iter().collect();
+				neighbors.sort_by(|a, b| a.0.cmp(&b.0)); // Sort neighbors by currency for deterministic traversal
+
+				for (neighbor, rate) in neighbors {
+					let new_rate = current_rate * rate.rate();
 
 					if neighbor == base {
-						// Update shortest path length and collect rates
+						// Update the shortest path length and collect rates
 						if shortest_path_length.is_none()
 							|| depth + 1 == shortest_path_length.unwrap()
 						{
@@ -244,20 +327,27 @@ impl Graph {
 			return None;
 		};
 
-		Some(other.ratio)
+		Some(other.rate())
 	}
 
-	/// Returns all rates as tuples of (base, quote, rate)
+	/// Returns all rates as tuples of (base, quote, rate).
 	/// This includes both direct and indirect conversion rates.
+	/// Ensures each rate is calculated only once and the process is deterministic.
 	pub fn get_all_rates(&self) -> Vec<(String, String, Quant)> {
 		let mut rates = Vec::new();
 
-		for base in self.nodes.keys() {
-			for quote in self.nodes.keys() {
-				if base != quote {
-					if let Some(rate) = self.convert(base, quote) {
-						rates.push((base.clone(), quote.clone(), rate));
-					}
+		let mut currencies: Vec<_> = self.nodes.keys().cloned().collect();
+		currencies.sort(); // Ensure deterministic order
+
+		for (i, base) in currencies.iter().enumerate() {
+			for quote in currencies.iter().skip(i + 1) {
+				if let Some(rate) = self.convert(base, quote) {
+					rates.push((base.clone(), quote.clone(), rate));
+					rates.push((
+						quote.clone(),
+						base.clone(),
+						Quant::from_i128(1) / rate,
+					)); // Include inverse rate
 				}
 			}
 		}
@@ -284,7 +374,9 @@ mod tests {
 		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let expected_output = Quant::new(5, 1);
 		let result = graph.convert("USD", "EUR");
@@ -299,7 +391,9 @@ mod tests {
 		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let expected_output = Quant::new(2, 0);
 		let result = graph.convert("EUR", "USD");
@@ -313,11 +407,15 @@ mod tests {
 		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let c = Amount::new(Quant::new(5, 0), "EUR");
 		let d = Amount::new(Quant::new(1, 0), "GBP");
-		graph.add_rate(&c, &d, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.expect("Could not add rate");
 
 		let expected_output = Quant::new(1, 1);
 		let result = graph.convert("USD", "GBP");
@@ -331,11 +429,15 @@ mod tests {
 		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let c = Amount::new(Quant::new(5, 0), "EUR");
 		let d = Amount::new(Quant::new(1, 0), "GBP");
-		graph.add_rate(&c, &d, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.expect("Could not add rate");
 
 		let expected_output = Quant::new(10, 0);
 		let result = graph.convert("GBP", "USD");
@@ -358,11 +460,15 @@ mod tests {
 		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let c = Amount::new(Quant::new(3, 0), "JPY");
 		let d = Amount::new(Quant::new(1, 0), "INR");
-		graph.add_rate(&c, &d, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.expect("Could not add rate");
 
 		let result = graph.convert("USD", "JPY");
 
@@ -375,19 +481,27 @@ mod tests {
 		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let c = Amount::new(Quant::new(5, 0), "EUR");
 		let d = Amount::new(Quant::new(1, 0), "GBP");
-		graph.add_rate(&c, &d, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.expect("Could not add rate");
 
 		let e = Amount::new(Quant::new(10, 0), "GBP");
 		let f = Amount::new(Quant::new(1, 0), "JPY");
-		graph.add_rate(&e, &f, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &e, &f, true)
+			.expect("Could not add rate");
 
 		let g = Amount::new(Quant::new(3, 0), "JPY");
 		let h = Amount::new(Quant::new(1, 0), "INR");
-		graph.add_rate(&g, &h, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &g, &h, true)
+			.expect("Could not add rate");
 
 		let expected_output = Quant::new(300, 0);
 		let result = graph.convert("INR", "USD");
@@ -414,17 +528,26 @@ mod tests {
 		// Add USD <-> EUR rate
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		// Add EUR <-> GBP rate
 		let c = Amount::new(Quant::new(5, 0), "EUR");
 		let d = Amount::new(Quant::new(1, 0), "GBP");
-		graph.add_rate(&c, &d, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.expect("Could not add rate");
 
 		// Add GBP <-> USD rate that creates an inconsistent cycle
 		let e = Amount::new(Quant::new(1, 0), "GBP");
 		let f = Amount::new(Quant::new(1, 0), "USD");
-		let _result = graph.add_rate(&e, &f, true);
+		let _result = graph.add_rate(
+			&Date::from_str("2024-11-12").unwrap(),
+			&e,
+			&f,
+			true,
+		);
 
 		// Assert that the inconsistent cycle is detected
 		assert!(graph.has_inconsistent_cycle());
@@ -445,7 +568,14 @@ mod tests {
 				let rate2 = Quant::from_i128((j * 10 + 3) as i128);
 				let a = Amount::new(rate1, &currencies[i]);
 				let b = Amount::new(rate2, &currencies[j]);
-				graph.add_rate(&a, &b, true).expect("Could not add rate");
+				graph
+					.add_rate(
+						&Date::from_str("2024-11-12").unwrap(),
+						&a,
+						&b,
+						true,
+					)
+					.expect("Could not add rate");
 			}
 		}
 
@@ -479,7 +609,12 @@ mod tests {
 			let amount_from = Amount::new(Quant::new(100, 0), from);
 			let amount_to = Amount::new(rate, to);
 			graph
-				.add_rate(&amount_from, &amount_to, true)
+				.add_rate(
+					&Date::from_str("2024-11-12").unwrap(),
+					&amount_from,
+					&amount_to,
+					true,
+				)
 				.expect("Could not add rate");
 		}
 
@@ -516,21 +651,36 @@ mod tests {
 			let amount_from = Amount::new(Quant::new(100, 0), from);
 			let amount_to = Amount::new(rate, to);
 			graph
-				.add_rate(&amount_from, &amount_to, true)
+				.add_rate(
+					&Date::from_str("2024-11-12").unwrap(),
+					&amount_from,
+					&amount_to,
+					true,
+				)
 				.expect("Could not add rate");
 		}
 		for (from, to, rate) in segment2 {
 			let amount_from = Amount::new(Quant::new(100, 0), from);
 			let amount_to = Amount::new(rate, to);
 			graph
-				.add_rate(&amount_from, &amount_to, true)
+				.add_rate(
+					&Date::from_str("2024-11-12").unwrap(),
+					&amount_from,
+					&amount_to,
+					true,
+				)
 				.expect("Could not add rate");
 		}
 		for (from, to, rate) in segment3 {
 			let amount_from = Amount::new(Quant::new(100, 0), from);
 			let amount_to = Amount::new(rate, to);
 			graph
-				.add_rate(&amount_from, &amount_to, true)
+				.add_rate(
+					&Date::from_str("2024-11-12").unwrap(),
+					&amount_from,
+					&amount_to,
+					true,
+				)
 				.expect("Could not add rate");
 		}
 
@@ -551,7 +701,14 @@ mod tests {
 			for j in i + 1..seg1.len() {
 				let a = Amount::new(Quant::from_i128((i + 1) as i128), seg1[i]);
 				let b = Amount::new(Quant::from_i128((j + 1) as i128), seg1[j]);
-				graph.add_rate(&a, &b, true).expect("Could not add rate");
+				graph
+					.add_rate(
+						&Date::from_str("2024-11-12").unwrap(),
+						&a,
+						&b,
+						true,
+					)
+					.expect("Could not add rate");
 			}
 		}
 
@@ -561,7 +718,14 @@ mod tests {
 			for j in i + 1..seg2.len() {
 				let a = Amount::new(Quant::from_i128((i + 1) as i128), seg2[i]);
 				let b = Amount::new(Quant::from_i128((j + 1) as i128), seg2[j]);
-				graph.add_rate(&a, &b, true).expect("Could not add rate");
+				graph
+					.add_rate(
+						&Date::from_str("2024-11-12").unwrap(),
+						&a,
+						&b,
+						true,
+					)
+					.expect("Could not add rate");
 			}
 		}
 
@@ -571,7 +735,14 @@ mod tests {
 			for j in i + 1..seg3.len() {
 				let a = Amount::new(Quant::from_i128((i + 1) as i128), seg3[i]);
 				let b = Amount::new(Quant::from_i128((j + 1) as i128), seg3[j]);
-				graph.add_rate(&a, &b, true).expect("Could not add rate");
+				graph
+					.add_rate(
+						&Date::from_str("2024-11-12").unwrap(),
+						&a,
+						&b,
+						true,
+					)
+					.expect("Could not add rate");
 			}
 		}
 
@@ -587,7 +758,9 @@ mod tests {
 		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::new(1_000_000_000_000, 0), "BTC"); // 1 USD = 1 trillion BTC
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let expected_output = Quant::new(1_000_000_000_000, 0);
 		let result = graph.convert("USD", "BTC");
@@ -601,7 +774,9 @@ mod tests {
 		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::from_frac(1, 1_000_000_000_000), "BTC"); // 1 USD = 1e-12 BTC
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let expected_output = Quant::from_frac(1, 1_000_000_000_000);
 		let result = graph.convert("USD", "BTC");
@@ -615,11 +790,15 @@ mod tests {
 		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::new(1_000_000_000, 0), "BTC");
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let c = Amount::new(Quant::from_frac(1, 1_000_000_000), "BTC");
 		let d = Amount::new(Quant::new(1, 0), "ETH");
-		graph.add_rate(&c, &d, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.expect("Could not add rate");
 
 		let expected_output = Quant::new(1_000_000_000_000_000_000, 0);
 		let result = graph.convert("USD", "ETH");
@@ -633,7 +812,9 @@ mod tests {
 		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "USD"); // Self-loop
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let result = graph.convert("USD", "USD");
 		assert_eq!(result.unwrap(), Quant::from_i128(1));
@@ -645,7 +826,9 @@ mod tests {
 		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::from_frac(123456789, 987654321), "USD");
 		let b = Amount::new(Quant::from_frac(987654321, 123456789), "EUR");
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let expected_output =
 			Quant::from_frac(12042729108518161, 188167638891241);
@@ -660,7 +843,9 @@ mod tests {
 		let mut graph: Graph = Default::default();
 		let a = Amount::new(Quant::from_frac(1, 987654321), "USD"); // 1/987654321 USD
 		let b = Amount::new(Quant::new(1, 0), "JPY"); // 1 JPY
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let expected_output = Quant::from_frac(1, 987654321);
 		let result = graph.convert("JPY", "USD");
@@ -676,11 +861,15 @@ mod tests {
 		// Add several fractions in a chain
 		let a = Amount::new(Quant::from_frac(123456789, 987654321), "USD");
 		let b = Amount::new(Quant::from_frac(987654321, 123456789), "EUR");
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let c = Amount::new(Quant::from_frac(22222222, 33333333), "EUR");
 		let d = Amount::new(Quant::from_frac(33333333, 22222222), "GBP");
-		graph.add_rate(&c, &d, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.expect("Could not add rate");
 
 		let expected_output =
 			Quant::from_frac(108384561976663449, 752670555564964);
@@ -697,7 +886,9 @@ mod tests {
 		// Extreme fraction rates
 		let a = Amount::new(Quant::from_frac(1, 1_000_000_000_007), "BTC");
 		let b = Amount::new(Quant::from_frac(1_000_000_000_007, 1), "ETH");
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let expected_output =
 			Quant::from_frac(1_000_000_000_014_000_000_000_049, 1);
@@ -714,15 +905,21 @@ mod tests {
 		// Chain of bizarre fractions
 		let a = Amount::new(Quant::from_frac(987654321, 123456789), "USD");
 		let b = Amount::new(Quant::from_frac(123456789, 987654321), "EUR");
-		graph.add_rate(&a, &b, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.expect("Could not add rate");
 
 		let c = Amount::new(Quant::from_frac(44444444, 55555555), "EUR");
 		let d = Amount::new(Quant::from_frac(55555555, 44444444), "JPY");
-		graph.add_rate(&c, &d, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.expect("Could not add rate");
 
 		let e = Amount::new(Quant::from_frac(22222222, 33333333), "JPY");
 		let f = Amount::new(Quant::from_frac(33333333, 22222222), "AUD");
-		graph.add_rate(&e, &f, true).expect("Could not add rate");
+		graph
+			.add_rate(&Date::from_str("2024-11-12").unwrap(), &e, &f, true)
+			.expect("Could not add rate");
 
 		let expected_output =
 			Quant::from_frac(42337718750529225, 770734662945162304);

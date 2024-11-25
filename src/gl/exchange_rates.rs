@@ -24,22 +24,21 @@ use std::collections::HashMap;
 #[derive(Debug, Default)]
 pub struct ExchangeRates {
 	/// Stores a set of Graphs, one per date
-	rate_graphs: HashMap<Date, Graph>,
+	daily_graphs: HashMap<Date, Graph>,
+
+	primary_graph: Graph,
 
 	/// Preprocessed data for constant-time lookups, only available after
 	/// finalize() has been called on this
 	resolved_rates: HashMap<(String, String), Vec<(Date, Quant)>>,
-
-	/// Skip consistency checks on price graphs if enabled
-	lenient_mode: bool,
 }
 
 impl ExchangeRates {
-	pub fn new(lenient: bool) -> Self {
+	pub fn new() -> Self {
 		Self {
-			rate_graphs: Default::default(),
+			daily_graphs: Default::default(),
 			resolved_rates: Default::default(),
-			lenient_mode: lenient,
+			primary_graph: Default::default(),
 		}
 	}
 
@@ -70,13 +69,16 @@ impl ExchangeRates {
 		// We do not need to check for existing inferred rates, because
 		// all directives are handled first, so one cannot exist.
 
-		let entry = self.rate_graphs.entry(date).or_default();
+		let entry = self.daily_graphs.entry(date).or_default();
 
 		if entry.get_direct_rate(&base, &quote, true).is_some() {
 			bail!("Cannot declare multiple rates on same date")
 		}
 
-		entry.add_rate(&b_amt, &q_amt, false)?;
+		entry.add_rate(&date, &b_amt, &q_amt, false)?;
+
+		self.primary_graph
+			.overwrite_rate_if_newer(&date, &b_amt, &q_amt, false)?;
 
 		Ok(())
 	}
@@ -109,7 +111,7 @@ impl ExchangeRates {
 		// We do not need to check for existing inferred rates, because
 		// all directives are handled first, so one cannot exist.
 
-		let entry = self.rate_graphs.entry(date).or_default();
+		let entry = self.daily_graphs.entry(date).or_default();
 
 		if let Some(existing_rate) = entry.get_direct_rate(base, quote, true) {
 			// Check if the inferred rate is within 1% of the
@@ -124,7 +126,10 @@ impl ExchangeRates {
 			return Ok(());
 		}
 
-		entry.add_rate(&b_amt, &q_amt, true)?;
+		entry.add_rate(&date, &b_amt, &q_amt, true)?;
+
+		self.primary_graph
+			.overwrite_rate_if_newer(&date, &b_amt, &q_amt, true)?;
 
 		Ok(())
 	}
@@ -135,7 +140,9 @@ impl ExchangeRates {
 		a: Amount,
 		b: Amount,
 	) -> Result<(), Error> {
-		let entry = self.rate_graphs.entry(date).or_default();
+		let entry = self.daily_graphs.entry(date).or_default();
+
+		// TODO: Sweep this whole project for nondeterministic things.
 
 		if let Some(existing_rate) =
 			entry.get_direct_rate(&a.currency, &b.currency, true)
@@ -153,7 +160,10 @@ impl ExchangeRates {
 			return Ok(());
 		}
 
-		entry.add_rate(&a, &b, true)?;
+		entry.add_rate(&date, &a, &b, true)?;
+
+		self.primary_graph
+			.overwrite_rate_if_newer(&date, &a, &a, true)?;
 
 		Ok(())
 	}
@@ -163,23 +173,25 @@ impl ExchangeRates {
 	/// Prior to that, they will not work. Finalization can fail if any
 	/// of the underlying Graphs are incoherent.
 	///
-	/// Ignores and drops all data outside the bounds defined by the
-	/// relevant arguments.
+	/// Ignores and drops all data after the passed drop_after date.
 	pub fn finalize(
 		&mut self,
-		drop_before: &Date,
 		drop_after: &Date,
 		max_precision_by_currency: &HashMap<String, u32>,
+		emit_warnings: bool,
 	) -> Result<(), Error> {
 		let mut resolved = HashMap::new();
 
-		self.rate_graphs
-			.retain(|date, _| date >= drop_before && date <= drop_after);
+		self.daily_graphs.retain(|date, _| date <= drop_after);
 
-		for (date, graph) in &self.rate_graphs {
-			if !self.lenient_mode && graph.has_inconsistent_cycle() {
-				bail!("Exchange rates on {} are incoherent", date)
+		for (date, graph) in &self.daily_graphs {
+			if emit_warnings && graph.has_inconsistent_cycle() {
+				println!("Warning: currency conversion graph on {} is not internally consistent\n", date);
 			}
+
+			// TODO: Clarify: We still need the daily graphs because of some
+			//  reports' need to conjure a historical exchange rate as of a
+			//  given day. Just... think about it when I'm not so tired!
 
 			// Make sure exchange rates inherit desired precision from user
 			for (base, quote, mut rate) in graph.get_all_rates() {
@@ -207,7 +219,31 @@ impl ExchangeRates {
 			rates.sort_by(|a, b| b.0.cmp(&a.0));
 		}
 
+		for (base, quote, mut rate) in self.primary_graph.get_all_rates() {
+			match (
+				max_precision_by_currency.get(&base),
+				max_precision_by_currency.get(&quote),
+			) {
+				(Some(bmp), Some(qmp)) => {
+					rate.set_render_precision(*bmp.max(qmp))
+				},
+				(Some(bmp), None) => rate.set_render_precision(*bmp),
+				(None, Some(qmp)) => rate.set_render_precision(*qmp),
+				(None, None) => {},
+			}
+
+			// We push the global rates after the daily ones so we end up last
+			// in the list. Local rates get prioritized. TODO in practice this
+			// is pointless because the newest rates always end up in global
+			// and this causes duplication (of no UX consequence).
+			resolved
+				.entry((base.clone(), quote.clone()))
+				.or_insert_with(Vec::new)
+				.push((*drop_after, rate));
+		}
+
 		self.resolved_rates = resolved;
+
 		Ok(())
 	}
 
@@ -370,7 +406,7 @@ mod tests {
 			.unwrap();
 
 		exchange_rates
-			.finalize(&Date::min(), &Date::max(), &HashMap::new())
+			.finalize(&Date::max(), &HashMap::new(), true)
 			.expect("finalize failed");
 
 		assert_eq!(exchange_rates.get_latest_rate(&base, &quote), Some(rate2));
@@ -382,7 +418,7 @@ mod tests {
 			.unwrap();
 
 		exchange_rates
-			.finalize(&Date::min(), &Date::max(), &HashMap::new())
+			.finalize(&Date::max(), &HashMap::new(), true)
 			.expect("finalize failed");
 
 		assert_eq!(exchange_rates.get_latest_rate(&base, &quote), Some(rate3));

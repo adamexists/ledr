@@ -1,0 +1,8 @@
+    USD 35,563.69    Assets
+    USD 60,564.19      Investments
+    USD 59,560.00        Boring
+     USD 1,004.19        Cool
+   USD -25,000.50      Cash
+   USD -35,563.69    Equity:OpeningBalances
+------------------
+         USD 0.00

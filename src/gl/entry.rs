@@ -24,6 +24,7 @@ use std::collections::HashMap;
 use std::string::ToString;
 
 pub(crate) const VIRTUAL_CONVERSION_ACCOUNT: &str = "Equity:Conversions";
+pub(crate) const VIRTUAL_ROUNDING_ERROR_ACCOUNT: &str = "Equity:Rounding";
 
 #[derive(Debug)]
 pub struct Entry {
@@ -33,9 +34,6 @@ pub struct Entry {
 
 	virtual_detail: Option<String>,
 
-	/// Never accounts for virtual detail activity or multiline implicit
-	/// currency conversion activity.
-	totals: HashMap<String, Quant>, // Currency -> Amount
 	reference: Option<String>, // optional string, not inspected
 
 	/// Lot actions related to this entry. Don't read until finalization,
@@ -51,7 +49,6 @@ impl Entry {
 			desc,
 			details: vec![],
 			virtual_detail: None,
-			totals: HashMap::new(),
 			reference: None,
 			actions: vec![],
 		}
@@ -66,11 +63,6 @@ impl Entry {
 			bail!("Account is empty")
 		}
 
-		*self
-			.totals
-			.entry(amount.currency.clone())
-			.or_insert(Quant::zero()) += amount.value;
-
 		self.details.push(Detail::new(account, amount, false));
 
 		Ok(())
@@ -84,11 +76,6 @@ impl Entry {
 		if account.is_empty() {
 			bail!("Account is empty")
 		}
-
-		*self
-			.totals
-			.entry(amount.currency.clone())
-			.or_insert(Quant::zero()) += amount.value;
 
 		self.details.push(Detail::new(account, amount, true));
 
@@ -179,10 +166,22 @@ impl Entry {
 		currency: &str,
 		decimal_places: u32,
 	) -> Result<(), Error> {
+		let mut sum_of_error = Quant::zero();
 		for detail in &mut self.details {
 			if detail.amount.currency == *currency {
-				detail.amount.value.round(decimal_places)
+				sum_of_error += detail.amount.value.round(decimal_places);
 			}
+		}
+
+		// Add rounding error as a system entry, but subject it to the same
+		// precision requirement as everything else. So, it will get reduced
+		// away if it doesn't exceed half of minimum precision, but that's ok!
+		if sum_of_error != 0 {
+			sum_of_error.set_render_precision(decimal_places);
+			self.add_system_detail(
+				VIRTUAL_ROUNDING_ERROR_ACCOUNT,
+				Amount::new(sum_of_error, currency),
+			)?;
 		}
 
 		Ok(())
@@ -253,7 +252,6 @@ impl Entry {
 			}
 		}
 
-		self.reduce(vec![VIRTUAL_CONVERSION_ACCOUNT]);
 		Ok(self.actions.clone())
 	}
 
@@ -270,16 +268,14 @@ impl Entry {
 		let (currency1, amount1) = imbalances.remove(0);
 		let (currency2, amount2) = imbalances.remove(0);
 
-		self.details.push(Detail::new(
+		self.add_system_detail(
 			VIRTUAL_CONVERSION_ACCOUNT,
 			Amount::new(-amount1, &currency1),
-			true,
-		));
-		self.details.push(Detail::new(
+		)?;
+		self.add_system_detail(
 			VIRTUAL_CONVERSION_ACCOUNT,
 			Amount::new(-amount2, &currency2),
-			true,
-		));
+		)?;
 
 		// This implies an exchange rate between the currencies
 		rates.infer_from_equal_amounts(
@@ -344,12 +340,6 @@ impl Entry {
 	/// unchanged, but in actuality, the whole detail set is reallocated.
 	/// Ideally, only call this once, for the sake of efficiency.
 	pub fn reduce(&mut self, accounts: Vec<&str>) {
-		let system_details: Vec<_> = self
-			.details
-			.iter()
-			.filter(|d| d.is_system && accounts.contains(&&*d.account))
-			.collect();
-
 		let mut all_other_details: Vec<_> = self
 			.details
 			.iter()
@@ -357,14 +347,21 @@ impl Entry {
 			.cloned()
 			.collect();
 
-		let mut balances_by_currency: HashMap<String, Quant> = HashMap::new();
-		for detail in system_details {
-			*balances_by_currency
-				.entry(detail.currency().to_string())
-				.or_insert(Quant::zero()) += detail.value();
-		}
+		for account in accounts.iter() {
+			let system_details: Vec<_> = self
+				.details
+				.iter()
+				.filter(|d| d.is_system && *account == d.account)
+				.collect();
 
-		for account in accounts {
+			let mut balances_by_currency: HashMap<String, Quant> =
+				HashMap::new();
+			for detail in system_details {
+				*balances_by_currency
+					.entry(detail.currency().to_string())
+					.or_insert(Quant::zero()) += detail.value();
+			}
+
 			let reduced_details: Vec<Detail> = balances_by_currency
 				.iter()
 				.filter_map(|(currency, balance)| {
@@ -387,18 +384,34 @@ impl Entry {
 
 	/// Find all currencies that don't sum to zero, with amounts
 	fn get_imbalances(&self) -> Vec<(String, Quant)> {
-		self.totals
-			.iter()
-			.filter_map(
-				|(k, &v)| {
-					if v != 0 {
-						Some((k.clone(), v))
-					} else {
-						None
-					}
-				},
-			)
+		let mut balances: HashMap<String, Quant> = HashMap::new();
+
+		// Sum up the values for each currency
+		for detail in &self.details {
+			*balances
+				.entry(detail.currency().to_string())
+				.or_insert(Quant::zero()) += detail.value();
+		}
+
+		// Filter for currencies that don't sum to zero
+		balances
+			.into_iter()
+			.filter(|&(_, value)| value != Quant::zero())
 			.collect()
+	}
+
+	/// This method will re-sum all entries and apply a conversion entry to
+	/// correct any imbalances. The correcting entry will go to the passed
+	/// account.
+	///
+	/// Intended to be used after currency conversion, rounding, or other
+	/// operations which introduce error.
+	pub fn force_balance(&mut self, account: &str) {
+		let imbalances = self.get_imbalances();
+		for (currency, amount) in imbalances {
+			self.add_system_detail(account, Amount::new(-amount, &currency))
+				.unwrap();
+		}
 	}
 
 	/// Returns those details that were not inserted automatically
@@ -513,22 +526,6 @@ mod tests {
 			entry.add_detail("", Amount::new(Quant::new(1000, 1), "USD"));
 
 		assert!(result.is_err());
-	}
-
-	#[test]
-	fn test_add_detail_multiple_same_currency() {
-		let mut entry = create_entry();
-		entry
-			.add_detail("Assets:Cash", Amount::new(Quant::new(1000, 1), "USD"))
-			.unwrap();
-		entry
-			.add_detail(
-				"Assets:Savings",
-				Amount::new(Quant::new(500, 1), "USD"),
-			)
-			.unwrap();
-
-		assert_eq!(entry.totals.get("USD"), Some(&Quant::new(1500, 1)));
 	}
 
 	#[test]

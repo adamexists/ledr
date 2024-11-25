@@ -73,6 +73,10 @@ struct Cli {
 	#[arg(short, long)]
 	depth: Option<usize>,
 
+	/// Enable warning messages for potential data integrity problems
+	#[arg(long)]
+	emit_warnings: bool,
+
 	/// Negates all currency values
 	#[arg(short, long)]
 	invert: bool,
@@ -109,11 +113,6 @@ fn main() -> Result<(), Error> {
 	let mut parser = parsing::parser::Parser::new();
 	let parse_result = parser.parse(&args.file, &mut ledger, &end)?;
 
-	// For some filtered reports, the end date is an as-of date, so we "rewind"
-	// history if that report is selected by ignoring lot actions after it.
-	// Everything before it is always computed. In other cases, the portfolio
-	// always sees everything, but other date filters may change what we show
-	// about the full up-to-date state.
 	let portfolio = finalize_ledger(
 		&mut ledger,
 		args.precision,
@@ -121,19 +120,26 @@ fn main() -> Result<(), Error> {
 		&parse_result,
 		&begin,
 		&end,
-		args.command == Directive::Lots || args.command == Directive::Ugl,
+		args.emit_warnings,
 	)?;
 
 	match args.command {
-		Directive::Bs => {
-			financial_statement(ledger, args, vec!["Assets", "Liabilities"])?
-		},
-		Directive::Is => {
-			financial_statement(ledger, args, vec!["Income, Expenses"])?
-		},
+		Directive::Bs => financial_statement(
+			ledger,
+			args,
+			true,
+			vec!["Assets", "Liabilities"],
+		)?,
+		Directive::Is => financial_statement(
+			ledger,
+			args,
+			false,
+			vec!["Income", "Expenses"],
+		)?,
 		Directive::Tb => financial_statement(
 			ledger,
 			args,
+			true,
 			vec!["Assets", "Liabilities", "Income", "Expenses"],
 		)?,
 		Directive::As => {
@@ -195,20 +201,15 @@ fn finalize_ledger(
 	parse_result: &ParseResult,
 	begin: &Date,
 	end: &Date,
-	portfolio_ignore_after_end: bool,
+	emit_warnings: bool,
 ) -> Result<Portfolio, Error> {
 	ledger.exchange_rates.finalize(
-		begin,
 		end,
 		&parse_result.max_precision_by_currency,
+		emit_warnings,
 	)?;
 
-	let portfolio_end = match portfolio_ignore_after_end {
-		true => end,
-		false => &Date::max(),
-	};
-
-	let portfolio = ledger.lots.tabulate(portfolio_end)?;
+	let portfolio = ledger.lots.tabulate(end)?;
 
 	if let Some(collapse) = collapse_to {
 		ledger.collapse_to(collapse.clone());
@@ -227,12 +228,13 @@ fn finalize_ledger(
 fn financial_statement(
 	ledger: Ledger,
 	args: Cli,
+	include_equity_by_default: bool,
 	top_level_accounts_to_show: Vec<&str>,
 ) -> Result<(), Error> {
 	let mut totals = ledger_to_totals(ledger, args.currency, args.invert)?;
 
 	let mut top_levels = top_level_accounts_to_show;
-	if !args.ignore_equity {
+	if include_equity_by_default && !args.ignore_equity {
 		top_levels.push("Equity");
 	}
 	totals.filter_top_level(top_levels);

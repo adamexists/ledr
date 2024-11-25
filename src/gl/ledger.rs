@@ -14,7 +14,9 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::gl::entry::{Entry, VIRTUAL_CONVERSION_ACCOUNT};
+use crate::gl::entry::{
+	Entry, VIRTUAL_CONVERSION_ACCOUNT, VIRTUAL_ROUNDING_ERROR_ACCOUNT,
+};
 use crate::gl::exchange_rates::ExchangeRates;
 use crate::investment::action::Action;
 use crate::investment::action_buffer::ActionBuffer;
@@ -69,7 +71,7 @@ impl Ledger {
 			lenient_mode: lenient,
 			declared_currencies: Default::default(),
 			declared_accounts: Default::default(),
-			exchange_rates: ExchangeRates::new(lenient),
+			exchange_rates: ExchangeRates::new(),
 			lots: Default::default(),
 		}
 	}
@@ -308,7 +310,11 @@ impl Ledger {
 				{
 					d.convert_to(&currency, rate)
 				}
-			})
+			});
+
+		self.entries.iter_mut().for_each(|e| {
+			e.force_balance(VIRTUAL_CONVERSION_ACCOUNT);
+		})
 	}
 
 	/// Finalizes the entire ledger by standardizing the visible precision of
@@ -326,14 +332,18 @@ impl Ledger {
 			e.get_date() >= drop_before && e.get_date() <= drop_after
 		});
 
+		self.entries.sort();
 		for entry in &mut self.entries {
 			for (currency, &reso) in max_reso_by_currency {
 				entry.round_for_currency(currency, min(reso, max_reso))?;
+
+				entry.force_balance(VIRTUAL_ROUNDING_ERROR_ACCOUNT);
+				entry.reduce(vec![
+					VIRTUAL_CONVERSION_ACCOUNT,
+					VIRTUAL_ROUNDING_ERROR_ACCOUNT,
+				]);
 			}
 		}
-
-		// TODO: Print and reingest every detail of every entry, sum them, and
-		//  if they do not balance, put the difference in the
 
 		Ok(())
 	}
