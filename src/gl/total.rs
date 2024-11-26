@@ -13,11 +13,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-
 use crate::gl::entry::Detail;
+use crate::gl::exchange_rates::ExchangeRates;
 use crate::gl::ledger::Ledger;
 use crate::util::quant::Quant;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 /// Each total represents one account or segment, one position on the hierarchy,
 /// that may have a balance. For example, for the ledger with hierarchy:
@@ -48,13 +48,13 @@ impl Total {
 		Default::default()
 	}
 
-	pub fn from_ledger(ledger: Ledger) -> Self {
+	pub fn from_ledger(ledger: &Ledger) -> Self {
 		let mut total = Self::new();
 
 		let all_details: Vec<Detail> = ledger
-			.take_entries()
-			.into_iter()
-			.flat_map(|e| e.take_details())
+			.entries()
+			.iter()
+			.flat_map(|e| e.details().iter().cloned())
 			.collect();
 
 		total.ingest_details(&all_details);
@@ -119,14 +119,47 @@ impl Total {
 		self.amounts = currency_totals.into_iter().collect();
 	}
 
-	/// Designed for use with collapsed reports, we drop totals not in the
-	/// target currency. This is so the collapsed report only shows the
-	/// currency requested and not anything that could not be converted to
-	/// it.
-	pub fn ignore_currencies_except(&mut self, currency: &String) {
-		self.amounts.retain(|c, _| c == currency);
+	/// Designed for use with currency reports, we convert all totals to
+	/// the target currency. If not possible, currencies are retained iff
+	/// the given bool is marked true.
+	pub fn collapse_to(
+		&mut self,
+		currency: &String,
+		exchange_rates: &mut ExchangeRates,
+		ignore_non_convertable_balances: bool,
+	) {
+		let mut converted_total = Quant::zero();
+		let mut retained_balances = BTreeMap::new();
+
+		// Iterate through all balances in `self.amounts` and attempt to convert them
+		for (c, balance) in &self.amounts {
+			if c == currency {
+				// Add existing balances in the target currency directly
+				converted_total += *balance;
+			} else if let Some(rate) =
+				exchange_rates.get_latest_rate(c, currency)
+			{
+				// Convert balances using the exchange rate
+				converted_total += *balance * rate;
+			} else if !ignore_non_convertable_balances {
+				// Retain the balance if conversion is not possible and retention is allowed
+				retained_balances.insert(c.clone(), *balance);
+			}
+		}
+
+		self.amounts.clear();
+		self.amounts.insert(currency.clone(), converted_total);
+		if !ignore_non_convertable_balances {
+			self.amounts.extend(retained_balances);
+		}
+
+		// Recursively collapse subtotals
 		for subtotal in self.subtotals.values_mut() {
-			subtotal.ignore_currencies_except(currency);
+			subtotal.collapse_to(
+				currency,
+				exchange_rates,
+				ignore_non_convertable_balances,
+			);
 		}
 	}
 
@@ -138,6 +171,16 @@ impl Total {
 
 		for subtotal in self.subtotals.values_mut() {
 			subtotal.invert();
+		}
+	}
+
+	pub fn set_max_precision(&mut self, max_precision: u32) {
+		for quant in self.amounts.values_mut() {
+			quant.set_render_precision(max_precision, true);
+		}
+
+		for subtotal in self.subtotals.values_mut() {
+			subtotal.set_max_precision(max_precision);
 		}
 	}
 }

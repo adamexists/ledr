@@ -16,5 +16,6 @@
 
 pub mod ledger_reporter;
 pub mod portfolio_reporter;
+pub mod rate_reporter;
 pub mod statement_reporter;
 pub mod table;

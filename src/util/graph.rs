@@ -13,11 +13,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-
 use crate::util::amount::Amount;
 use crate::util::date::Date;
 use crate::util::quant::Quant;
 use anyhow::{bail, Error};
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 #[derive(Debug, Default)]
@@ -45,7 +45,6 @@ impl Rate {
 			.quant
 			.iter()
 			.zip(std::iter::repeat(self.observation_date))
-			.map(|(rate, date)| (rate, date))
 			.max_by_key(|&(_, date)| date)
 			.map(|(rate, _)| rate);
 
@@ -140,11 +139,13 @@ impl Graph {
 				node.edges
 					.entry(target_currency)
 					.and_modify(|existing_rate| {
-						if &existing_rate.observation_date < date {
-							existing_rate.quant = vec![rate];
-							existing_rate.observation_date = *date;
-						} else if &existing_rate.observation_date == date {
-							existing_rate.quant.push(rate);
+						match &existing_rate.observation_date.cmp(date) {
+							Ordering::Less => {
+								existing_rate.quant = vec![rate];
+								existing_rate.observation_date = *date;
+							},
+							Ordering::Equal => existing_rate.quant.push(rate),
+							Ordering::Greater => {},
 						}
 					})
 					.or_insert_with(|| Rate {
@@ -249,11 +250,12 @@ impl Graph {
 		false
 	}
 
-	/// Reports the average rate between two currencies using all shortest paths.
+	/// Reports the average rate between two currencies using all shortest paths,
+	/// as well as the number of hops it took to convert the rate (adjacent = 1).
 	/// Returns None if no path exists between the currencies.
-	pub fn convert(&self, base: &str, quote: &str) -> Option<Quant> {
+	pub fn convert(&self, base: &str, quote: &str) -> Option<(Quant, u32)> {
 		if base == quote {
-			return Some(Quant::from_frac(1, 1));
+			return Some((Quant::from_frac(1, 1), 0));
 			// TODO: Implement reciprocal.
 			// TODO: This whole graph traversal thing is not working well.
 		}
@@ -301,7 +303,10 @@ impl Graph {
 
 		if !rates.is_empty() {
 			let total_rate: Quant = rates.iter().cloned().sum();
-			Some(total_rate / Quant::from_i128(rates.len() as i128))
+			Some((
+				total_rate / Quant::from_i128(rates.len() as i128),
+				shortest_path_length.unwrap(),
+			))
 		} else {
 			None
 		}
@@ -339,7 +344,7 @@ impl Graph {
 	/// Returns all rates as tuples of (base, quote, rate).
 	/// This includes both direct and indirect conversion rates.
 	/// Ensures each rate is calculated only once and the process is deterministic.
-	pub fn get_all_rates(&self) -> Vec<(String, String, Quant)> {
+	pub fn get_all_direct_rates(&self) -> Vec<(String, String, Quant)> {
 		let mut rates = Vec::new();
 
 		let mut currencies: Vec<_> = self.nodes.keys().cloned().collect();
@@ -347,7 +352,38 @@ impl Graph {
 
 		for (i, base) in currencies.iter().enumerate() {
 			for quote in currencies.iter().skip(i + 1) {
-				if let Some(rate) = self.convert(base, quote) {
+				if let Some((rate, path_len)) = self.convert(base, quote) {
+					if path_len != 1 {
+						continue;
+					}
+
+					rates.push((base.clone(), quote.clone(), rate));
+					rates.push((
+						quote.clone(),
+						base.clone(),
+						Quant::from_i128(1) / rate,
+					)); // Include inverse rate
+				}
+			}
+		}
+
+		rates
+	}
+
+	/// Gets only those rates that are not adjacent, i.e. two-hop or more.
+	pub fn get_all_indirect_rates(&self) -> Vec<(String, String, Quant)> {
+		let mut rates = Vec::new();
+
+		let mut currencies: Vec<_> = self.nodes.keys().cloned().collect();
+		currencies.sort(); // Ensure deterministic order
+
+		for (i, base) in currencies.iter().enumerate() {
+			for quote in currencies.iter().skip(i + 1) {
+				if let Some((rate, path_len)) = self.convert(base, quote) {
+					if path_len < 2 {
+						continue;
+					}
+
 					rates.push((base.clone(), quote.clone(), rate));
 					rates.push((
 						quote.clone(),
@@ -386,9 +422,12 @@ mod tests {
 
 		let expected_output = Quant::new(5, 1);
 		let result = graph.convert("USD", "EUR");
-
 		assert!(result.is_some());
-		assert_eq!(result.unwrap(), expected_output);
+
+		let (out, path_len) = result.unwrap();
+
+		assert_eq!(expected_output, out);
+		assert_eq!(path_len, 1);
 		assert!(!graph.has_inconsistent_cycle());
 	}
 
@@ -403,8 +442,12 @@ mod tests {
 
 		let expected_output = Quant::new(2, 0);
 		let result = graph.convert("EUR", "USD");
+		assert!(result.is_some());
 
-		assert_eq!(result.unwrap(), expected_output);
+		let (out, path_len) = result.unwrap();
+
+		assert_eq!(expected_output, out);
+		assert_eq!(path_len, 1);
 		assert!(!graph.has_inconsistent_cycle());
 	}
 
@@ -425,8 +468,12 @@ mod tests {
 
 		let expected_output = Quant::new(1, 1);
 		let result = graph.convert("USD", "GBP");
+		assert!(result.is_some());
 
-		assert_eq!(result.unwrap(), expected_output);
+		let (out, path_len) = result.unwrap();
+
+		assert_eq!(expected_output, out);
+		assert_eq!(path_len, 2);
 		assert!(!graph.has_inconsistent_cycle());
 	}
 
@@ -447,8 +494,12 @@ mod tests {
 
 		let expected_output = Quant::new(10, 0);
 		let result = graph.convert("GBP", "USD");
+		assert!(result.is_some());
 
-		assert_eq!(result.unwrap(), expected_output);
+		let (out, path_len) = result.unwrap();
+
+		assert_eq!(expected_output, out);
+		assert_eq!(path_len, 2);
 		assert!(!graph.has_inconsistent_cycle());
 	}
 
@@ -458,7 +509,7 @@ mod tests {
 
 		let result = graph.convert("USD", "USD");
 
-		assert_eq!(result.unwrap(), Quant::from_i128(1));
+		assert_eq!(result.unwrap().0, Quant::from_i128(1));
 	}
 
 	#[test]
@@ -512,8 +563,12 @@ mod tests {
 		let expected_output = Quant::new(300, 0);
 		let result = graph.convert("INR", "USD");
 		let direct_rate = graph.get_direct_rate("GBP", "EUR", false).unwrap();
+		assert!(result.is_some());
 
-		assert_eq!(result.unwrap(), expected_output);
+		let (out, path_len) = result.unwrap();
+
+		assert_eq!(expected_output, out);
+		assert_eq!(path_len, 4);
 		assert!(!graph.has_inconsistent_cycle());
 		assert_eq!(direct_rate, Quant::new(5, 0));
 	}
@@ -770,8 +825,12 @@ mod tests {
 
 		let expected_output = Quant::new(1_000_000_000_000, 0);
 		let result = graph.convert("USD", "BTC");
+		assert!(result.is_some());
 
-		assert_eq!(result.unwrap(), expected_output);
+		let (out, path_len) = result.unwrap();
+
+		assert_eq!(expected_output, out);
+		assert_eq!(path_len, 1);
 		assert!(!graph.has_inconsistent_cycle());
 	}
 
@@ -786,8 +845,12 @@ mod tests {
 
 		let expected_output = Quant::from_frac(1, 1_000_000_000_000);
 		let result = graph.convert("USD", "BTC");
+		assert!(result.is_some());
 
-		assert_eq!(result.unwrap(), expected_output);
+		let (out, path_len) = result.unwrap();
+
+		assert_eq!(expected_output, out);
+		assert_eq!(path_len, 1);
 		assert!(!graph.has_inconsistent_cycle());
 	}
 
@@ -808,8 +871,12 @@ mod tests {
 
 		let expected_output = Quant::new(1_000_000_000_000_000_000, 0);
 		let result = graph.convert("USD", "ETH");
+		assert!(result.is_some());
 
-		assert_eq!(result.unwrap(), expected_output);
+		let (out, path_len) = result.unwrap();
+
+		assert_eq!(expected_output, out);
+		assert_eq!(path_len, 2);
 		assert!(!graph.has_inconsistent_cycle());
 	}
 
@@ -823,7 +890,12 @@ mod tests {
 			.expect("Could not add rate");
 
 		let result = graph.convert("USD", "USD");
-		assert_eq!(result.unwrap(), Quant::from_i128(1));
+		assert!(result.is_some());
+
+		let (out, path_len) = result.unwrap();
+
+		assert_eq!(Quant::from_i128(1), out);
+		assert_eq!(path_len, 0);
 		assert!(!graph.has_inconsistent_cycle());
 	}
 
@@ -839,8 +911,12 @@ mod tests {
 		let expected_output =
 			Quant::from_frac(12042729108518161, 188167638891241);
 		let result = graph.convert("USD", "EUR");
+		assert!(result.is_some());
 
-		assert_eq!(result.unwrap(), expected_output);
+		let (out, path_len) = result.unwrap();
+
+		assert_eq!(expected_output, out);
+		assert_eq!(path_len, 1);
 		assert!(!graph.has_inconsistent_cycle());
 	}
 
@@ -855,8 +931,12 @@ mod tests {
 
 		let expected_output = Quant::from_frac(1, 987654321);
 		let result = graph.convert("JPY", "USD");
+		assert!(result.is_some());
 
-		assert_eq!(result.unwrap(), expected_output);
+		let (out, path_len) = result.unwrap();
+
+		assert_eq!(expected_output, out);
+		assert_eq!(path_len, 1);
 		assert!(!graph.has_inconsistent_cycle());
 	}
 
@@ -880,8 +960,12 @@ mod tests {
 		let expected_output =
 			Quant::from_frac(108384561976663449, 752670555564964);
 		let result = graph.convert("USD", "GBP");
+		assert!(result.is_some());
 
-		assert_eq!(result.unwrap(), expected_output);
+		let (out, path_len) = result.unwrap();
+
+		assert_eq!(expected_output, out);
+		assert_eq!(path_len, 2);
 		assert!(!graph.has_inconsistent_cycle());
 	}
 
@@ -899,8 +983,12 @@ mod tests {
 		let expected_output =
 			Quant::from_frac(1_000_000_000_014_000_000_000_049, 1);
 		let result = graph.convert("BTC", "ETH");
+		assert!(result.is_some());
 
-		assert_eq!(result.unwrap(), expected_output);
+		let (out, path_len) = result.unwrap();
+
+		assert_eq!(expected_output, out);
+		assert_eq!(path_len, 1);
 		assert!(!graph.has_inconsistent_cycle());
 	}
 
@@ -930,8 +1018,12 @@ mod tests {
 		let expected_output =
 			Quant::from_frac(42337718750529225, 770734662945162304);
 		let result = graph.convert("USD", "AUD");
+		assert!(result.is_some());
 
-		assert_eq!(result.unwrap(), expected_output);
+		let (out, path_len) = result.unwrap();
+
+		assert_eq!(expected_output, out);
+		assert_eq!(path_len, 3);
 		assert!(!graph.has_inconsistent_cycle());
 	}
 

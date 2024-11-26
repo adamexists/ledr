@@ -19,7 +19,7 @@ use crate::reports::table::Table;
 use crate::util::amount::Amount;
 use crate::util::date::Date;
 use crate::util::quant::Quant;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 /// Struct for handling and displaying an ordered list of lots, for reports
 pub struct PortfolioReporter {

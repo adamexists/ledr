@@ -29,6 +29,8 @@ impl LedgerReporter {
 		Self { entries }
 	}
 
+	// TODO: This is broken somewhat now, with the changes to currency
+	//  conversion (not happening in the ledger at all).
 	pub fn account_summary(&self, account: &String, currency: &String) {
 		if self.entries.is_empty() {
 			println!("No data");

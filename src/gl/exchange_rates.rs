@@ -19,7 +19,7 @@ use crate::util::date::Date;
 use crate::util::graph::Graph;
 use crate::util::quant::Quant;
 use anyhow::{bail, Error};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Default)]
 pub struct ExchangeRates {
@@ -194,7 +194,7 @@ impl ExchangeRates {
 			//  given day. Just... think about it when I'm not so tired!
 
 			// Make sure exchange rates inherit desired precision from user
-			for (base, quote, mut rate) in graph.get_all_rates() {
+			for (base, quote, mut rate) in graph.get_all_direct_rates() {
 				match (
 					max_precision_by_currency.get(&base),
 					max_precision_by_currency.get(&quote),
@@ -219,7 +219,9 @@ impl ExchangeRates {
 			rates.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
 		}
 
-		for (base, quote, mut rate) in self.primary_graph.get_all_rates() {
+		for (base, quote, mut rate) in
+			self.primary_graph.get_all_indirect_rates()
+		{
 			match (
 				max_precision_by_currency.get(&base),
 				max_precision_by_currency.get(&quote),
@@ -239,7 +241,7 @@ impl ExchangeRates {
 			resolved
 				.entry((base.clone(), quote.clone()))
 				.or_insert_with(Vec::new)
-				.push((*drop_after, rate));
+				.push((Date::max(), rate));
 		}
 
 		self.resolved_rates = resolved;
@@ -274,6 +276,13 @@ impl ExchangeRates {
 		self.resolved_rates
 			.get(&(base.to_string(), quote.to_string()))
 			.and_then(|rates| rates.first().map(|(_, rate)| *rate))
+	}
+
+	/// Returns the final map of resolved rates. Consumes this.
+	pub fn take_all_rates(
+		self,
+	) -> BTreeMap<(String, String), Vec<(Date, Quant)>> {
+		self.resolved_rates
 	}
 }
 

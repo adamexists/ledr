@@ -1,4 +1,4 @@
-# Collapsing will exclude currencies it can't convert from
+# Collapsing will include currencies it can't convert from
 
 ! 2024-11-10 currency USD
 ! 2024-11-10 currency BTC

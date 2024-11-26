@@ -3,6 +3,8 @@
     USD 2,000.00        Questionable
         USD 0.00        ETH
     USD 1,000.00      Cash
-   USD -3,000.00    Equity:OpeningBalances
+   USD -3,000.00    Equity
+   USD -3,000.00      OpeningBalances
+        USD 0.00      Conversions
 ------------------
         USD 0.00

@@ -84,10 +84,7 @@ impl StatementReporter {
 			let abs_sum_a = sum_a.abs();
 			let abs_sum_b = sum_b.abs();
 
-			match abs_sum_b
-				.partial_cmp(&abs_sum_a)
-				.unwrap_or(std::cmp::Ordering::Equal)
-			{
+			match abs_sum_b.cmp(&abs_sum_a) {
 				std::cmp::Ordering::Equal => {
 					match (sum_b > 0).cmp(&(sum_a > 0)) {
 						std::cmp::Ordering::Equal => name_a.cmp(name_b),

@@ -20,7 +20,7 @@ use crate::util::date::Date;
 use crate::util::quant::Quant;
 use anyhow::{bail, Error};
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::string::ToString;
 
 pub(crate) const VIRTUAL_CONVERSION_ACCOUNT: &str = "Equity:Conversions";
@@ -133,12 +133,8 @@ impl Entry {
 		}
 	}
 
-	pub fn details(&mut self) -> &mut Vec<Detail> {
-		&mut self.details
-	}
-
-	pub fn take_details(self) -> Vec<Detail> {
-		self.details
+	pub fn details(&self) -> &Vec<Detail> {
+		&self.details
 	}
 
 	/// Returns the net amount from this entry on the given account, i.e.
@@ -180,7 +176,7 @@ impl Entry {
 			sum_of_error.set_render_precision(decimal_places, true);
 			self.add_system_detail(
 				VIRTUAL_ROUNDING_ERROR_ACCOUNT,
-				Amount::new(sum_of_error, currency),
+				Amount::new(-sum_of_error, currency),
 			)?;
 		}
 
@@ -406,13 +402,14 @@ impl Entry {
 	///
 	/// Intended to be used after currency conversion, rounding, or other
 	/// operations which introduce error.
-	pub fn force_balance(&mut self, account: &str) {
-		let imbalances = self.get_imbalances();
-		for (currency, amount) in imbalances {
-			self.add_system_detail(account, Amount::new(-amount, &currency))
-				.unwrap();
-		}
-	}
+	/// TODO: Confirm we don't need this, and delete if not.
+	// pub fn force_balance(&mut self, account: &str) {
+	// 	let imbalances = self.get_imbalances();
+	// 	for (currency, amount) in imbalances {
+	// 		self.add_system_detail(account, Amount::new(-amount, &currency))
+	// 			.unwrap();
+	// 	}
+	// }
 
 	/// Returns those details that were not inserted automatically
 	fn get_actual_details(&self) -> Vec<Detail> {
@@ -475,10 +472,6 @@ impl Detail {
 
 	pub fn value(&self) -> Quant {
 		self.amount.value
-	}
-
-	pub fn convert_to(&mut self, currency: &str, rate: Quant) {
-		self.amount.convert_to(currency, rate);
 	}
 }
 
@@ -618,10 +611,7 @@ mod tests {
 			.add_detail("Assets:Cash", Amount::new(Quant::new(1000, 1), "USD"))
 			.unwrap();
 		entry
-			.add_detail(
-				"Assets:Bank",
-				Amount::new(Quant::new(-2000, 1), &"EUR".to_string()),
-			)
+			.add_detail("Assets:Bank", Amount::new(Quant::new(-2000, 1), "EUR"))
 			.unwrap();
 
 		let mut rates = ExchangeRates::default();
@@ -766,7 +756,7 @@ mod tests {
 		#[test]
 		fn test_rounding_and_conversion_determinism() {
 			let mut rng = rand::thread_rng();
-			let currencies = vec!["USD", "EUR", "GBP", "JPY", "AUD"];
+			let currencies = ["USD", "EUR", "GBP", "JPY", "AUD"];
 			let decimal_places = 2;
 
 			// Generate a random Entry with random Details
@@ -791,10 +781,6 @@ mod tests {
 			for _ in 0..100 {
 				let mut results = vec![];
 				let currency = currencies.choose(&mut rng).unwrap();
-				let random_rate = Quant::from_frac(
-					rng.gen_range(1..100),
-					rng.gen_range(1..10),
-				);
 				for _ in 0..100 {
 					let mut test_entry = entry.clone();
 
@@ -802,13 +788,6 @@ mod tests {
 					test_entry
 						.round_for_currency(currency, decimal_places)
 						.expect("Rounding failed");
-
-					// Apply a random conversion rate to a random detail
-					for detail in test_entry.details.iter_mut() {
-						if detail.currency() == currency {
-							detail.convert_to("TEST", random_rate);
-						}
-					}
 
 					// Collect results
 					results.push(test_entry.details.clone());

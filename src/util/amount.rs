@@ -38,11 +38,6 @@ impl Amount {
 			currency: currency.to_string(),
 		}
 	}
-
-	pub fn convert_to(&mut self, currency: &str, rate: Quant) {
-		self.currency = currency.to_owned();
-		self.value *= rate;
-	}
 }
 
 impl Neg for Amount {

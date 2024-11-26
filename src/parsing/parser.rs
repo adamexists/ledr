@@ -20,7 +20,7 @@ use crate::util::date::Date;
 use crate::util::quant::Quant;
 use anyhow::{anyhow, bail, Error};
 use regex::Regex;
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, Seek};

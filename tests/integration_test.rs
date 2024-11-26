@@ -73,6 +73,7 @@ fn test_integration_max_depth() {
 	execute("maxdepth", test_cases, true, "bs", vec!["-d", "2"]);
 }
 
+#[test]
 fn test_integration_low_precision() {
 	let test_cases = collect_test_cases("precision");
 	execute(
@@ -167,7 +168,12 @@ fn execute(
 			continue;
 		}
 
-		assert!(output.status.success(), "{} failed processing!", input_file);
+		assert!(
+			output.status.success(),
+			"{} failed processing: {}",
+			input_file,
+			String::from_utf8_lossy(&output.stderr)
+		);
 
 		let stdout = String::from_utf8_lossy(&output.stdout);
 

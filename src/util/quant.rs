@@ -160,7 +160,7 @@ impl Quant {
 		self.is_negative = self.is_negative && rounded_quotient > 0;
 
 		self.reduce();
-		initial - *self
+		*self - initial
 	}
 
 	pub fn render_precision(&self) -> u32 {
@@ -206,6 +206,14 @@ impl Quant {
 			a = temp;
 		}
 		a
+	}
+
+	pub fn recip(&self) -> Self {
+		Self {
+			numerator: self.denominator,
+			denominator: self.numerator,
+			..self.clone()
+		}
 	}
 }
 
@@ -271,9 +279,21 @@ impl Add for Quant {
 	type Output = Self;
 
 	fn add(self, rhs: Self) -> Self::Output {
-		// Calculate the resulting numerator and denominator
-		let term_a = self.numerator * rhs.denominator;
-		let term_b = rhs.numerator * self.denominator;
+		// Special cases for zero
+		if self.numerator == 0 {
+			return rhs;
+		}
+		if rhs.numerator == 0 {
+			return self;
+		}
+
+		// Compute GCD of denominators
+		let gcd = Self::gcd(self.denominator, rhs.denominator);
+		let lcm = self.denominator / gcd * rhs.denominator;
+
+		// Scale numerators to the common denominator
+		let term_a = self.numerator * (lcm / self.denominator);
+		let term_b = rhs.numerator * (lcm / rhs.denominator);
 
 		let (numerator, result_is_negative) =
 			match (self.is_negative, rhs.is_negative) {
@@ -297,7 +317,7 @@ impl Add for Quant {
 
 		let mut out = Self {
 			numerator,
-			denominator: self.denominator * rhs.denominator,
+			denominator: lcm,
 			render_precision: self.render_precision.max(rhs.render_precision),
 			is_negative: result_is_negative && numerator > 0,
 		};
@@ -322,40 +342,7 @@ impl Sub for Quant {
 	type Output = Self;
 
 	fn sub(self, rhs: Self) -> Self::Output {
-		// Calculate the resulting numerator and denominator
-		let term_a = self.numerator * rhs.denominator;
-		let term_b = rhs.numerator * self.denominator;
-
-		let (numerator, result_is_negative) =
-			match (self.is_negative, !rhs.is_negative) {
-				(true, true) => (term_a + term_b, true),
-				(false, false) => (term_a + term_b, false),
-				(true, false) => {
-					if term_a > term_b {
-						(term_a - term_b, true)
-					} else {
-						(term_b - term_a, false)
-					}
-				},
-				(false, true) => {
-					if term_a > term_b {
-						(term_a - term_b, false)
-					} else {
-						(term_b - term_a, true)
-					}
-				},
-			};
-
-		let denominator = self.denominator * rhs.denominator;
-
-		let mut out = Self {
-			numerator,
-			denominator,
-			render_precision: self.render_precision.max(rhs.render_precision),
-			is_negative: result_is_negative && numerator > 0,
-		};
-		out.reduce();
-		out
+		self + (-rhs)
 	}
 }
 
@@ -369,8 +356,18 @@ impl Mul for Quant {
 	type Output = Self;
 
 	fn mul(self, rhs: Self) -> Self::Output {
-		let numerator = self.numerator * rhs.numerator;
-		let denominator = self.denominator * rhs.denominator;
+		// reduce overflow risk
+		let gcd_self = Self::gcd(self.numerator, rhs.denominator);
+		let gcd_rhs = Self::gcd(rhs.numerator, self.denominator);
+
+		let reduced_numerator_self = self.numerator / gcd_self;
+		let reduced_denominator_self = self.denominator / gcd_rhs;
+		let reduced_numerator_rhs = rhs.numerator / gcd_rhs;
+		let reduced_denominator_rhs = rhs.denominator / gcd_self;
+
+		let numerator = reduced_numerator_self * reduced_numerator_rhs;
+		let denominator = reduced_denominator_self * reduced_denominator_rhs;
+
 		let is_negative = numerator > 0 && (self.is_negative ^ rhs.is_negative);
 
 		let mut out = Self {
@@ -428,18 +425,7 @@ impl Div for Quant {
 			panic!("Attempt to divide by zero");
 		}
 
-		let numerator = self.numerator * rhs.denominator;
-		let denominator = self.denominator * rhs.numerator;
-		let is_negative = numerator > 0 && (self.is_negative ^ rhs.is_negative);
-
-		let mut out = Self {
-			numerator,
-			denominator,
-			is_negative,
-			render_precision: self.render_precision.max(rhs.render_precision),
-		};
-		out.reduce();
-		out
+		self * rhs.recip()
 	}
 }
 
@@ -497,11 +483,8 @@ impl PartialEq for Quant {
 
 impl PartialEq<Quant> for i128 {
 	fn eq(&self, other: &Quant) -> bool {
-		if (*self < 0) ^ other.is_negative {
-			return false;
-		};
-
-		*self as u128 * other.denominator == other.numerator
+		let s = Quant::from_i128(*self);
+		&s == other
 	}
 }
 
@@ -515,57 +498,15 @@ impl PartialOrd for Quant {
 
 impl PartialOrd<i128> for Quant {
 	fn partial_cmp(&self, other: &i128) -> Option<Ordering> {
-		if self.numerator == 0 && *other == 0 {
-			return Some(Ordering::Equal);
-		}
-
-		let self_positive = !self.is_negative;
-		let other_positive = *other >= 0;
-
-		match (self_positive, other_positive) {
-			(true, false) => Some(Ordering::Greater),
-			(false, true) => Some(Ordering::Less),
-			_ => {
-				let other_abs = (*other).unsigned_abs();
-				let scaled_other = other_abs * self.denominator;
-
-				if other_positive {
-					scaled_other
-						.partial_cmp(&self.numerator)
-						.map(Ordering::reverse)
-				} else {
-					self.numerator
-						.partial_cmp(&scaled_other)
-						.map(Ordering::reverse)
-				}
-			},
-		}
+		let o = Quant::from_i128(*other);
+		Some(self.cmp(&o))
 	}
 }
 
 impl PartialOrd<Quant> for i128 {
 	fn partial_cmp(&self, other: &Quant) -> Option<Ordering> {
-		if *self == 0 && other.numerator == 0 {
-			return Some(Ordering::Equal);
-		}
-
-		let self_positive = *self >= 0;
-		let other_positive = !other.is_negative;
-
-		match (self_positive, other_positive) {
-			(true, false) => Some(Ordering::Greater),
-			(false, true) => Some(Ordering::Less),
-			_ => {
-				let self_abs = self.unsigned_abs();
-				let scaled_self = self_abs * other.denominator;
-
-				if self_positive {
-					scaled_self.partial_cmp(&other.numerator)
-				} else {
-					other.numerator.partial_cmp(&scaled_self)
-				}
-			},
-		}
+		let s = Quant::from_i128(*self);
+		Some(s.cmp(other))
 	}
 }
 
@@ -576,18 +517,22 @@ impl Ord for Quant {
 		}
 
 		match (self.is_negative, other.is_negative) {
-			(false, true) => Ordering::Greater,
-			(true, false) => Ordering::Less,
-			_ => {
-				let scaled_self = self.numerator * other.denominator;
-				let scaled_other = other.numerator * self.denominator;
+			(true, false) => return Ordering::Less,
+			(false, true) => return Ordering::Greater,
+			_ => {},
+		};
 
-				if self.is_negative {
-					scaled_other.cmp(&scaled_self)
-				} else {
-					scaled_self.cmp(&scaled_other)
-				}
-			},
+		// limit overflow by reducing both in relation to each other
+		let gcd = Self::gcd(self.denominator, other.denominator);
+		let lcm = self.denominator / gcd * other.denominator;
+
+		let left = self.numerator * (lcm / self.denominator);
+		let right = other.numerator * (lcm / other.denominator);
+
+		if self.is_negative {
+			right.cmp(&left)
+		} else {
+			left.cmp(&right)
 		}
 	}
 }
@@ -597,7 +542,7 @@ impl Hash for Quant {
 		self.numerator.hash(state);
 		self.denominator.hash(state);
 		self.is_negative.hash(state);
-		// `render_precision` intentionally excluded from the hash.
+		// `render_precision` intentionally excluded from the hash
 	}
 }
 
@@ -1567,7 +1512,7 @@ mod tests {
 
 			assert!(a >= b, "Expected a >= b (both equal to 2.5)");
 			assert!(c >= a, "Expected c >= a (3.0 >= 2.5)");
-			assert!(!(d >= a), "Expected d < a (2.0 < 2.5)");
+			assert!(d < a, "Expected d < a (2.0 < 2.5)");
 		}
 
 		#[test]
@@ -1579,7 +1524,7 @@ mod tests {
 
 			assert!(a <= b, "Expected a <= b (both equal to 2.5)");
 			assert!(a <= c, "Expected a <= c (2.5 <= 3.0)");
-			assert!(!(a <= d), "Expected a > d (2.5 > 2.0)");
+			assert!(a > d, "Expected a > d (2.5 > 2.0)");
 		}
 
 		#[test]
@@ -1615,7 +1560,7 @@ mod tests {
 
 			assert!(a < b, "Expected a < b (3.5 < 4.5)");
 			assert!(b > a, "Expected b > a (4.5 > 3.5)");
-			assert!(a == c, "Expected a == c (3.5 == 3.5)");
+			assert_eq!(a, c, "Expected a == c (3.5 == 3.5)");
 		}
 
 		#[test]
@@ -1958,6 +1903,42 @@ mod tests {
 				quant.to_string(),
 				"0.000",
 				"Expected 0.000 after rounding down small value"
+			);
+		}
+
+		#[test]
+		fn test_rounding_error_for_one_third() {
+			let mut fraction = Quant {
+				numerator: 1,
+				denominator: 3,
+				is_negative: false,
+				render_precision: 0,
+			};
+
+			let rounding_error = fraction.round(2);
+
+			let expected_rounded = Quant {
+				numerator: 33,
+				denominator: 100,
+				is_negative: false,
+				render_precision: 2,
+			};
+
+			let expected_error = Quant {
+				numerator: 1,
+				denominator: 300,
+				is_negative: true,
+				render_precision: 0,
+			};
+
+			assert_eq!(
+				fraction, expected_rounded,
+				"The fraction was not rounded correctly."
+			);
+
+			assert_eq!(
+				rounding_error, expected_error,
+				"The rounding error is incorrect."
 			);
 		}
 	}

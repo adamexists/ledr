@@ -22,10 +22,9 @@ use crate::investment::action::Action;
 use crate::investment::action_buffer::ActionBuffer;
 use crate::util::amount::Amount;
 use crate::util::date::Date;
-use crate::util::graph::Graph;
 use anyhow::{bail, Error};
 use std::cmp::min;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 /// The only valid top-level account names. This is an accounting system, after
 /// all! Society has rules! Granted, there is no functional reason to have this
@@ -295,30 +294,6 @@ impl Ledger {
 	// -- TABULATING --
 	// ----------------
 
-	/// Converts all possible balances to the currency provided, if exchange
-	/// rates are available. The underlying exchange rate system assembles a
-	/// graph data structure for indirect conversions, so if there is any path
-	/// to an exchange rate, the exchange will be done. Note that all rates
-	/// must have been observed on the same day for this graph traversal to
-	/// take place.
-	pub fn collapse_to(&mut self, currency: String) {
-		self.entries
-			.iter_mut()
-			.flat_map(|e| e.details())
-			.for_each(|d| {
-				if let Some(rate) =
-					self.exchange_rates.get_latest_rate(d.currency(), &currency)
-				{
-					d.convert_to(&currency, rate)
-				}
-			});
-
-		self.entries.iter_mut().for_each(|e| {
-			e.force_balance(VIRTUAL_CONVERSION_ACCOUNT);
-			e.reduce(vec![VIRTUAL_CONVERSION_ACCOUNT]);
-		})
-	}
-
 	/// Finalizes the entire ledger by standardizing the visible precision of
 	/// each currency, and dropping entries outside the passed date range.
 	pub fn finalize(
@@ -339,15 +314,20 @@ impl Ledger {
 			for (currency, &reso) in max_reso_by_currency {
 				entry.round_for_currency(currency, min(reso, max_reso))?;
 
+				// TODO: Pretty sure it is conceptually invalid to have this.
+				// entry.force_balance(VIRTUAL_ROUNDING_ERROR_ACCOUNT);
 				entry.reduce(vec![
 					VIRTUAL_CONVERSION_ACCOUNT,
 					VIRTUAL_ROUNDING_ERROR_ACCOUNT,
 				]);
-				entry.force_balance(VIRTUAL_ROUNDING_ERROR_ACCOUNT);
 			}
 		}
 
 		Ok(())
+	}
+
+	pub fn entries(&self) -> &Vec<Entry> {
+		&self.entries
 	}
 
 	pub fn take_entries(self) -> Vec<Entry> {

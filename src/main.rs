@@ -19,6 +19,7 @@ use crate::investment::portfolio::{LotFilter, Portfolio};
 use crate::parsing::parser::ParseResult;
 use crate::reports::ledger_reporter::LedgerReporter;
 use crate::reports::portfolio_reporter::PortfolioReporter;
+use crate::reports::rate_reporter::RateReporter;
 use crate::reports::statement_reporter::StatementReporter;
 use crate::util::date::Date;
 use anyhow::{bail, Error};
@@ -97,6 +98,7 @@ enum Directive {
 	Tb, // trial balance
 
 	As, // account summary
+	Er, // exchange rates
 
 	Lots, // open lots report
 	Rgl,  // realized gains/losses report
@@ -116,7 +118,6 @@ fn main() -> Result<(), Error> {
 	let portfolio = finalize_ledger(
 		&mut ledger,
 		args.precision,
-		&args.currency,
 		&parse_result,
 		&begin,
 		&end,
@@ -155,6 +156,11 @@ fn main() -> Result<(), Error> {
 			} else {
 				bail!("No account specified");
 			}
+		},
+		Directive::Er => {
+			let rates = ledger.exchange_rates.take_all_rates();
+			let reporter = RateReporter::new(rates);
+			reporter.print_all_rates();
 		},
 		Directive::Lots => {
 			let reporter = PortfolioReporter::new(
@@ -197,7 +203,6 @@ fn main() -> Result<(), Error> {
 fn finalize_ledger(
 	ledger: &mut Ledger,
 	max_precision: Option<u32>,
-	collapse_to: &Option<String>,
 	parse_result: &ParseResult,
 	begin: &Date,
 	end: &Date,
@@ -210,10 +215,6 @@ fn finalize_ledger(
 	)?;
 
 	let portfolio = ledger.lots.tabulate(end)?;
-
-	if let Some(collapse) = collapse_to {
-		ledger.collapse_to(collapse.clone());
-	}
 
 	ledger.finalize(
 		&parse_result.max_precision_by_currency,
@@ -232,6 +233,9 @@ fn financial_statement(
 	top_level_accounts_to_show: Vec<&str>,
 ) -> Result<(), Error> {
 	let mut totals = ledger_to_totals(ledger, args.currency, args.invert)?;
+	if let Some(p) = args.precision {
+		totals.set_max_precision(p);
+	}
 
 	let mut top_levels = top_level_accounts_to_show;
 	if include_equity_by_default && !args.ignore_equity {
@@ -246,14 +250,14 @@ fn financial_statement(
 }
 
 fn ledger_to_totals(
-	ledger: Ledger,
+	mut ledger: Ledger,
 	collapse: Option<String>,
 	invert: bool,
 ) -> Result<Total, Error> {
-	let mut totals = Total::from_ledger(ledger);
+	let mut totals = Total::from_ledger(&ledger);
 
 	if let Some(collapse) = &collapse {
-		totals.ignore_currencies_except(collapse);
+		totals.collapse_to(collapse, &mut ledger.exchange_rates, false);
 	}
 
 	if invert {
