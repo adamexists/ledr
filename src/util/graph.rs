@@ -153,7 +153,7 @@ impl Graph {
 			.push(rate);
 	}
 
-	/// Gets the date at which a direct rate was observed, if any exists. 
+	/// Gets the date at which a direct rate was observed, if any exists.
 	/// Does not traverse.
 	pub fn get_date_for_rate(&self, a: &String, b: &String) -> Option<Date> {
 		// we only need to check one as they are all symmetric
@@ -163,6 +163,15 @@ impl Graph {
 			}
 		}
 		None
+	}
+
+	/// Removes the given currency node and all edges to it.
+	pub fn remove_currency(&mut self, currency: &String) {
+		if let Some(node) = self.nodes.get_mut(currency) {
+			node.edges.remove(currency);
+		}
+
+		self.nodes.remove(currency);
 	}
 
 	/// Removes edges between the given pair, if any exist, else no-op.

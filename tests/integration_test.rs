@@ -138,6 +138,18 @@ fn test_integration_ioc() {
 }
 
 #[test]
+fn test_integration_worthless() {
+	let test_cases = collect_test_cases("worthless");
+	execute(
+		"worthless",
+		test_cases,
+		true,
+		"bs",
+		vec!["-c", "USD", "--ioc"],
+	);
+}
+
+#[test]
 fn test_integration_misc_flags() {
 	let test_cases = collect_test_cases("miscflags");
 	execute(

@@ -128,7 +128,15 @@ impl ExchangeRates {
 
 	/// Reports that the currency in question has no value and should always
 	/// be reported as having zero worth.
+	///
+	/// If the currency is already in the graphs, it and all edges to & from it
+	/// are deleted.
 	pub fn declare_worthless(&mut self, symbol: String) {
+		for graph in self.daily_graphs.values_mut() {
+			graph.remove_currency(&symbol);
+		}
+		self.primary_graph.remove_currency(&symbol);
+
 		self.worthless.insert(symbol);
 	}
 

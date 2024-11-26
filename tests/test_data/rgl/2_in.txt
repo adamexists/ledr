@@ -1,7 +1,4 @@
-# TODO: Move more lot-specific tests to this category
-# Checks that naming lots works and matters
-# TODO: Would be nice to move lot names forward in the logic
-#  so you could omit the cost basis amount if it is present
+# Checks variant of first test with other entry
 
 ! 2024-11-19 currency USD
 ! 2024-11-19 currency CAD
