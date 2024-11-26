@@ -14,6 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::gl::exchange_rates::ExchangeRates;
+use crate::gl::observed_rate::ObservationType;
 use crate::investment::action::{Action, Direction};
 use crate::util::amount::Amount;
 use crate::util::date::Date;
@@ -286,10 +287,11 @@ impl Entry {
 		)?;
 
 		// This implies an exchange rate between the currencies
-		rates.infer_from_equal_amounts(
+		rates.add_equality(
 			self.date,
 			Amount::new(amount1, &currency1),
 			Amount::new(-amount2, &currency2),
+			ObservationType::Inferred,
 		)?;
 
 		Ok(())
@@ -549,7 +551,7 @@ mod tests {
 			)
 			.unwrap();
 
-		let mut rates = ExchangeRates::default();
+		let mut rates = ExchangeRates::new();
 		let result = entry.finalize(&mut rates);
 
 		assert!(result.is_err());
@@ -568,7 +570,7 @@ mod tests {
 			)
 			.unwrap();
 
-		let mut rates = ExchangeRates::default();
+		let mut rates = ExchangeRates::new();
 		let result = entry.finalize(&mut rates);
 
 		assert!(result.is_ok());
@@ -613,7 +615,7 @@ mod tests {
 			.add_detail("Assets:Bank", Amount::new(Quant::new(-2000, 1), "EUR"))
 			.unwrap();
 
-		let mut rates = ExchangeRates::default();
+		let mut rates = ExchangeRates::new();
 		let mut imbalances = entry.get_imbalances();
 		let result = entry.multiline_implicit_currency_conversion(
 			&mut imbalances,

@@ -48,7 +48,7 @@ impl ObservedRate {
 
 /// The nature of an observation: right now, whether it was a direct trade
 /// or an indirect inference gathered from multiple other rates.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ObservationType {
 	/// The user told us this rate, so it is gospel
 	Declared,

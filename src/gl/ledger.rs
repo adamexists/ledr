@@ -18,6 +18,7 @@ use crate::gl::entry::{
 	Entry, VIRTUAL_CONVERSION_ACCOUNT, VIRTUAL_ROUNDING_ERROR_ACCOUNT,
 };
 use crate::gl::exchange_rates::ExchangeRates;
+use crate::gl::observed_rate::ObservationType;
 use crate::investment::action::Action;
 use crate::investment::action_buffer::ActionBuffer;
 use crate::util::amount::Amount;
@@ -173,11 +174,12 @@ impl Ledger {
 			// multiple intraday transactions that differ from each
 			// other (as day traders etc. experience all the time),
 			// we must treat them as inferred rates here.
-			self.exchange_rates.infer(
+			self.exchange_rates.add_rate(
 				*pending_entry.get_date(),
-				&amount.currency.clone(),
-				&ica.currency.clone(),
+				amount.currency.clone(),
+				ica.currency.clone(),
 				ica.value,
+				ObservationType::Inferred,
 			)?;
 
 			// Move the imbalance to the cost basis currency via

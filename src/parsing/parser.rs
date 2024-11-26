@@ -14,6 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::gl::ledger::Ledger;
+use crate::gl::observed_rate::ObservationType;
 use crate::parsing::filesystem::Filesystem;
 use crate::util::amount::Amount;
 use crate::util::date::Date;
@@ -150,12 +151,13 @@ impl Parser {
 					let rate = directive[3];
 					ledger
 						.exchange_rates
-						.declare(
+						.add_rate(
 							date,
 							from,
 							to,
 							Quant::from_str(rate)
 								.map_err(|e| anyhow!("{} (line {})", e, i))?,
+							ObservationType::Declared,
 						)
 						.map_err(|e| anyhow!("{} (line {})", e, i))?;
 				},

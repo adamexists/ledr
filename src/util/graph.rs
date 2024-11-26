@@ -22,9 +22,10 @@ use anyhow::{bail, Error};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Graph {
 	nodes: BTreeMap<String, Node>, // currency symbol -> its Node
+	date: Option<Date>,            // reference date for data within
 }
 
 #[derive(Debug)]
@@ -56,7 +57,7 @@ impl Rate {
 
 		match latest_date {
 			Some(rate) => *rate,
-			None => Quant::zero(), // Handle edge case if quant is empty.
+			None => unreachable!(), // TODO confirm this is not stupid
 		}
 	}
 }
@@ -70,6 +71,20 @@ enum RateType {
 }
 
 impl Graph {
+	pub fn new(date: Date) -> Self {
+		Self {
+			nodes: Default::default(),
+			date: Some(date),
+		}
+	}
+
+	pub fn new_undated() -> Self {
+		Self {
+			nodes: Default::default(),
+			date: None,
+		}
+	}
+
 	/// Adds a bidirectional exchange rate between two currencies
 	pub fn add_rate(
 		&mut self,
@@ -382,10 +397,6 @@ impl Graph {
 	}
 
 	/// Gets all rates without exception from this.
-	/// TODO: Refactor the output into a data structure. See other TODO
-	///  on the matter. The bool is true iff the rate was two-op or more.
-	///  In general this file needs a refactor.
-	///
 	/// TODO: Also need some gnarly tests to test new traversal behavior,
 	///  but should refactor all manner of things in this file first.
 	pub fn get_all_rates(&self) -> Vec<(String, String, ObservedRate)> {
@@ -404,7 +415,7 @@ impl Graph {
 						quote.clone(),
 						ObservedRate::new(
 							rate,
-							None,
+							self.date,
 							if all_declared {
 								ObservationType::Declared
 							} else if path_len == 1 {
@@ -419,7 +430,7 @@ impl Graph {
 						base.clone(),
 						ObservedRate::new(
 							rate.recip(),
-							None,
+							self.date,
 							if all_declared {
 								ObservationType::Declared
 							} else if path_len == 1 {
@@ -452,7 +463,7 @@ mod tests {
 
 	#[test]
 	fn test_direct_conversion() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph
@@ -472,7 +483,7 @@ mod tests {
 
 	#[test]
 	fn test_reverse_conversion() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph
@@ -492,7 +503,7 @@ mod tests {
 
 	#[test]
 	fn test_indirect_conversion() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph
@@ -518,7 +529,7 @@ mod tests {
 
 	#[test]
 	fn test_reverse_indirect_conversion() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph
@@ -544,7 +555,7 @@ mod tests {
 
 	#[test]
 	fn test_self_conversion() {
-		let graph: Graph = Default::default();
+		let graph: Graph = Graph::new_undated();
 
 		let result = graph.convert("USD", "USD");
 
@@ -553,7 +564,7 @@ mod tests {
 
 	#[test]
 	fn test_no_conversion_path() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph
@@ -574,7 +585,7 @@ mod tests {
 
 	#[test]
 	fn test_large_graph_conversion() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph
@@ -614,7 +625,7 @@ mod tests {
 
 	#[test]
 	fn test_nonexistent_currency() {
-		let graph: Graph = Default::default();
+		let graph: Graph = Graph::new_undated();
 
 		let result = graph.convert("USD", "XYZ");
 
@@ -623,7 +634,7 @@ mod tests {
 
 	#[test]
 	fn test_inconsistent_cycle_detection() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 
 		// Add USD <-> EUR rate
 		let a = Amount::new(Quant::new(2, 0), "USD");
@@ -655,7 +666,7 @@ mod tests {
 
 	#[test]
 	fn test_large_connected_graph_no_cycles() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 
 		// Generate many currencies
 		let currencies: Vec<String> =
@@ -688,7 +699,7 @@ mod tests {
 
 	#[test]
 	fn test_large_connected_graph_with_contextual_inconsistencies() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 
 		// Add bidirectional rates between some currencies
 		let pairs = vec![
@@ -727,7 +738,7 @@ mod tests {
 
 	#[test]
 	fn test_disconnected_segments_with_contextual_inconsistencies() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 
 		// Define three disconnected segments
 		let segment1 = vec![
@@ -793,7 +804,7 @@ mod tests {
 
 	#[test]
 	fn test_multiple_disconnected_segments_no_cycles() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 
 		// Segment 1
 		let seg1 = ["USD", "EUR", "GBP"];
@@ -855,7 +866,7 @@ mod tests {
 
 	#[test]
 	fn test_extreme_high_rate() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::new(1_000_000_000_000, 0), "BTC"); // 1 USD = 1 trillion BTC
 		graph
@@ -875,7 +886,7 @@ mod tests {
 
 	#[test]
 	fn test_extreme_low_rate() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::from_frac(1, 1_000_000_000_000), "BTC"); // 1 USD = 1e-12 BTC
 		graph
@@ -895,7 +906,7 @@ mod tests {
 
 	#[test]
 	fn test_combined_extreme_rates() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::new(1_000_000_000, 0), "BTC");
 		graph
@@ -921,7 +932,7 @@ mod tests {
 
 	#[test]
 	fn test_edge_case_self_loop() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "USD"); // Self-loop
 		graph
@@ -940,7 +951,7 @@ mod tests {
 
 	#[test]
 	fn test_bizarre_fraction_high() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 		let a = Amount::new(Quant::from_frac(123456789, 987654321), "USD");
 		let b = Amount::new(Quant::from_frac(987654321, 123456789), "EUR");
 		graph
@@ -961,7 +972,7 @@ mod tests {
 
 	#[test]
 	fn test_bizarre_fraction_low() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 		let a = Amount::new(Quant::from_frac(1, 987654321), "USD"); // 1/987654321 USD
 		let b = Amount::new(Quant::new(1, 0), "JPY"); // 1 JPY
 		graph
@@ -981,7 +992,7 @@ mod tests {
 
 	#[test]
 	fn test_bizarre_fraction_chain() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 
 		// Add several fractions in a chain
 		let a = Amount::new(Quant::from_frac(123456789, 987654321), "USD");
@@ -1010,7 +1021,7 @@ mod tests {
 
 	#[test]
 	fn test_extreme_bizarre_fraction() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 
 		// Extreme fraction rates
 		let a = Amount::new(Quant::from_frac(1, 1_000_000_000_007), "BTC");
@@ -1033,7 +1044,7 @@ mod tests {
 
 	#[test]
 	fn test_bizarre_fraction_cascade() {
-		let mut graph: Graph = Default::default();
+		let mut graph: Graph = Graph::new_undated();
 
 		// Chain of bizarre fractions
 		let a = Amount::new(Quant::from_frac(987654321, 123456789), "USD");
@@ -1122,7 +1133,7 @@ mod tests {
 
 			for _ in 0..1000 {
 				// Create a new graph and populate it with the same rates
-				let mut graph: Graph = Default::default();
+				let mut graph: Graph = Graph::new_undated();
 				for &(base, quote, rate1, rate2) in &rates {
 					let a = Amount::new(rate1, base);
 					let b = Amount::new(rate2, quote);

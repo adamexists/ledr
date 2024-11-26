@@ -14,7 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::gl::observed_rate::ObservedRate;
+use crate::gl::observed_rate::{ObservationType, ObservedRate};
 use crate::util::amount::Amount;
 use crate::util::date::Date;
 use crate::util::graph::Graph;
@@ -22,16 +22,21 @@ use crate::util::quant::Quant;
 use anyhow::{bail, Error};
 use std::collections::BTreeMap;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ExchangeRates {
 	/// Stores a set of Graphs, one per date
 	daily_graphs: BTreeMap<Date, Graph>,
 
 	primary_graph: Graph,
 
+	is_finalized: bool,
+
 	/// Preprocessed data for constant-time lookups, only available after
 	/// finalize() has been called on this.
 	resolved_rates: BTreeMap<(String, String), Vec<ObservedRate>>,
+	// TODO: Implement zero-value declarations separate from the
+	//  underlying graph.
+	// TODO: Sweep the project for unnecessary derived traits.
 }
 
 impl ExchangeRates {
@@ -39,132 +44,73 @@ impl ExchangeRates {
 		Self {
 			daily_graphs: Default::default(),
 			resolved_rates: Default::default(),
-			primary_graph: Default::default(),
+			primary_graph: Graph::new_undated(),
+			is_finalized: false,
 		}
 	}
 
-	/// Adds a new exchange rate declared via directive. Might fail if
-	/// there's already a declared rate on the same date, or if the input
-	/// is incoherent.
-	pub fn declare(
+	/// Adds a rate in base-quote semantics.
+	pub fn add_rate(
 		&mut self,
 		date: Date,
 		base: String,
 		quote: String,
 		rate: Quant,
+		observation_type: ObservationType,
 	) -> Result<(), Error> {
-		if base == quote {
-			bail!("Cannot exchange a currency for itself")
-		}
-
-		// Rates of 0 or Inf are conceptually permissible, but we can't
-		// work with it. Instead, avoid putting in such a rate so we
-		// never try to convert to or from something worthless.
-		if rate == 0 {
-			return Ok(());
-		}
-
 		let b_amt = Amount::new(Quant::from_i128(1), &base);
 		let q_amt = Amount::new(rate, &quote);
 
-		// We do not need to check for existing inferred rates, because
-		// all directives are handled first, so one cannot exist.
-
-		let entry = self.daily_graphs.entry(date).or_default();
-
-		if entry.get_direct_rate(&base, &quote, true).is_some() {
-			bail!("Cannot declare multiple rates on same date")
-		}
-
-		entry.add_rate(&date, &b_amt, &q_amt, false)?;
-
-		self.primary_graph
-			.overwrite_rate_if_newer(&date, &b_amt, &q_amt, false)?;
-
-		Ok(())
+		self.add_equality(date, b_amt, q_amt, observation_type)
 	}
 
-	/// Adds a new exchange rate inferred from an entry. Might fail if there
-	/// is already a declared rate that is outside tolerance from this new
-	/// rate. If there is already a declared rate at all, this one will
-	/// definitely be ignored.
-	pub fn infer(
-		&mut self,
-		date: Date,
-		base: &String,
-		quote: &String,
-		rate: Quant,
-	) -> Result<(), Error> {
-		if base == quote {
-			bail!("Cannot exchange a currency for itself")
-		}
-
-		// Rates of 0 or Inf are conceptually permissible, but we can't
-		// work with it. Instead, avoid putting in such a rate so we
-		// never try to convert to or from something worthless.
-		if rate == 0 {
-			return Ok(());
-		}
-
-		let b_amt = Amount::new(Quant::from_i128(1), base);
-		let q_amt = Amount::new(rate, quote);
-
-		// We do not need to check for existing inferred rates, because
-		// all directives are handled first, so one cannot exist.
-
-		let entry = self.daily_graphs.entry(date).or_default();
-
-		if let Some(existing_rate) = entry.get_direct_rate(base, quote, true) {
-			// Check if the inferred rate is within 1% of the
-			// declared rate. If it is, ignore this inferred rate
-			// and use the declared; if not, then the declared rate
-			// is too far from reality on this date to be accurate,
-			// so we should error to stop tabulation here.
-			if !within_tolerance_of(Quant::new(1, 2), existing_rate, rate) {
-				bail!("Inferred exchange rate deviates >1% from declared rate")
-			}
-
-			return Ok(());
-		}
-
-		entry.add_rate(&date, &b_amt, &q_amt, true)?;
-
-		self.primary_graph
-			.overwrite_rate_if_newer(&date, &b_amt, &q_amt, true)?;
-
-		Ok(())
-	}
-
-	pub fn infer_from_equal_amounts(
+	/// Adds a rate by passing two amounts of different currencies that are
+	/// deemed to be identical in value to each other.
+	pub fn add_equality(
 		&mut self,
 		date: Date,
 		a: Amount,
 		b: Amount,
+		observation_type: ObservationType,
 	) -> Result<(), Error> {
-		let entry = self.daily_graphs.entry(date).or_default();
+		if a.currency == b.currency {
+			bail!("Cannot exchange a currency for itself")
+		}
 
-		// TODO: Sweep this whole project for nondeterministic things.
-
-		if let Some(existing_rate) =
-			entry.get_direct_rate(&a.currency, &b.currency, true)
-		{
-			let rate = b.value / a.value;
-			// Check if the inferred rate is within 1% of the
-			// declared rate. If it is, ignore this inferred rate
-			// and use the declared; if not, then the declared rate
-			// is too far from reality on this date to be accurate,
-			// so we should error to stop tabulation here.
-			if !within_tolerance_of(Quant::new(1, 2), existing_rate, rate) {
-				bail!("Inferred exchange rate deviates >1% from declared rate")
-			}
-
+		// Rates of 0 or Inf are conceptually permissible, but we can't
+		// work with it. Instead, avoid putting in such a rate so we
+		// never try to convert to or from something worthless.
+		if a.value == 0 || b.value == 0 {
 			return Ok(());
 		}
 
-		entry.add_rate(&date, &a, &b, true)?;
+		let graph = self
+			.daily_graphs
+			.entry(date)
+			.or_insert_with(|| Graph::new(date));
 
-		self.primary_graph
-			.overwrite_rate_if_newer(&date, &a, &b, true)?;
+		if observation_type == ObservationType::Declared
+			&& graph
+				.get_direct_rate(&a.currency, &b.currency, true)
+				.is_some()
+		{
+			// only one declared rate per pair on a date is allowed
+			bail!("Cannot declare multiple rates on same date")
+		}
+
+		graph.add_rate(
+			&date,
+			&a,
+			&b,
+			observation_type == ObservationType::Inferred,
+		)?;
+
+		self.primary_graph.overwrite_rate_if_newer(
+			&date,
+			&a,
+			&b,
+			observation_type == ObservationType::Inferred,
+		)?;
 
 		Ok(())
 	}
@@ -182,34 +128,17 @@ impl ExchangeRates {
 
 		for (date, graph) in &self.daily_graphs {
 			if emit_warnings && graph.has_inconsistent_cycle() {
-				println!("Warning: currency conversion graph on {} is not internally consistent\n", date);
+				println!("Warning: currency conversion rates on {} are not internally consistent", date);
 			}
-
-			// TODO: Clarify: We still need the daily graphs because of some
-			//  reports' need to conjure a historical exchange rate as of a
-			//  given day. Just... think about it when I'm not so tired!
 
 			// Make sure exchange rates inherit desired precision from user
 			for (base, quote, mut observation) in graph.get_all_rates() {
-				match (
+				if let Some(precision) = determine_precision(
 					max_precision_by_currency.get(&base),
 					max_precision_by_currency.get(&quote),
 				) {
-					(Some(bmp), Some(qmp)) => observation
-						.rate
-						.set_render_precision(*bmp.max(qmp), true),
-					(Some(bmp), None) => {
-						observation.rate.set_render_precision(*bmp, true)
-					},
-					(None, Some(qmp)) => {
-						observation.rate.set_render_precision(*qmp, true)
-					},
-					(None, None) => {},
+					observation.rate.set_render_precision(precision, true);
 				}
-
-				// Attach date to these observations, because the underlying
-				// graph has no way to know it TODO that could be improved
-				observation.date = Some(*date);
 
 				resolved
 					.entry((base.clone(), quote.clone()))
@@ -218,7 +147,7 @@ impl ExchangeRates {
 			}
 		}
 
-		// Sort rates for each currency pair by date in descending order
+		// Sort rates for each pair by date (descending) and then by rate
 		for rates in resolved.values_mut() {
 			rates.sort_by(|a, b| {
 				b.date.cmp(&a.date).then_with(|| a.rate.cmp(&b.rate))
@@ -227,38 +156,26 @@ impl ExchangeRates {
 
 		for (base, quote, mut observation) in self.primary_graph.get_all_rates()
 		{
-			match (
+			if let Some(precision) = determine_precision(
 				max_precision_by_currency.get(&base),
 				max_precision_by_currency.get(&quote),
 			) {
-				(Some(bmp), Some(qmp)) => {
-					observation.rate.set_render_precision(*bmp.max(qmp), false)
-				},
-				(Some(bmp), None) => {
-					observation.rate.set_render_precision(*bmp, false)
-				},
-				(None, Some(qmp)) => {
-					observation.rate.set_render_precision(*qmp, false)
-				},
-				(None, None) => {},
+				observation.rate.set_render_precision(precision, false);
 			}
 
-			// Do not use the primary graph, which goes across dates, unless
-			// there is no other rate for a pair.
-			if resolved.contains_key(&(base.clone(), quote.clone())) {
-				continue;
+			// The primary graph is way more prone to drift because it uses
+			// data irrespective of time, so it's only used when no other
+			// rate is available.
+			if !resolved.contains_key(&(base.clone(), quote.clone())) {
+				resolved
+					.entry((base.clone(), quote.clone()))
+					.or_insert_with(Vec::new)
+					.push(observation);
 			}
-
-			// We set date to max here just so the rates will be used last when sorted,
-			// and as a hacky signal to certain reports that they are not from a specific
-			// date.
-			resolved
-				.entry((base.clone(), quote.clone()))
-				.or_insert_with(Vec::new)
-				.push(observation);
 		}
 
 		self.resolved_rates = resolved;
+		self.is_finalized = true;
 
 		Ok(())
 	}
@@ -270,21 +187,26 @@ impl ExchangeRates {
 		quote: &str,
 		as_of: &Date,
 	) -> Option<Quant> {
-		// TODO: Refactor this expression.
+		if !self.is_finalized {
+			panic!("exchange rates not finalized")
+		};
+
 		self.resolved_rates
 			.get(&(base.to_string(), quote.to_string()))
 			.and_then(|rates| {
 				rates
 					.iter()
-					.find(|o| {
-						o.date.is_none() || o.date.as_ref().unwrap() <= as_of
-					})
+					.find(|o| o.date.map_or(true, |d| d <= *as_of))
 					.map(|o| o.rate)
 			})
 	}
 
 	/// Retrieves the most recent rate available, if any
 	pub fn get_latest_rate(&self, base: &str, quote: &str) -> Option<Quant> {
+		if !self.is_finalized {
+			panic!("exchange rates not finalized")
+		};
+
 		self.resolved_rates
 			.get(&(base.to_string(), quote.to_string()))
 			.and_then(|rates| rates.first().map(|o| o.rate))
@@ -294,14 +216,12 @@ impl ExchangeRates {
 	pub fn take_all_rates(
 		self,
 	) -> BTreeMap<(String, String), Vec<ObservedRate>> {
+		if !self.is_finalized {
+			panic!("exchange rates not finalized")
+		};
+
 		self.resolved_rates
 	}
-}
-
-/// Returns true iff a and b are within the given tolerance of each other.
-/// The given tolerance should be in the form of a percent, i.e. 1% == 0.01.
-fn within_tolerance_of(tolerance: Quant, a: Quant, b: Quant) -> bool {
-	(a - b).abs() <= tolerance * a.abs().max(b.abs())
 }
 
 #[cfg(test)]
@@ -311,7 +231,7 @@ mod tests {
 	use crate::util::quant::Quant;
 
 	fn setup_exchange_rates() -> ExchangeRates {
-		ExchangeRates::default()
+		ExchangeRates::new()
 	}
 
 	#[test]
@@ -323,12 +243,24 @@ mod tests {
 		let rate = Quant::new(11, 1);
 
 		assert!(exchange_rates
-			.declare(date, base.clone(), quote.clone(), rate)
+			.add_rate(
+				date,
+				base.clone(),
+				quote.clone(),
+				rate,
+				ObservationType::Declared
+			)
 			.is_ok());
 
 		let date2 = Date::from_str("2024-11-2").unwrap();
 		assert!(exchange_rates
-			.declare(date2, base, quote, Quant::new(12, 1))
+			.add_rate(
+				date2,
+				base,
+				quote,
+				Quant::new(12, 1),
+				ObservationType::Declared
+			)
 			.is_ok());
 	}
 
@@ -340,12 +272,24 @@ mod tests {
 		let rate = Quant::new(11, 1);
 
 		assert!(exchange_rates
-			.declare(date, base.clone(), base.clone(), rate)
+			.add_rate(
+				date,
+				base.clone(),
+				base.clone(),
+				rate,
+				ObservationType::Declared
+			)
 			.is_err());
 
 		let date2 = Date::from_str("2024-11-2").unwrap();
 		assert!(exchange_rates
-			.declare(date2, base.clone(), base, Quant::new(9, 1))
+			.add_rate(
+				date2,
+				base.clone(),
+				base,
+				Quant::new(9, 1),
+				ObservationType::Declared
+			)
 			.is_err());
 	}
 
@@ -357,10 +301,22 @@ mod tests {
 		let quote = "EUR".to_string();
 
 		assert!(exchange_rates
-			.declare(date, base.clone(), quote.clone(), Quant::new(0, 0))
+			.add_rate(
+				date,
+				base.clone(),
+				quote.clone(),
+				Quant::new(0, 0),
+				ObservationType::Declared
+			)
 			.is_ok());
 		assert!(exchange_rates
-			.declare(date, base, quote, Quant::new(-1, 1))
+			.add_rate(
+				date,
+				base,
+				quote,
+				Quant::new(-1, 1),
+				ObservationType::Declared
+			)
 			.is_ok());
 	}
 
@@ -373,39 +329,48 @@ mod tests {
 		let declared_rate = Quant::new(11, 1);
 
 		exchange_rates
-			.declare(date, base.clone(), quote.clone(), declared_rate)
+			.add_rate(
+				date,
+				base.clone(),
+				quote.clone(),
+				declared_rate,
+				ObservationType::Declared,
+			)
 			.unwrap();
 
 		let inferred_rate = Quant::new(1099, 3);
 		assert!(exchange_rates
-			.infer(date, &base, &quote, inferred_rate)
+			.add_rate(
+				date,
+				base.clone(),
+				quote.clone(),
+				inferred_rate,
+				ObservationType::Inferred
+			)
 			.is_ok());
 
 		let date2 = Date::from_str("2024-11-02").unwrap();
 		assert!(exchange_rates
-			.infer(date2, &base, &quote, Quant::new(111, 2))
+			.add_rate(
+				date2,
+				base.clone(),
+				quote.clone(),
+				Quant::new(111, 2),
+				ObservationType::Inferred
+			)
 			.is_ok());
 	}
+}
 
-	#[test]
-	fn test_infer_rate_outside_tolerance() {
-		let mut exchange_rates = setup_exchange_rates();
-		let date = Date::from_str("2024-11-1").unwrap();
-		let base = "USD".to_string();
-		let quote = "EUR".to_string();
-		let declared_rate = Quant::new(11, 1);
-
-		exchange_rates
-			.declare(date, base.clone(), quote.clone(), declared_rate)
-			.unwrap();
-
-		let inferred_rate = Quant::new(112, 2);
-		assert!(exchange_rates
-			.infer(date, &base, &quote, inferred_rate)
-			.is_err());
-
-		assert!(exchange_rates
-			.infer(date, &base, &quote, Quant::new(97, 2))
-			.is_err());
+/// Helper function to determine the maximum precision between two optionals
+fn determine_precision(
+	base_precision: Option<&u32>,
+	quote_precision: Option<&u32>,
+) -> Option<u32> {
+	match (base_precision, quote_precision) {
+		(Some(&bp), Some(&qp)) => Some(bp.max(qp)),
+		(Some(&bp), None) => Some(bp),
+		(None, Some(&qp)) => Some(qp),
+		(None, None) => None,
 	}
 }
