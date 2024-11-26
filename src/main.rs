@@ -67,8 +67,6 @@ struct Cli {
 	currency: Option<String>,
 
 	/// Ignore balances that do not resolve to this currency
-	///
-	/// TODO: Need to implement, then test, this one.
 	#[arg(long = "ioc")]
 	ignore_other_currencies: bool,
 
@@ -97,6 +95,23 @@ struct Cli {
 	precision: Option<u32>,
 }
 
+impl Cli {
+	/// The point is that this number exceeds what anyone wants; it's just to
+	/// stop the program from printing e.g. millions of zeroes by accident
+	const MAX_PRECISION: u32 = 50;
+
+	/// Extra validations on top of what clap does
+	fn validate(&self) -> Result<(), Error> {
+		if let Some(prec) = self.precision {
+			if prec > Cli::MAX_PRECISION {
+				bail!("Maximum precision is {}", Cli::MAX_PRECISION);
+			}
+		}
+
+		Ok(())
+	}
+}
+
 #[derive(ValueEnum, Clone, PartialEq)]
 enum Directive {
 	Bs, // balance sheet
@@ -113,6 +128,7 @@ enum Directive {
 
 fn main() -> Result<(), Error> {
 	let args = Cli::parse();
+	args.validate()?;
 
 	let (begin, end) = get_range(&args)?;
 
@@ -152,6 +168,8 @@ fn main() -> Result<(), Error> {
 			// Ensure the search term is provided for the AS command
 			if let Some(account) = &args.term {
 				let entries = LedgerReporter::new(ledger.take_entries());
+				// no need to pass ignore_other_currencies in here because
+				// this report always does that
 				entries.account_summary(account, args.currency)
 			} else {
 				bail!("No account specified");
@@ -228,7 +246,12 @@ fn financial_statement(
 	include_equity_by_default: bool,
 	top_level_accounts_to_show: Vec<&str>,
 ) -> Result<(), Error> {
-	let mut totals = ledger_to_totals(ledger, args.currency, args.invert)?;
+	let mut totals = ledger_to_totals(
+		ledger,
+		args.currency,
+		args.invert,
+		args.ignore_other_currencies,
+	)?;
 	if let Some(p) = args.precision {
 		totals.set_max_precision(p);
 	}
@@ -249,11 +272,16 @@ fn ledger_to_totals(
 	mut ledger: Ledger,
 	collapse: Option<String>,
 	invert: bool,
+	ignore_other_currencies: bool,
 ) -> Result<Total, Error> {
 	let mut totals = Total::from_ledger(&ledger);
 
 	if let Some(collapse) = &collapse {
-		totals.collapse_to(collapse, &mut ledger.exchange_rates, false);
+		totals.collapse_to(
+			collapse,
+			&mut ledger.exchange_rates,
+			ignore_other_currencies,
+		);
 	}
 
 	if invert {

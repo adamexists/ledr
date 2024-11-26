@@ -20,7 +20,6 @@ use std::process::Command;
 fn collect_test_cases(subfolder: &str) -> Vec<(String, String)> {
 	let dir_path = format!("tests/test_data/{}", subfolder);
 
-	// Gather input and output files.
 	let mut test_cases = vec![];
 
 	if let Ok(entries) = fs::read_dir(&dir_path) {
@@ -39,11 +38,10 @@ fn collect_test_cases(subfolder: &str) -> Vec<(String, String)> {
 			}
 		}
 
-		// Sort to ensure consistent pairing.
 		inputs.sort();
 		outputs.sort();
 
-		// Pair inputs with corresponding outputs.
+		// Pair inputs with corresponding outputs
 		for input_file in inputs {
 			let output_file = input_file.replace("_in.txt", "_out.txt");
 			if outputs.contains(&output_file) {
@@ -125,6 +123,18 @@ fn test_integration_rgl() {
 fn test_integration_ugl() {
 	let test_cases = collect_test_cases("ugl");
 	execute("ugl", test_cases, true, "ugl", vec!["-e", "2024-11-23"]);
+}
+
+#[test]
+fn test_integration_ioc() {
+	let test_cases = collect_test_cases("ioc");
+	execute(
+		"ioc",
+		test_cases,
+		true,
+		"bs",
+		vec!["-c", "USD", "--ioc", "-E"],
+	);
 }
 
 #[test]

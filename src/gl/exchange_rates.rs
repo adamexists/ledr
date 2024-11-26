@@ -114,7 +114,7 @@ impl ExchangeRates {
 			}
 		}
 
-		graph.add_rate(&date, &a, &b, observation_type.clone())?;
+		graph.add_rate(&date, &a, &b, observation_type)?;
 
 		self.primary_graph.overwrite_rate_if_newer(
 			&date,

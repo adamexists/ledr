@@ -90,32 +90,20 @@ impl Graph {
 			bail!("Exchange rates cannot be zero");
 		}
 
-		// Update the graph with rates
-		self.nodes
-			.entry(a.currency.clone())
-			.or_insert_with(Node::new)
-			.edges
-			.entry(b.currency.clone())
-			.or_insert_with(|| Rate {
-				quant: vec![rate_ab],
-				observation_type: observation_type.clone(),
-				observation_date: *date,
-			})
-			.quant
-			.push(rate_ab);
-
-		self.nodes
-			.entry(b.currency.clone())
-			.or_insert_with(Node::new)
-			.edges
-			.entry(a.currency.clone())
-			.or_insert_with(|| Rate {
-				quant: vec![rate_ba],
-				observation_type,
-				observation_date: *date,
-			})
-			.quant
-			.push(rate_ba);
+		self.add_rate_to_node(
+			date,
+			&a.currency,
+			&b.currency,
+			rate_ab,
+			observation_type,
+		);
+		self.add_rate_to_node(
+			date,
+			&b.currency,
+			&a.currency,
+			rate_ba,
+			observation_type,
+		);
 
 		Ok(())
 	}
@@ -141,7 +129,32 @@ impl Graph {
 		Ok(())
 	}
 
-	/// Gets the date at which a direct rate was observed. Does not traverse.
+	/// Adds an edge on the node_currency reflecting the given rate to the
+	/// edge_currency, with metadata on the edge.
+	fn add_rate_to_node(
+		&mut self,
+		date: &Date,
+		node_currency: &String,
+		edge_currency: &String,
+		rate: Quant,
+		observation_type: ObservationType,
+	) {
+		self.nodes
+			.entry(node_currency.clone())
+			.or_insert_with(Node::new)
+			.edges
+			.entry(edge_currency.clone())
+			.or_insert_with(|| Rate {
+				quant: vec![],
+				observation_type,
+				observation_date: *date,
+			})
+			.quant
+			.push(rate);
+	}
+
+	/// Gets the date at which a direct rate was observed, if any exists. 
+	/// Does not traverse.
 	pub fn get_date_for_rate(&self, a: &String, b: &String) -> Option<Date> {
 		// we only need to check one as they are all symmetric
 		if let Some(node) = self.nodes.get(a) {
@@ -152,7 +165,7 @@ impl Graph {
 		None
 	}
 
-	/// Removes edges between the given pair, if any exist.
+	/// Removes edges between the given pair, if any exist, else no-op.
 	fn remove_rate(&mut self, a: &String, b: &String) {
 		self.nodes.get_mut(a).and_then(|node| node.edges.remove(b));
 		self.nodes.get_mut(b).and_then(|node| node.edges.remove(a));
