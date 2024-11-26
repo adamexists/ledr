@@ -16,10 +16,8 @@
 use crate::gl::observed_rate::{ObservationType, ObservedRate};
 use crate::util::amount::Amount;
 use crate::util::date::Date;
-use crate::util::graph::RateType::Declared;
 use crate::util::quant::Quant;
 use anyhow::{bail, Error};
-use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 #[derive(Debug)]
@@ -36,8 +34,8 @@ struct Node {
 #[derive(Debug)]
 struct Rate {
 	quant: Vec<Quant>,
-	rate_type: RateType,
 
+	observation_type: ObservationType,
 	/// There is only one observation date for potentially many observations
 	/// because we only accept the observations from the newest date on those
 	/// graphs that span multiple days.
@@ -47,7 +45,7 @@ struct Rate {
 impl Rate {
 	/// Reports a single rate to the caller, based on all underlying rate data.
 	/// Uses only the latest rates by observation date.
-	fn rate(&self) -> Quant {
+	fn avg(&self) -> Quant {
 		let latest_date = self
 			.quant
 			.iter()
@@ -57,17 +55,9 @@ impl Rate {
 
 		match latest_date {
 			Some(rate) => *rate,
-			None => unreachable!(), // TODO confirm this is not stupid
+			None => unreachable!(),
 		}
 	}
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum RateType {
-	/// i.e. The user said this is true
-	Declared,
-	/// i.e. We inferred this rate from an entry or detail
-	Inferred,
 }
 
 impl Graph {
@@ -91,7 +81,7 @@ impl Graph {
 		date: &Date,
 		a: &Amount,
 		b: &Amount,
-		is_inferred: bool,
+		observation_type: ObservationType,
 	) -> Result<(), Error> {
 		let rate_ab = a.value / b.value;
 		let rate_ba = b.value / a.value;
@@ -99,12 +89,6 @@ impl Graph {
 		if rate_ab == Quant::zero() || rate_ba == Quant::zero() {
 			bail!("Exchange rates cannot be zero");
 		}
-
-		let rate_type = if is_inferred {
-			RateType::Inferred
-		} else {
-			RateType::Declared
-		};
 
 		// Update the graph with rates
 		self.nodes
@@ -114,7 +98,7 @@ impl Graph {
 			.entry(b.currency.clone())
 			.or_insert_with(|| Rate {
 				quant: vec![rate_ab],
-				rate_type,
+				observation_type: observation_type.clone(),
 				observation_date: *date,
 			})
 			.quant
@@ -127,7 +111,7 @@ impl Graph {
 			.entry(a.currency.clone())
 			.or_insert_with(|| Rate {
 				quant: vec![rate_ba],
-				rate_type,
+				observation_type,
 				observation_date: *date,
 			})
 			.quant
@@ -143,67 +127,41 @@ impl Graph {
 		date: &Date,
 		a: &Amount,
 		b: &Amount,
-		is_inferred: bool,
+		observation_type: ObservationType,
 	) -> Result<(), Error> {
-		let rate_ab = a.value / b.value;
-		let rate_ba = b.value / a.value;
-
-		let rate_type = if is_inferred {
-			RateType::Inferred
-		} else {
-			RateType::Declared
-		};
-
-		// Helper function to update a rate if the date is newer
-		let update_rate_if_newer =
-			|node: &mut Node, target_currency: String, rate: Quant| {
-				node.edges
-					.entry(target_currency)
-					.and_modify(|existing_rate| {
-						match &existing_rate.observation_date.cmp(date) {
-							Ordering::Less => {
-								existing_rate.quant = vec![rate];
-								existing_rate.observation_date = *date;
-							},
-							Ordering::Equal => existing_rate.quant.push(rate),
-							Ordering::Greater => {},
-						}
-					})
-					.or_insert_with(|| Rate {
-						quant: vec![rate],
-						rate_type,
-						observation_date: *date,
-					});
-			};
-
-		// Update or insert rates for both currencies
-		// TODO: Rename update_rate_if_newer and this method to sensible things;
-		//  now we add the rate to the set for averaging if same date.
-		self.nodes
-			.entry(a.currency.clone())
-			.and_modify(|node| {
-				update_rate_if_newer(node, b.currency.clone(), rate_ab)
-			})
-			.or_insert_with(|| {
-				let mut node = Node::new();
-				update_rate_if_newer(&mut node, b.currency.clone(), rate_ab);
-				node
-			});
-
-		self.nodes
-			.entry(b.currency.clone())
-			.and_modify(|node| {
-				update_rate_if_newer(node, a.currency.clone(), rate_ba)
-			})
-			.or_insert_with(|| {
-				let mut node = Node::new();
-				update_rate_if_newer(&mut node, a.currency.clone(), rate_ba);
-				node
-			});
+		if let Some(existing_date) =
+			self.get_date_for_rate(&a.currency, &b.currency)
+		{
+			if &existing_date < date {
+				self.remove_rate(&a.currency, &b.currency);
+				self.add_rate(date, a, b, observation_type)?;
+			}
+		}
 
 		Ok(())
 	}
 
+	/// Gets the date at which a direct rate was observed. Does not traverse.
+	pub fn get_date_for_rate(&self, a: &String, b: &String) -> Option<Date> {
+		// we only need to check one as they are all symmetric
+		if let Some(node) = self.nodes.get(a) {
+			if let Some(rate) = node.edges.get(b) {
+				return Some(rate.observation_date);
+			}
+		}
+		None
+	}
+
+	/// Removes edges between the given pair, if any exist.
+	fn remove_rate(&mut self, a: &String, b: &String) {
+		self.nodes.get_mut(a).and_then(|node| node.edges.remove(b));
+		self.nodes.get_mut(b).and_then(|node| node.edges.remove(a));
+	}
+
+	/// Returns true iff this has any cycles in the graph that do not multiply
+	/// out to approximately 1, i.e. if the rates are internally inconsistent.
+	///
+	/// Costly on performance if the graph is large.
 	pub fn has_inconsistent_cycle(&self) -> bool {
 		for currency in self.nodes.keys() {
 			let mut visited = HashSet::new();
@@ -228,10 +186,10 @@ impl Graph {
 		visited: &mut HashSet<String>,
 		rec_stack: &mut HashSet<String>,
 		rate_product: Quant,
-		start: &str, // Track the original starting node
+		start: &str,
 	) -> bool {
 		if rec_stack.contains(current) {
-			// Cycle detected, but only check consistency if we're back at the starting node
+			// Cycle detected, but only check if we're at the start node
 			if current == start {
 				return rate_product > Quant::from_frac(21, 20)
 					|| rate_product < Quant::from_frac(19, 20);
@@ -250,15 +208,14 @@ impl Graph {
 
 		if let Some(node) = self.nodes.get(current) {
 			for (neighbor, rate) in &node.edges {
-				let new_rate_product = rate_product * rate.rate();
+				let new_rate_product = rate_product * rate.avg();
 
-				// Recursive call for the neighbor
 				if self.detect_inconsistent_cycle(
 					neighbor,
 					visited,
 					rec_stack,
 					new_rate_product,
-					start, // Always pass the original starting node
+					start,
 				) {
 					return true;
 				}
@@ -271,13 +228,14 @@ impl Graph {
 		false
 	}
 
-	/// Reports the average rate between two currencies using all shortest paths,
-	/// as well as the number of hops it took to convert the rate (adjacent = 1).
-	/// Returns None if no path exists between the currencies.
+	/// Reports the average rate between two currencies using all shortest
+	/// paths with the highest number of possible declared rates along the
+	/// way, as well as the number of hops it took to convert the rate
+	/// (adjacent = 1). Returns None if no path exists between the currencies.
 	///
-	/// The returned bool represents whether the rate was marked as declared, and
-	/// TODO this should be refactored because the return type is too complex and
-	/// have you even read this thing? It's insane! Graphs can be so much better.
+	/// The returned bool represents whether the rate was marked as declared
+	/// across every step in its traversal, i.e. only computed using declared
+	/// rates.
 	pub fn convert(
 		&self,
 		base: &str,
@@ -292,33 +250,38 @@ impl Graph {
 		let mut shortest_path_length = None;
 		let mut rates = vec![];
 
-		// this chaos is (currency, rate, depth, number_of_declared_rates_along_path)
+		// (currency, rate, depth, number_of_declared_rates_along_path)
 		queue.push_back((quote.to_string(), Quant::from_i128(1), 0, 0));
 
 		while let Some((
 			current_currency,
 			current_rate,
 			depth,
-			mut declared_rates,
+			mut declared_count,
 		)) = queue.pop_front()
 		{
 			if let Some(node) = self.nodes.get(&current_currency) {
 				for (neighbor, rate) in &node.edges {
-					let new_rate = current_rate * rate.rate();
-					if rate.rate_type == Declared {
-						declared_rates += 1;
+					let new_rate = current_rate * rate.avg();
+					if rate.observation_type == ObservationType::Declared {
+						declared_count += 1;
 					}
 
 					if neighbor == base {
-						if shortest_path_length.is_none()
-							|| depth + 1 == shortest_path_length.unwrap()
-						{
-							shortest_path_length = Some(depth + 1);
-							rates.push((new_rate, declared_rates));
-						} else if depth + 1 < shortest_path_length.unwrap() {
-							shortest_path_length = Some(depth + 1);
-							rates.clear();
-							rates.push((new_rate, declared_rates));
+						match shortest_path_length {
+							Some(path_len) if depth + 1 < path_len => {
+								shortest_path_length = Some(depth + 1);
+								rates.clear();
+								rates.push((new_rate, declared_count));
+							},
+							Some(path_len) if depth + 1 == path_len => {
+								rates.push((new_rate, declared_count));
+							},
+							None => {
+								shortest_path_length = Some(depth + 1);
+								rates.push((new_rate, declared_count));
+							},
+							_ => {},
 						}
 					}
 
@@ -330,7 +293,7 @@ impl Graph {
 							neighbor.clone(),
 							new_rate,
 							depth + 1,
-							declared_rates,
+							declared_count,
 						));
 					}
 				}
@@ -340,30 +303,25 @@ impl Graph {
 		if rates.is_empty() {
 			return None;
 		}
+
 		// First, try to use the average of paths with the greatest number
-		// of declared rates. Basically, highly prefer traversing with
-		// declared rates whenever possible, ignoring inferred rates unless
-		// impossible (which is usually).
-		let highest_declared_count =
-			rates
-				.iter()
-				.fold(0, |acc, (_, c)| if c > &acc { *c } else { acc });
+		// of declared rates. Basically, ignore paths that inferred more
+		// than necessary.
+		let max_declared_count =
+			rates.iter().map(|&(_, count)| count).max().unwrap_or(0);
 
 		// average all rates from the set with the highest declared rate count
-		let mut rate_count = 0;
-		let total_rate: Quant =
-			rates.iter().cloned().fold(Quant::zero(), |acc, (rate, c)| {
-				if c == highest_declared_count {
-					rate_count += 1;
-					acc + rate
-				} else {
-					acc
-				}
+		let (total_rate, count) = rates
+			.iter()
+			.filter(|&&(_, count)| count == max_declared_count)
+			.fold((Quant::zero(), 0), |(acc_rate, acc_count), &(rate, _)| {
+				(acc_rate + rate, acc_count + 1)
 			});
+
 		Some((
-			total_rate / rate_count,
+			total_rate / count,
 			shortest_path_length.unwrap(),
-			false,
+			max_declared_count > 0,
 		))
 	}
 
@@ -384,21 +342,21 @@ impl Graph {
 			None => return None,
 		};
 
-		let other = match node.edges.get(base) {
-			Some(other) => other,
+		let rate = match node.edges.get(base) {
+			Some(rate) => rate,
 			None => return None,
 		};
 
-		if must_be_declared && other.rate_type != RateType::Declared {
+		if must_be_declared
+			&& rate.observation_type != ObservationType::Declared
+		{
 			return None;
 		};
 
-		Some(other.rate())
+		Some(rate.avg())
 	}
 
-	/// Gets all rates without exception from this.
-	/// TODO: Also need some gnarly tests to test new traversal behavior,
-	///  but should refactor all manner of things in this file first.
+	/// TODO: Also need some gnarly tests to test new traversal behavior.
 	pub fn get_all_rates(&self) -> Vec<(String, String, ObservedRate)> {
 		let mut rates = Vec::new();
 
@@ -410,20 +368,18 @@ impl Graph {
 				if let Some((rate, path_len, all_declared)) =
 					self.convert(base, quote)
 				{
+					let observation_type = if all_declared {
+						ObservationType::Declared
+					} else if path_len == 1 {
+						ObservationType::Direct
+					} else {
+						ObservationType::Inferred
+					};
+
 					rates.push((
 						base.clone(),
 						quote.clone(),
-						ObservedRate::new(
-							rate,
-							self.date,
-							if all_declared {
-								ObservationType::Declared
-							} else if path_len == 1 {
-								ObservationType::Direct
-							} else {
-								ObservationType::Inferred
-							},
-						),
+						ObservedRate::new(rate, self.date, observation_type),
 					));
 					rates.push((
 						quote.clone(),
@@ -431,15 +387,9 @@ impl Graph {
 						ObservedRate::new(
 							rate.recip(),
 							self.date,
-							if all_declared {
-								ObservationType::Declared
-							} else if path_len == 1 {
-								ObservationType::Direct
-							} else {
-								ObservationType::Inferred
-							},
+							observation_type,
 						),
-					)); // Include inverse rate
+					));
 				}
 			}
 		}
@@ -467,7 +417,12 @@ mod tests {
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let expected_output = Quant::new(5, 1);
@@ -487,7 +442,12 @@ mod tests {
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let expected_output = Quant::new(2, 0);
@@ -507,13 +467,23 @@ mod tests {
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let c = Amount::new(Quant::new(5, 0), "EUR");
 		let d = Amount::new(Quant::new(1, 0), "GBP");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&c,
+				&d,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let expected_output = Quant::new(1, 1);
@@ -533,13 +503,23 @@ mod tests {
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let c = Amount::new(Quant::new(5, 0), "EUR");
 		let d = Amount::new(Quant::new(1, 0), "GBP");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&c,
+				&d,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let expected_output = Quant::new(10, 0);
@@ -568,13 +548,23 @@ mod tests {
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let c = Amount::new(Quant::new(3, 0), "JPY");
 		let d = Amount::new(Quant::new(1, 0), "INR");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&c,
+				&d,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let result = graph.convert("USD", "JPY");
@@ -589,25 +579,45 @@ mod tests {
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let c = Amount::new(Quant::new(5, 0), "EUR");
 		let d = Amount::new(Quant::new(1, 0), "GBP");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&c,
+				&d,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let e = Amount::new(Quant::new(10, 0), "GBP");
 		let f = Amount::new(Quant::new(1, 0), "JPY");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &e, &f, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&e,
+				&f,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let g = Amount::new(Quant::new(3, 0), "JPY");
 		let h = Amount::new(Quant::new(1, 0), "INR");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &g, &h, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&g,
+				&h,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let expected_output = Quant::new(300, 0);
@@ -640,14 +650,24 @@ mod tests {
 		let a = Amount::new(Quant::new(2, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "EUR");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		// Add EUR <-> GBP rate
 		let c = Amount::new(Quant::new(5, 0), "EUR");
 		let d = Amount::new(Quant::new(1, 0), "GBP");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&c,
+				&d,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		// Add GBP <-> USD rate that creates an inconsistent cycle
@@ -657,7 +677,7 @@ mod tests {
 			&Date::from_str("2024-11-12").unwrap(),
 			&e,
 			&f,
-			true,
+			ObservationType::Inferred,
 		);
 
 		// Assert that the inconsistent cycle is detected
@@ -684,7 +704,7 @@ mod tests {
 						&Date::from_str("2024-11-12").unwrap(),
 						&a,
 						&b,
-						true,
+						ObservationType::Inferred,
 					)
 					.expect("Could not add rate");
 			}
@@ -724,7 +744,7 @@ mod tests {
 					&Date::from_str("2024-11-12").unwrap(),
 					&amount_from,
 					&amount_to,
-					true,
+					ObservationType::Inferred,
 				)
 				.expect("Could not add rate");
 		}
@@ -766,7 +786,7 @@ mod tests {
 					&Date::from_str("2024-11-12").unwrap(),
 					&amount_from,
 					&amount_to,
-					true,
+					ObservationType::Inferred,
 				)
 				.expect("Could not add rate");
 		}
@@ -778,7 +798,7 @@ mod tests {
 					&Date::from_str("2024-11-12").unwrap(),
 					&amount_from,
 					&amount_to,
-					true,
+					ObservationType::Inferred,
 				)
 				.expect("Could not add rate");
 		}
@@ -790,7 +810,7 @@ mod tests {
 					&Date::from_str("2024-11-12").unwrap(),
 					&amount_from,
 					&amount_to,
-					true,
+					ObservationType::Inferred,
 				)
 				.expect("Could not add rate");
 		}
@@ -817,7 +837,7 @@ mod tests {
 						&Date::from_str("2024-11-12").unwrap(),
 						&a,
 						&b,
-						true,
+						ObservationType::Inferred,
 					)
 					.expect("Could not add rate");
 			}
@@ -834,7 +854,7 @@ mod tests {
 						&Date::from_str("2024-11-12").unwrap(),
 						&a,
 						&b,
-						true,
+						ObservationType::Inferred,
 					)
 					.expect("Could not add rate");
 			}
@@ -851,7 +871,7 @@ mod tests {
 						&Date::from_str("2024-11-12").unwrap(),
 						&a,
 						&b,
-						true,
+						ObservationType::Inferred,
 					)
 					.expect("Could not add rate");
 			}
@@ -870,7 +890,12 @@ mod tests {
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::new(1_000_000_000_000, 0), "BTC"); // 1 USD = 1 trillion BTC
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let expected_output = Quant::new(1_000_000_000_000, 0);
@@ -890,7 +915,12 @@ mod tests {
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::from_frac(1, 1_000_000_000_000), "BTC"); // 1 USD = 1e-12 BTC
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let expected_output = Quant::from_frac(1, 1_000_000_000_000);
@@ -910,13 +940,23 @@ mod tests {
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::new(1_000_000_000, 0), "BTC");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let c = Amount::new(Quant::from_frac(1, 1_000_000_000), "BTC");
 		let d = Amount::new(Quant::new(1, 0), "ETH");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&c,
+				&d,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let expected_output = Quant::new(1_000_000_000_000_000_000, 0);
@@ -936,7 +976,12 @@ mod tests {
 		let a = Amount::new(Quant::new(1, 0), "USD");
 		let b = Amount::new(Quant::new(1, 0), "USD"); // Self-loop
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let result = graph.convert("USD", "USD");
@@ -955,7 +1000,12 @@ mod tests {
 		let a = Amount::new(Quant::from_frac(123456789, 987654321), "USD");
 		let b = Amount::new(Quant::from_frac(987654321, 123456789), "EUR");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let expected_output =
@@ -976,7 +1026,12 @@ mod tests {
 		let a = Amount::new(Quant::from_frac(1, 987654321), "USD"); // 1/987654321 USD
 		let b = Amount::new(Quant::new(1, 0), "JPY"); // 1 JPY
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let expected_output = Quant::from_frac(1, 987654321);
@@ -998,13 +1053,23 @@ mod tests {
 		let a = Amount::new(Quant::from_frac(123456789, 987654321), "USD");
 		let b = Amount::new(Quant::from_frac(987654321, 123456789), "EUR");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let c = Amount::new(Quant::from_frac(22222222, 33333333), "EUR");
 		let d = Amount::new(Quant::from_frac(33333333, 22222222), "GBP");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&c,
+				&d,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let expected_output =
@@ -1027,7 +1092,12 @@ mod tests {
 		let a = Amount::new(Quant::from_frac(1, 1_000_000_000_007), "BTC");
 		let b = Amount::new(Quant::from_frac(1_000_000_000_007, 1), "ETH");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let expected_output =
@@ -1050,19 +1120,34 @@ mod tests {
 		let a = Amount::new(Quant::from_frac(987654321, 123456789), "USD");
 		let b = Amount::new(Quant::from_frac(123456789, 987654321), "EUR");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &a, &b, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&a,
+				&b,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let c = Amount::new(Quant::from_frac(44444444, 55555555), "EUR");
 		let d = Amount::new(Quant::from_frac(55555555, 44444444), "JPY");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &c, &d, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&c,
+				&d,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let e = Amount::new(Quant::from_frac(22222222, 33333333), "JPY");
 		let f = Amount::new(Quant::from_frac(33333333, 22222222), "AUD");
 		graph
-			.add_rate(&Date::from_str("2024-11-12").unwrap(), &e, &f, true)
+			.add_rate(
+				&Date::from_str("2024-11-12").unwrap(),
+				&e,
+				&f,
+				ObservationType::Inferred,
+			)
 			.expect("Could not add rate");
 
 		let expected_output =
@@ -1143,7 +1228,7 @@ mod tests {
 							&Date::from_str("2024-11-12").unwrap(),
 							&a,
 							&b,
-							true,
+							ObservationType::Inferred,
 						)
 						.expect("Could not add rate");
 				}

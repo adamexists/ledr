@@ -62,9 +62,15 @@ struct Cli {
 	#[arg(short)]
 	file: String,
 
-	/// Only show balances in the given currency, converting when possible
+	/// Convert all possible balances to this currency
 	#[arg(short, long)]
 	currency: Option<String>,
+
+	/// Ignore balances that do not resolve to this currency
+	///
+	/// TODO: Need to implement, then test, this one.
+	#[arg(long = "ioc")]
+	ignore_other_currencies: bool,
 
 	/// Hides equity accounts from reports
 	#[arg(short = 'E', long)]

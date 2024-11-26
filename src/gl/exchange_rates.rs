@@ -20,7 +20,7 @@ use crate::util::date::Date;
 use crate::util::graph::Graph;
 use crate::util::quant::Quant;
 use anyhow::{bail, Error};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 #[derive(Debug)]
 pub struct ExchangeRates {
@@ -34,10 +34,12 @@ pub struct ExchangeRates {
 	/// Preprocessed data for constant-time lookups, only available after
 	/// finalize() has been called on this.
 	resolved_rates: BTreeMap<(String, String), Vec<ObservedRate>>,
-	// TODO: Implement zero-value declarations separate from the
-	//  underlying graph.
-	// TODO: Sweep the project for unnecessary derived traits.
+
+	/// Set of currencies the user has told us has no value
+	worthless: HashSet<String>,
 }
+
+// TODO: Sweep the project for unnecessary derived traits.
 
 impl ExchangeRates {
 	pub fn new() -> Self {
@@ -46,6 +48,7 @@ impl ExchangeRates {
 			resolved_rates: Default::default(),
 			primary_graph: Graph::new_undated(),
 			is_finalized: false,
+			worthless: Default::default(),
 		}
 	}
 
@@ -58,6 +61,10 @@ impl ExchangeRates {
 		rate: Quant,
 		observation_type: ObservationType,
 	) -> Result<(), Error> {
+		if self.worthless.contains(&base) || self.worthless.contains(&quote) {
+			return Ok(());
+		}
+
 		let b_amt = Amount::new(Quant::from_i128(1), &base);
 		let q_amt = Amount::new(rate, &quote);
 
@@ -77,10 +84,15 @@ impl ExchangeRates {
 			bail!("Cannot exchange a currency for itself")
 		}
 
-		// Rates of 0 or Inf are conceptually permissible, but we can't
-		// work with it. Instead, avoid putting in such a rate so we
-		// never try to convert to or from something worthless.
-		if a.value == 0 || b.value == 0 {
+		// We conceptually can't add zero-value rates; infinities are bad,
+		// and we also no-op if the user has declared something worthless;
+		// why convert it to anything in that case?
+		// TODO: Make a test for the worthless functionality.
+		if a.value == 0
+			|| b.value == 0
+			|| self.worthless.contains(&b.currency)
+			|| self.worthless.contains(&a.currency)
+		{
 			return Ok(());
 		}
 
@@ -89,30 +101,35 @@ impl ExchangeRates {
 			.entry(date)
 			.or_insert_with(|| Graph::new(date));
 
-		if observation_type == ObservationType::Declared
-			&& graph
-				.get_direct_rate(&a.currency, &b.currency, true)
-				.is_some()
+		if graph
+			.get_direct_rate(&a.currency, &b.currency, true)
+			.is_some()
 		{
-			// only one declared rate per pair on a date is allowed
-			bail!("Cannot declare multiple rates on same date")
+			match observation_type {
+				ObservationType::Declared => {
+					bail!("Cannot declare multiple rates on same date")
+				},
+				ObservationType::Inferred => return Ok(()), // ignore this
+				ObservationType::Direct => unreachable!(),
+			}
 		}
 
-		graph.add_rate(
-			&date,
-			&a,
-			&b,
-			observation_type == ObservationType::Inferred,
-		)?;
+		graph.add_rate(&date, &a, &b, observation_type.clone())?;
 
 		self.primary_graph.overwrite_rate_if_newer(
 			&date,
 			&a,
 			&b,
-			observation_type == ObservationType::Inferred,
+			observation_type,
 		)?;
 
 		Ok(())
+	}
+
+	/// Reports that the currency in question has no value and should always
+	/// be reported as having zero worth.
+	pub fn declare_worthless(&mut self, symbol: String) {
+		self.worthless.insert(symbol);
 	}
 
 	/// Finalizes the rates into a resolved form for efficient lookups,

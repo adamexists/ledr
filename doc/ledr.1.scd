@@ -19,7 +19,7 @@ Here's what this doc should contain in the future:
   in the lot syntax.
 - Include instructions are not directives. They have different syntax. It
   is best practice to use fully qualified paths with them, else it'll be
-  relative to the current working directory.
+  relative to the current working directory. Document all directives too.
 - If two or more implicit exchange rates are inferred from the same date,
   the last of the set will be used for all reporting. This is the only time
   where the order of entries matters outside of lot-counting, potentially.

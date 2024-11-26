@@ -35,6 +35,9 @@ pub struct Parser {
 	entry_count: usize,
 }
 
+// TODO: Switch out all strings everywhere possible with identifiers, then
+//  only go back to strings when necessary at the end. Get ziggy with it!
+
 impl Parser {
 	pub fn new() -> Self {
 		let re = Regex::new(r#""([^"]*)"|(\S+)"#).unwrap();
@@ -160,6 +163,10 @@ impl Parser {
 							ObservationType::Declared,
 						)
 						.map_err(|e| anyhow!("{} (line {})", e, i))?;
+				},
+				"worthless" if directive.len() == 2 => {
+					let currency = directive[1].to_string();
+					ledger.exchange_rates.declare_worthless(currency);
 				},
 				_ => bail!("Invalid directive (line {}): {}", i + 1, l),
 			}
