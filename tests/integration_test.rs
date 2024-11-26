@@ -60,6 +60,12 @@ fn test_integration_standard() {
 }
 
 #[test]
+fn test_integration_income_statements() {
+	let test_cases = collect_test_cases("incomestatement");
+	execute("incomestatement", test_cases, true, "is", vec!["-i"]);
+}
+
+#[test]
 fn test_integration_collapse_currency() {
 	let test_cases = collect_test_cases("collapse");
 	execute("collapse", test_cases, true, "tb", vec!["-c", "USD"]);
@@ -81,6 +87,12 @@ fn test_integration_low_precision() {
 		"bs",
 		vec!["-p", "1", "-c", "USD"],
 	);
+}
+
+#[test]
+fn test_integration_clear() {
+	let test_cases = collect_test_cases("clear");
+	execute("clear", test_cases, true, "bs", vec![]);
 }
 
 #[test]

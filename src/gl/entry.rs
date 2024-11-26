@@ -196,6 +196,17 @@ impl Entry {
 		Ok(())
 	}
 
+	/// Removes all Details denominated in the given currency. Should only
+	/// be used on finalized, balanced entries, else balance results could
+	/// get weird.
+	///
+	/// If all details were removed this way, reports true, indicating that
+	/// the caller should drop this entry entirely.
+	pub fn remove_currency(&mut self, currency: &str) -> bool {
+		self.details.retain(|detail| detail.currency() != currency);
+		self.details.is_empty()
+	}
+
 	/// Completes an entry. We have to pass the exchange rate set in here,
 	/// because this is where exchange rates are inferred in some cases,
 	/// i.e. if exactly two currencies are imbalanced.

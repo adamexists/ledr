@@ -142,6 +142,10 @@ impl Parser {
 						.declare_account(account, date)
 						.map_err(|e| anyhow!("{} (line {})", e, i))?;
 				},
+				"clear" if directive.len() == 2 => {
+					let currency = directive[1].to_string();
+					ledger.declare_clear(currency, date);
+				},
 				"currency" if directive.len() == 2 => {
 					let currency = directive[1].to_string();
 					ledger

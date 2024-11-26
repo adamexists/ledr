@@ -58,6 +58,8 @@ pub struct Ledger {
 	declared_currencies: BTreeMap<String, Date>,
 	/// account -> the earliest date account is allowed to appear
 	declared_accounts: BTreeMap<String, Date>,
+	/// currency + the date prior to which we should ignore this currency
+	declared_clears: Vec<(String, Date)>,
 
 	// conceptually distinct modules the ledger must populate or access
 	pub exchange_rates: ExchangeRates,
@@ -72,6 +74,7 @@ impl Ledger {
 			lenient_mode: lenient,
 			declared_currencies: Default::default(),
 			declared_accounts: Default::default(),
+			declared_clears: Default::default(),
 			exchange_rates: ExchangeRates::new(),
 			lots: Default::default(),
 		}
@@ -115,6 +118,17 @@ impl Ledger {
 		self.declared_accounts.insert(account.clone(), date);
 
 		Ok(())
+	}
+
+	/// Declares to the ledger that details related to the given
+	/// currency on or prior to the given date should be ignored
+	/// for the purposes of reporting.
+	///
+	/// The intention is to hide old instruments that you never
+	/// want to see again from reports, without having to delete
+	/// records of history.
+	pub fn declare_clear(&mut self, account: String, date: Date) {
+		self.declared_clears.push((account, date));
 	}
 
 	pub fn new_entry(
@@ -321,12 +335,28 @@ impl Ledger {
 
 		self.entries.retain(|e| e.get_date() >= drop_before);
 
+		// A clear directive says to ignore a given currency prior to a given
+		// date, so we iterate through those and remove details as required.
+		// By this point, all currencies must independently balance within each
+		// entry, and all details on an entry share a date, so this cannot
+		// impact the overall ledger balance.
+		for (currency, date) in &mut self.declared_clears {
+			self.entries.retain_mut(|e| {
+				if e.get_date() <= date {
+					let should_drop = e.remove_currency(currency);
+					!should_drop
+				} else {
+					true
+				}
+			})
+		}
+
 		self.entries.sort();
 		for entry in &mut self.entries {
 			for (currency, &reso) in max_reso_by_currency {
 				entry.round_for_currency(currency, min(reso, max_reso))?;
 
-				// Reduce is and should be the final step of entry processing
+				// Reduce cleans up redundancies without affecting balances
 				entry.reduce(vec![
 					VIRTUAL_CONVERSION_ACCOUNT,
 					VIRTUAL_ROUNDING_ERROR_ACCOUNT,

@@ -134,16 +134,16 @@ impl Graph {
 	fn add_rate_to_node(
 		&mut self,
 		date: &Date,
-		node_currency: &String,
-		edge_currency: &String,
+		node_currency: &str,
+		edge_currency: &str,
 		rate: Quant,
 		observation_type: ObservationType,
 	) {
 		self.nodes
-			.entry(node_currency.clone())
+			.entry(node_currency.to_owned())
 			.or_insert_with(Node::new)
 			.edges
-			.entry(edge_currency.clone())
+			.entry(edge_currency.to_owned())
 			.or_insert_with(|| Rate {
 				quant: vec![],
 				observation_type,
