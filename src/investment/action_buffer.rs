@@ -16,7 +16,6 @@
 
 use crate::investment::action::{Action, Direction};
 use crate::investment::portfolio::Portfolio;
-use crate::util::date::Date;
 use anyhow::Error;
 use std::cmp::Ordering;
 
@@ -38,14 +37,8 @@ impl ActionBuffer {
 	/// order of appearance not being guaranteed. Fails if a Sell action
 	/// has no corresponding lot from which to sell, else succeeds and
 	/// results in a portfolio.
-	///
-	/// All actions after the given ignore_after date are ignored.
-	pub fn tabulate(
-		&mut self,
-		ignore_after: &Date,
-	) -> Result<Portfolio, Error> {
+	pub fn tabulate(&mut self) -> Result<Portfolio, Error> {
 		self.sort_actions();
-		self.actions.retain(|a| &a.date <= ignore_after);
 
 		let mut state = Portfolio::new();
 

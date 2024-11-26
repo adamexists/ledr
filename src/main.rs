@@ -120,7 +120,6 @@ fn main() -> Result<(), Error> {
 		args.precision,
 		&parse_result,
 		&begin,
-		&end,
 		args.emit_warnings,
 	)?;
 
@@ -146,13 +145,8 @@ fn main() -> Result<(), Error> {
 		Directive::As => {
 			// Ensure the search term is provided for the AS command
 			if let Some(account) = &args.term {
-				let currency = match &args.currency {
-					Some(c) => c,
-					None => bail!("Currency required (-c)"),
-				};
-
 				let entries = LedgerReporter::new(ledger.take_entries());
-				entries.account_summary(account, currency)
+				entries.account_summary(account, args.currency)
 			} else {
 				bail!("No account specified");
 			}
@@ -205,22 +199,18 @@ fn finalize_ledger(
 	max_precision: Option<u32>,
 	parse_result: &ParseResult,
 	begin: &Date,
-	end: &Date,
 	emit_warnings: bool,
 ) -> Result<Portfolio, Error> {
-	ledger.exchange_rates.finalize(
-		end,
-		&parse_result.max_precision_by_currency,
-		emit_warnings,
-	)?;
+	ledger
+		.exchange_rates
+		.finalize(&parse_result.max_precision_by_currency, emit_warnings)?;
 
-	let portfolio = ledger.lots.tabulate(end)?;
+	let portfolio = ledger.lots.tabulate()?;
 
 	ledger.finalize(
 		&parse_result.max_precision_by_currency,
 		max_precision,
 		begin,
-		end,
 	)?;
 
 	Ok(portfolio)

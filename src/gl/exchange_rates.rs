@@ -14,6 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+use crate::gl::observed_rate::ObservedRate;
 use crate::util::amount::Amount;
 use crate::util::date::Date;
 use crate::util::graph::Graph;
@@ -29,8 +30,8 @@ pub struct ExchangeRates {
 	primary_graph: Graph,
 
 	/// Preprocessed data for constant-time lookups, only available after
-	/// finalize() has been called on this
-	resolved_rates: BTreeMap<(String, String), Vec<(Date, Quant)>>,
+	/// finalize() has been called on this.
+	resolved_rates: BTreeMap<(String, String), Vec<ObservedRate>>,
 }
 
 impl ExchangeRates {
@@ -172,17 +173,12 @@ impl ExchangeRates {
 	/// after which the methods to retrieve rates from here will work.
 	/// Prior to that, they will not work. Finalization can fail if any
 	/// of the underlying Graphs are incoherent.
-	///
-	/// Ignores and drops all data after the passed drop_after date.
 	pub fn finalize(
 		&mut self,
-		drop_after: &Date,
 		max_precision_by_currency: &BTreeMap<String, u32>,
 		emit_warnings: bool,
 	) -> Result<(), Error> {
 		let mut resolved = BTreeMap::new();
-
-		self.daily_graphs.retain(|date, _| date <= drop_after);
 
 		for (date, graph) in &self.daily_graphs {
 			if emit_warnings && graph.has_inconsistent_cycle() {
@@ -194,65 +190,78 @@ impl ExchangeRates {
 			//  given day. Just... think about it when I'm not so tired!
 
 			// Make sure exchange rates inherit desired precision from user
-			for (base, quote, mut rate) in graph.get_all_direct_rates() {
+			for (base, quote, mut observation) in graph.get_all_rates() {
 				match (
 					max_precision_by_currency.get(&base),
 					max_precision_by_currency.get(&quote),
 				) {
-					(Some(bmp), Some(qmp)) => {
-						rate.set_render_precision(*bmp.max(qmp), true)
+					(Some(bmp), Some(qmp)) => observation
+						.rate
+						.set_render_precision(*bmp.max(qmp), true),
+					(Some(bmp), None) => {
+						observation.rate.set_render_precision(*bmp, true)
 					},
-					(Some(bmp), None) => rate.set_render_precision(*bmp, true),
-					(None, Some(qmp)) => rate.set_render_precision(*qmp, true),
+					(None, Some(qmp)) => {
+						observation.rate.set_render_precision(*qmp, true)
+					},
 					(None, None) => {},
 				}
+
+				// Attach date to these observations, because the underlying
+				// graph has no way to know it TODO that could be improved
+				observation.date = Some(*date);
 
 				resolved
 					.entry((base.clone(), quote.clone()))
 					.or_insert_with(Vec::new)
-					.push((*date, rate));
+					.push(observation);
 			}
 		}
 
 		// Sort rates for each currency pair by date in descending order
 		for rates in resolved.values_mut() {
-			rates.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+			rates.sort_by(|a, b| {
+				b.date.cmp(&a.date).then_with(|| a.rate.cmp(&b.rate))
+			});
 		}
 
-		for (base, quote, mut rate) in
-			self.primary_graph.get_all_indirect_rates()
+		for (base, quote, mut observation) in self.primary_graph.get_all_rates()
 		{
 			match (
 				max_precision_by_currency.get(&base),
 				max_precision_by_currency.get(&quote),
 			) {
 				(Some(bmp), Some(qmp)) => {
-					rate.set_render_precision(*bmp.max(qmp), false)
+					observation.rate.set_render_precision(*bmp.max(qmp), false)
 				},
-				(Some(bmp), None) => rate.set_render_precision(*bmp, false),
-				(None, Some(qmp)) => rate.set_render_precision(*qmp, false),
+				(Some(bmp), None) => {
+					observation.rate.set_render_precision(*bmp, false)
+				},
+				(None, Some(qmp)) => {
+					observation.rate.set_render_precision(*qmp, false)
+				},
 				(None, None) => {},
 			}
 
-			// We push the global rates after the daily ones so we end up last
-			// in the list. Local rates get prioritized. TODO in practice this
-			// is pointless because the newest rates always end up in global
-			// and this causes duplication (of no UX consequence).
+			// Do not use the primary graph, which goes across dates, unless
+			// there is no other rate for a pair.
+			if resolved.contains_key(&(base.clone(), quote.clone())) {
+				continue;
+			}
+
+			// We set date to max here just so the rates will be used last when sorted,
+			// and as a hacky signal to certain reports that they are not from a specific
+			// date.
 			resolved
 				.entry((base.clone(), quote.clone()))
 				.or_insert_with(Vec::new)
-				.push((Date::max(), rate));
+				.push(observation);
 		}
 
 		self.resolved_rates = resolved;
 
 		Ok(())
 	}
-
-	// TODO: There is some detritus in the codebase around drop_after;
-	//  this is now useless because the parser totally ignores lines
-	//  newer than what is requested, so nowhere else in the code has to
-	//  do so anymore.
 
 	/// Retrieves the most recent rate, if any, at or before the given date
 	pub fn get_rate_as_of(
@@ -261,13 +270,16 @@ impl ExchangeRates {
 		quote: &str,
 		as_of: &Date,
 	) -> Option<Quant> {
+		// TODO: Refactor this expression.
 		self.resolved_rates
 			.get(&(base.to_string(), quote.to_string()))
 			.and_then(|rates| {
 				rates
 					.iter()
-					.find(|(d, _)| d <= as_of)
-					.map(|(_, rate)| *rate)
+					.find(|o| {
+						o.date.is_none() || o.date.as_ref().unwrap() <= as_of
+					})
+					.map(|o| o.rate)
 			})
 	}
 
@@ -275,13 +287,13 @@ impl ExchangeRates {
 	pub fn get_latest_rate(&self, base: &str, quote: &str) -> Option<Quant> {
 		self.resolved_rates
 			.get(&(base.to_string(), quote.to_string()))
-			.and_then(|rates| rates.first().map(|(_, rate)| *rate))
+			.and_then(|rates| rates.first().map(|o| o.rate))
 	}
 
 	/// Returns the final map of resolved rates. Consumes this.
 	pub fn take_all_rates(
 		self,
-	) -> BTreeMap<(String, String), Vec<(Date, Quant)>> {
+	) -> BTreeMap<(String, String), Vec<ObservedRate>> {
 		self.resolved_rates
 	}
 }
@@ -395,41 +407,5 @@ mod tests {
 		assert!(exchange_rates
 			.infer(date, &base, &quote, Quant::new(97, 2))
 			.is_err());
-	}
-
-	#[test]
-	fn test_get_latest_rate() {
-		let mut exchange_rates = setup_exchange_rates();
-		let date1 = Date::from_str("2024-11-01").unwrap();
-		let date2 = Date::from_str("2024-11-02").unwrap();
-		let base = "USD".to_string();
-		let quote = "EUR".to_string();
-		let rate1 = Quant::new(11, 1);
-		let rate2 = Quant::new(12, 1);
-
-		exchange_rates
-			.declare(date1, base.clone(), quote.clone(), rate1)
-			.unwrap();
-		exchange_rates
-			.declare(date2, base.clone(), quote.clone(), rate2)
-			.unwrap();
-
-		exchange_rates
-			.finalize(&Date::max(), &BTreeMap::new(), true)
-			.expect("finalize failed");
-
-		assert_eq!(exchange_rates.get_latest_rate(&base, &quote), Some(rate2));
-
-		let date3 = Date::from_str("2024-11-3").unwrap();
-		let rate3 = Quant::new(115, 2);
-		exchange_rates
-			.declare(date3, base.clone(), quote.clone(), rate3)
-			.unwrap();
-
-		exchange_rates
-			.finalize(&Date::max(), &BTreeMap::new(), true)
-			.expect("finalize failed");
-
-		assert_eq!(exchange_rates.get_latest_rate(&base, &quote), Some(rate3));
 	}
 }

@@ -1,39 +1,65 @@
+/* Copyright © 2024 Adam House <adam@adamexists.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+use crate::gl::observed_rate::{ObservationType, ObservedRate};
 use crate::reports::table::Table;
-use crate::util::date::Date;
-use crate::util::quant::Quant;
 use std::collections::BTreeMap;
 
 pub struct RateReporter {
-	rates: BTreeMap<(String, String), Vec<(Date, Quant)>>,
+	rates: BTreeMap<(String, String), Vec<ObservedRate>>,
 }
 
 impl RateReporter {
 	pub fn new(
-		rates: BTreeMap<(String, String), Vec<(Date, Quant)>>,
+		mut rates: BTreeMap<(String, String), Vec<ObservedRate>>,
 	) -> RateReporter {
+		for rate_set in rates.values_mut() {
+			for rate in rate_set.iter_mut() {
+				rate.make_visible();
+			}
+		}
+
 		Self { rates }
 	}
 
 	pub fn print_all_rates(&self) {
-		let mut table = Table::new(4);
+		let mut table = Table::new(5);
 
-		table.add_header(vec!["Base", "Quote", "Observed", "Rate"]);
+		table.add_header(vec!["Base", "Quote", "Observed", "Rate", "T"]);
 		table.add_separator();
 
 		for ((base, quote), rate_set) in &self.rates {
-			// This is a hack to account for the way the multi-day set of rates works. Should be resolved. TODO
-			for (date, rate) in rate_set {
-				let reported_date = if date == &Date::max() {
-					"Inferred".to_string()
+			// Hacky way of checking whether the given rate was an indirect,
+			// inferred rate or a rate actually observed between currencies.
+			for observation in rate_set {
+				let reported_date = if observation.date.is_none() {
+					"Multiple".to_string()
 				} else {
-					date.to_string()
+					observation.date.unwrap().to_string()
 				};
 
 				table.add_row(vec![
 					base,
 					quote,
 					&reported_date,
-					&rate.to_string(),
+					&observation.rate.to_string(),
+					match observation.observation_type {
+						ObservationType::Declared => "D",
+						ObservationType::Direct => "O",
+						ObservationType::Inferred => "I",
+					},
 				])
 			}
 		}

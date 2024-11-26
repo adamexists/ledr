@@ -54,3 +54,5 @@ Here's what this doc should contain in the future:
 - Describe how highly different currency conversions on the same day can yield
   unexpected results and significant conversion error. Also, describe rounding
   error in similar form.
+- I should take care to document the meaning of the headers and row contents
+  of each report, in proper detail befitting an accounting system's audience.

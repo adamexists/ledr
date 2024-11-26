@@ -13,10 +13,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-
 use crate::gl::entry::Entry;
 use crate::reports::table::Table;
 use crate::util::quant::Quant;
+use std::collections::BTreeMap;
 
 pub struct LedgerReporter {
 	entries: Vec<Entry>,
@@ -29,34 +29,64 @@ impl LedgerReporter {
 		Self { entries }
 	}
 
-	// TODO: This is broken somewhat now, with the changes to currency
-	//  conversion (not happening in the ledger at all).
-	pub fn account_summary(&self, account: &String, currency: &String) {
+	/// Reports entries and their net effect on the given account. Will report
+	/// all entries unless a currency is provided, in which case sums not in
+	/// the given currency will be filtered out. There is no currency
+	/// conversion in this report; currency is a simple filter.
+	pub fn account_summary(
+		&self,
+		account: &String,
+		currency_filter: Option<String>,
+	) {
 		if self.entries.is_empty() {
 			println!("No data");
 			return;
 		}
 
 		let mut table = Table::new(5);
-		table.right_align(vec![2]);
+		table.right_align(vec![1, 2]);
 
-		let mut total = Quant::zero();
+		let mut totals = BTreeMap::new();
+
 		for entry in &self.entries {
-			let net = entry.net_for_account(account, currency);
-			total += net;
-			if net != 0 {
-				table.add_row(vec![
-					&entry.get_date().to_string(),
-					entry.get_desc(),
-					&net.to_string(),
-					&currency.to_string(),
-					&entry.get_reference(),
-				]);
+			let net_map = entry.net_for_account(account);
+			for (i, (currency, total)) in net_map.iter().enumerate() {
+				if currency_filter.is_some()
+					&& currency_filter.as_ref().unwrap() != currency
+				{
+					continue;
+				}
+
+				if i == 0 {
+					// first row we print full detail
+					table.add_row(vec![
+						&entry.get_date().to_string(),
+						entry.get_desc(),
+						&total.to_string(),
+						&currency.to_string(),
+						&entry.get_reference(),
+					]);
+				} else {
+					// subsequent rows we only print amounts
+					table.add_row(vec![
+						&"",
+						&"↪ ",
+						&total.to_string(),
+						&currency.to_string(),
+						&"",
+					]);
+				}
+
+				*totals.entry(currency.clone()).or_insert(Quant::zero()) +=
+					*total;
 			}
 		}
 
 		table.add_partial_separator(vec![2]);
-		table.add_row(vec!["", "", &total.to_string(), &currency, ""]);
+
+		for (currency, total) in totals {
+			table.add_row(vec!["", "", &total.to_string(), &currency, ""]);
+		}
 
 		table.print();
 	}

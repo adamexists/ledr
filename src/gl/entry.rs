@@ -29,6 +29,10 @@ pub(crate) const VIRTUAL_ROUNDING_ERROR_ACCOUNT: &str = "Equity:Rounding";
 #[derive(Clone, Debug, Eq)]
 pub struct Entry {
 	date: Date,
+
+	/// Used to properly order these on some reports.
+	appearance_order: usize,
+
 	desc: String,
 	details: Vec<Detail>,
 
@@ -43,9 +47,10 @@ pub struct Entry {
 }
 
 impl Entry {
-	pub fn new(date: Date, desc: String) -> Self {
+	pub fn new(date: Date, desc: String, index: usize) -> Self {
 		Self {
 			date,
+			appearance_order: index,
 			desc,
 			details: vec![],
 			virtual_detail: None,
@@ -99,7 +104,7 @@ impl Entry {
 		Ok(())
 	}
 
-	/// Adds a reference to the entry, to be used for reference purposes.
+	/// Adds a reference to the entry, to be used for human purposes.
 	/// The system is guaranteed not to analyze it or use it for any reason
 	/// or purpose. Some reports and queries will display it, however.
 	///
@@ -137,21 +142,28 @@ impl Entry {
 		&self.details
 	}
 
+	/// Reports the order in which this entry appeared according to the parser
+	pub fn index(&self) -> usize {
+		self.appearance_order
+	}
+
 	/// Returns the net amount from this entry on the given account, i.e.
-	/// the sum of all detail lines related to the account, for a given
-	/// currency. Currency match must be exact. Account argument can be
-	/// any substring.
-	pub fn net_for_account(
-		&self,
-		account: &String,
-		currency: &String,
-	) -> Quant {
-		self.details.iter().fold(Quant::zero(), |mut acc, x| {
-			if x.account.contains(account) && x.amount.currency == *currency {
-				acc += x.amount.value
+	/// the sum of all detail lines related to the account, for all
+	/// currencies. Accounts will match on any substring of their name.
+	pub fn net_for_account(&self, account: &String) -> BTreeMap<String, Quant> {
+		let mut net_map = BTreeMap::new();
+
+		for detail in &self.details {
+			if !&detail.account.contains(account) {
+				continue;
 			}
-			acc
-		})
+
+			*net_map
+				.entry(detail.currency().to_string())
+				.or_insert(Quant::zero()) += detail.value();
+		}
+
+		net_map
 	}
 
 	/// Rounds all Details for a certain currency to a certain precision.
@@ -396,21 +408,6 @@ impl Entry {
 			.collect()
 	}
 
-	/// This method will re-sum all entries and apply a conversion entry to
-	/// correct any imbalances. The correcting entry will go to the passed
-	/// account.
-	///
-	/// Intended to be used after currency conversion, rounding, or other
-	/// operations which introduce error.
-	/// TODO: Confirm we don't need this, and delete if not.
-	// pub fn force_balance(&mut self, account: &str) {
-	// 	let imbalances = self.get_imbalances();
-	// 	for (currency, amount) in imbalances {
-	// 		self.add_system_detail(account, Amount::new(-amount, &currency))
-	// 			.unwrap();
-	// 	}
-	// }
-
 	/// Returns those details that were not inserted automatically
 	fn get_actual_details(&self) -> Vec<Detail> {
 		self.details
@@ -432,6 +429,7 @@ impl Ord for Entry {
 	fn cmp(&self, other: &Self) -> Ordering {
 		self.date
 			.cmp(&other.date)
+			.then_with(|| self.index().cmp(&other.index()))
 			.then_with(|| self.desc.cmp(&other.desc))
 			.then_with(|| self.details.len().cmp(&other.details.len()))
 			.then_with(|| self.actions.len().cmp(&other.actions.len()))
@@ -503,6 +501,7 @@ mod tests {
 		Entry::new(
 			Date::from_str("2024-1-1").unwrap(),
 			"Sample Entry".to_string(),
+			0,
 		)
 	}
 

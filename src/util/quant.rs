@@ -208,12 +208,50 @@ impl Quant {
 		a
 	}
 
+	/// Takes the reciprocal in like terms if possible, else
+	/// divides 1 by self.
 	pub fn recip(&self) -> Self {
-		Self {
-			numerator: self.denominator,
-			denominator: self.numerator,
-			..self.clone()
+		if self.numerator == 0 {
+			Quant::from_i128(1) / *self
+		} else {
+			Self {
+				numerator: self.denominator,
+				denominator: self.numerator,
+				..*self
+			}
 		}
+	}
+
+	/// Raises the precision large enough to not appear as zero when printed,
+	/// unless the number is actually zero. Allows one extra digit if the
+	/// number was not otherwise rendering. This should only be used for
+	/// exchange rates and nothing else.
+	pub fn make_visible(&mut self) {
+		if self.numerator == 0 {
+			return;
+		}
+
+		let mut was_invisible = false;
+		let mut current_precision = self.render_precision;
+
+		let mut scaled_numerator =
+			self.numerator * 10u128.pow(current_precision);
+
+		// Loop to accumulate how many more decimal places are required
+		while scaled_numerator / self.denominator == 0 {
+			was_invisible = true;
+
+			current_precision += 1;
+			scaled_numerator *= 10;
+		}
+
+		// Bump the value by one extra digit to get a better view, if it
+		// started out totally invisible to the user
+		if was_invisible {
+			current_precision += 1;
+		}
+
+		self.render_precision = current_precision;
 	}
 }
 

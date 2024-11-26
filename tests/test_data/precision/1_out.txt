@@ -1,10 +1,10 @@
-    USD 1,221.0    Assets
-      USD 708.2      USD
+    USD 1,154.0    Assets
+      USD 666.3      USD
       USD 200.0      Middle1
       USD 187.5      Middle2
-      USD 125.1      EUR
-   USD -1,221.0    Equity
-   USD -1,208.4      OpeningBalances
-      USD -12.6      Conversions
+      USD 100.0      EUR
+   USD -1,154.0    Equity
+   USD -1,166.5      OpeningBalances
+       USD 12.5      Conversions
 ------------------
         USD 0.0

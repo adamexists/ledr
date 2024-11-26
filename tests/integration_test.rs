@@ -94,13 +94,13 @@ fn test_integration_should_fail() {
 #[test]
 fn test_integration_account_summary() {
 	let test_cases = collect_test_cases("acctsummary");
-	execute(
-		"acctsummary",
-		test_cases,
-		true,
-		"as",
-		vec!["Assets:A", "-c", "USD"],
-	);
+	execute("acctsummary", test_cases, true, "as", vec!["Assets:A"]);
+}
+
+#[test]
+fn test_integration_exchange_rates() {
+	let test_cases = collect_test_cases("exchangerates");
+	execute("exchangerates", test_cases, true, "er", vec![]);
 }
 
 #[test]

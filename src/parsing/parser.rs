@@ -28,6 +28,10 @@ use std::io::{BufRead, Seek};
 pub struct Parser {
 	fs: Filesystem,
 	detail_regex: Regex,
+
+	/// Kept to perform sorting of entries on some reports in the order
+	/// they appear, second only to their date in sort order.
+	entry_count: usize,
 }
 
 impl Parser {
@@ -36,6 +40,7 @@ impl Parser {
 		Self {
 			detail_regex: re,
 			fs: Filesystem::new(),
+			entry_count: 0,
 		}
 	}
 
@@ -166,7 +171,7 @@ impl Parser {
 	/// not need to keep track of where it is to avoid circular include statements
 	/// because first_pass has already done that.
 	fn second_pass(
-		&self,
+		&mut self,
 		file: &File,
 		ledger: &mut Ledger,
 		parse_result: &mut ParseResult,
@@ -232,8 +237,14 @@ impl Parser {
 					ignore_until_next_entry = false;
 
 					ledger
-						.new_entry(date, desc.trim().to_string())
+						.new_entry(
+							date,
+							desc.trim().to_string(),
+							self.entry_count,
+						)
 						.map_err(|e| anyhow!("{} (line {})", e, i))?;
+
+					self.entry_count += 1;
 
 					parse_result.note_date(date);
 					continue;

@@ -13,8 +13,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
+use crate::gl::observed_rate::{ObservationType, ObservedRate};
 use crate::util::amount::Amount;
 use crate::util::date::Date;
+use crate::util::graph::RateType::Declared;
 use crate::util::quant::Quant;
 use anyhow::{bail, Error};
 use std::cmp::Ordering;
@@ -32,8 +34,12 @@ struct Node {
 
 #[derive(Debug)]
 struct Rate {
-	quant: Vec<Quant>, // TODO: Only one obs date for many Quants right now
+	quant: Vec<Quant>,
 	rate_type: RateType,
+
+	/// There is only one observation date for potentially many observations
+	/// because we only accept the observations from the newest date on those
+	/// graphs that span multiple days.
 	observation_date: Date,
 }
 
@@ -253,11 +259,17 @@ impl Graph {
 	/// Reports the average rate between two currencies using all shortest paths,
 	/// as well as the number of hops it took to convert the rate (adjacent = 1).
 	/// Returns None if no path exists between the currencies.
-	pub fn convert(&self, base: &str, quote: &str) -> Option<(Quant, u32)> {
+	///
+	/// The returned bool represents whether the rate was marked as declared, and
+	/// TODO this should be refactored because the return type is too complex and
+	/// have you even read this thing? It's insane! Graphs can be so much better.
+	pub fn convert(
+		&self,
+		base: &str,
+		quote: &str,
+	) -> Option<(Quant, u32, bool)> {
 		if base == quote {
-			return Some((Quant::from_frac(1, 1), 0));
-			// TODO: Implement reciprocal.
-			// TODO: This whole graph traversal thing is not working well.
+			return Some((Quant::from_frac(1, 1), 0, true));
 		}
 
 		let mut visited = HashMap::new();
@@ -265,25 +277,33 @@ impl Graph {
 		let mut shortest_path_length = None;
 		let mut rates = vec![];
 
-		queue.push_back((quote.to_string(), Quant::from_i128(1), 0)); // (currency, rate, depth)
+		// this chaos is (currency, rate, depth, number_of_declared_rates_along_path)
+		queue.push_back((quote.to_string(), Quant::from_i128(1), 0, 0));
 
-		while let Some((current_currency, current_rate, depth)) =
-			queue.pop_front()
+		while let Some((
+			current_currency,
+			current_rate,
+			depth,
+			mut declared_rates,
+		)) = queue.pop_front()
 		{
 			if let Some(node) = self.nodes.get(&current_currency) {
 				for (neighbor, rate) in &node.edges {
 					let new_rate = current_rate * rate.rate();
+					if rate.rate_type == Declared {
+						declared_rates += 1;
+					}
 
 					if neighbor == base {
 						if shortest_path_length.is_none()
 							|| depth + 1 == shortest_path_length.unwrap()
 						{
 							shortest_path_length = Some(depth + 1);
-							rates.push(new_rate);
+							rates.push((new_rate, declared_rates));
 						} else if depth + 1 < shortest_path_length.unwrap() {
 							shortest_path_length = Some(depth + 1);
 							rates.clear();
-							rates.push(new_rate);
+							rates.push((new_rate, declared_rates));
 						}
 					}
 
@@ -295,21 +315,41 @@ impl Graph {
 							neighbor.clone(),
 							new_rate,
 							depth + 1,
+							declared_rates,
 						));
 					}
 				}
 			}
 		}
 
-		if !rates.is_empty() {
-			let total_rate: Quant = rates.iter().cloned().sum();
-			Some((
-				total_rate / Quant::from_i128(rates.len() as i128),
-				shortest_path_length.unwrap(),
-			))
-		} else {
-			None
+		if rates.is_empty() {
+			return None;
 		}
+		// First, try to use the average of paths with the greatest number
+		// of declared rates. Basically, highly prefer traversing with
+		// declared rates whenever possible, ignoring inferred rates unless
+		// impossible (which is usually).
+		let highest_declared_count =
+			rates
+				.iter()
+				.fold(0, |acc, (_, c)| if c > &acc { *c } else { acc });
+
+		// average all rates from the set with the highest declared rate count
+		let mut rate_count = 0;
+		let total_rate: Quant =
+			rates.iter().cloned().fold(Quant::zero(), |acc, (rate, c)| {
+				if c == highest_declared_count {
+					rate_count += 1;
+					acc + rate
+				} else {
+					acc
+				}
+			});
+		Some((
+			total_rate / rate_count,
+			shortest_path_length.unwrap(),
+			false,
+		))
 	}
 
 	/// Reports whether two currency nodes are adjacent. If they are, it will still report
@@ -341,10 +381,14 @@ impl Graph {
 		Some(other.rate())
 	}
 
-	/// Returns all rates as tuples of (base, quote, rate).
-	/// This includes both direct and indirect conversion rates.
-	/// Ensures each rate is calculated only once and the process is deterministic.
-	pub fn get_all_direct_rates(&self) -> Vec<(String, String, Quant)> {
+	/// Gets all rates without exception from this.
+	/// TODO: Refactor the output into a data structure. See other TODO
+	///  on the matter. The bool is true iff the rate was two-op or more.
+	///  In general this file needs a refactor.
+	///
+	/// TODO: Also need some gnarly tests to test new traversal behavior,
+	///  but should refactor all manner of things in this file first.
+	pub fn get_all_rates(&self) -> Vec<(String, String, ObservedRate)> {
 		let mut rates = Vec::new();
 
 		let mut currencies: Vec<_> = self.nodes.keys().cloned().collect();
@@ -352,43 +396,38 @@ impl Graph {
 
 		for (i, base) in currencies.iter().enumerate() {
 			for quote in currencies.iter().skip(i + 1) {
-				if let Some((rate, path_len)) = self.convert(base, quote) {
-					if path_len != 1 {
-						continue;
-					}
-
-					rates.push((base.clone(), quote.clone(), rate));
+				if let Some((rate, path_len, all_declared)) =
+					self.convert(base, quote)
+				{
+					rates.push((
+						base.clone(),
+						quote.clone(),
+						ObservedRate::new(
+							rate,
+							None,
+							if all_declared {
+								ObservationType::Declared
+							} else if path_len == 1 {
+								ObservationType::Direct
+							} else {
+								ObservationType::Inferred
+							},
+						),
+					));
 					rates.push((
 						quote.clone(),
 						base.clone(),
-						Quant::from_i128(1) / rate,
-					)); // Include inverse rate
-				}
-			}
-		}
-
-		rates
-	}
-
-	/// Gets only those rates that are not adjacent, i.e. two-hop or more.
-	pub fn get_all_indirect_rates(&self) -> Vec<(String, String, Quant)> {
-		let mut rates = Vec::new();
-
-		let mut currencies: Vec<_> = self.nodes.keys().cloned().collect();
-		currencies.sort(); // Ensure deterministic order
-
-		for (i, base) in currencies.iter().enumerate() {
-			for quote in currencies.iter().skip(i + 1) {
-				if let Some((rate, path_len)) = self.convert(base, quote) {
-					if path_len < 2 {
-						continue;
-					}
-
-					rates.push((base.clone(), quote.clone(), rate));
-					rates.push((
-						quote.clone(),
-						base.clone(),
-						Quant::from_i128(1) / rate,
+						ObservedRate::new(
+							rate.recip(),
+							None,
+							if all_declared {
+								ObservationType::Declared
+							} else if path_len == 1 {
+								ObservationType::Direct
+							} else {
+								ObservationType::Inferred
+							},
+						),
 					)); // Include inverse rate
 				}
 			}
@@ -424,7 +463,7 @@ mod tests {
 		let result = graph.convert("USD", "EUR");
 		assert!(result.is_some());
 
-		let (out, path_len) = result.unwrap();
+		let (out, path_len, _) = result.unwrap();
 
 		assert_eq!(expected_output, out);
 		assert_eq!(path_len, 1);
@@ -444,7 +483,7 @@ mod tests {
 		let result = graph.convert("EUR", "USD");
 		assert!(result.is_some());
 
-		let (out, path_len) = result.unwrap();
+		let (out, path_len, _) = result.unwrap();
 
 		assert_eq!(expected_output, out);
 		assert_eq!(path_len, 1);
@@ -470,7 +509,7 @@ mod tests {
 		let result = graph.convert("USD", "GBP");
 		assert!(result.is_some());
 
-		let (out, path_len) = result.unwrap();
+		let (out, path_len, _) = result.unwrap();
 
 		assert_eq!(expected_output, out);
 		assert_eq!(path_len, 2);
@@ -496,7 +535,7 @@ mod tests {
 		let result = graph.convert("GBP", "USD");
 		assert!(result.is_some());
 
-		let (out, path_len) = result.unwrap();
+		let (out, path_len, _) = result.unwrap();
 
 		assert_eq!(expected_output, out);
 		assert_eq!(path_len, 2);
@@ -565,7 +604,7 @@ mod tests {
 		let direct_rate = graph.get_direct_rate("GBP", "EUR", false).unwrap();
 		assert!(result.is_some());
 
-		let (out, path_len) = result.unwrap();
+		let (out, path_len, _) = result.unwrap();
 
 		assert_eq!(expected_output, out);
 		assert_eq!(path_len, 4);
@@ -827,7 +866,7 @@ mod tests {
 		let result = graph.convert("USD", "BTC");
 		assert!(result.is_some());
 
-		let (out, path_len) = result.unwrap();
+		let (out, path_len, _) = result.unwrap();
 
 		assert_eq!(expected_output, out);
 		assert_eq!(path_len, 1);
@@ -847,7 +886,7 @@ mod tests {
 		let result = graph.convert("USD", "BTC");
 		assert!(result.is_some());
 
-		let (out, path_len) = result.unwrap();
+		let (out, path_len, _) = result.unwrap();
 
 		assert_eq!(expected_output, out);
 		assert_eq!(path_len, 1);
@@ -873,7 +912,7 @@ mod tests {
 		let result = graph.convert("USD", "ETH");
 		assert!(result.is_some());
 
-		let (out, path_len) = result.unwrap();
+		let (out, path_len, _) = result.unwrap();
 
 		assert_eq!(expected_output, out);
 		assert_eq!(path_len, 2);
@@ -892,7 +931,7 @@ mod tests {
 		let result = graph.convert("USD", "USD");
 		assert!(result.is_some());
 
-		let (out, path_len) = result.unwrap();
+		let (out, path_len, _) = result.unwrap();
 
 		assert_eq!(Quant::from_i128(1), out);
 		assert_eq!(path_len, 0);
@@ -913,7 +952,7 @@ mod tests {
 		let result = graph.convert("USD", "EUR");
 		assert!(result.is_some());
 
-		let (out, path_len) = result.unwrap();
+		let (out, path_len, _) = result.unwrap();
 
 		assert_eq!(expected_output, out);
 		assert_eq!(path_len, 1);
@@ -933,7 +972,7 @@ mod tests {
 		let result = graph.convert("JPY", "USD");
 		assert!(result.is_some());
 
-		let (out, path_len) = result.unwrap();
+		let (out, path_len, _) = result.unwrap();
 
 		assert_eq!(expected_output, out);
 		assert_eq!(path_len, 1);
@@ -962,7 +1001,7 @@ mod tests {
 		let result = graph.convert("USD", "GBP");
 		assert!(result.is_some());
 
-		let (out, path_len) = result.unwrap();
+		let (out, path_len, _) = result.unwrap();
 
 		assert_eq!(expected_output, out);
 		assert_eq!(path_len, 2);
@@ -985,7 +1024,7 @@ mod tests {
 		let result = graph.convert("BTC", "ETH");
 		assert!(result.is_some());
 
-		let (out, path_len) = result.unwrap();
+		let (out, path_len, _) = result.unwrap();
 
 		assert_eq!(expected_output, out);
 		assert_eq!(path_len, 1);
@@ -1020,7 +1059,7 @@ mod tests {
 		let result = graph.convert("USD", "AUD");
 		assert!(result.is_some());
 
-		let (out, path_len) = result.unwrap();
+		let (out, path_len, _) = result.unwrap();
 
 		assert_eq!(expected_output, out);
 		assert_eq!(path_len, 3);

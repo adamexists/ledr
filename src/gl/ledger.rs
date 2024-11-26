@@ -116,12 +116,17 @@ impl Ledger {
 		Ok(())
 	}
 
-	pub fn new_entry(&mut self, date: Date, desc: String) -> Result<(), Error> {
+	pub fn new_entry(
+		&mut self,
+		date: Date,
+		desc: String,
+		index: usize,
+	) -> Result<(), Error> {
 		if self.pending_entry.is_some() {
 			self.finish_entry()?;
 		}
 
-		self.pending_entry = Some(Entry::new(date, desc));
+		self.pending_entry = Some(Entry::new(date, desc, index));
 		Ok(())
 	}
 
@@ -295,27 +300,31 @@ impl Ledger {
 	// ----------------
 
 	/// Finalizes the entire ledger by standardizing the visible precision of
-	/// each currency, and dropping entries outside the passed date range.
+	/// each currency, and dropping entries prior to the start date. Note that
+	/// dropping entries in this way has no effect on observed exchange rates
+	/// or their effects. There is no exposed way to drop after a given date
+	/// because the parser takes care of that, to make sure all end dates that
+	/// are passed by the user are definitively point-in-time accurate.
+	///
+	/// At this stage, we round off amounts that do not fit in the desired
+	/// precision, and we put those rounded off amounts, if any, into the
+	/// rounding error equity account.
 	pub fn finalize(
 		&mut self,
 		max_reso_by_currency: &BTreeMap<String, u32>,
 		overall_max_reso: Option<u32>,
 		drop_before: &Date,
-		drop_after: &Date,
 	) -> Result<(), Error> {
 		let max_reso = overall_max_reso.unwrap_or(u32::MAX);
 
-		self.entries.retain(|e| {
-			e.get_date() >= drop_before && e.get_date() <= drop_after
-		});
+		self.entries.retain(|e| e.get_date() >= drop_before);
 
 		self.entries.sort();
 		for entry in &mut self.entries {
 			for (currency, &reso) in max_reso_by_currency {
 				entry.round_for_currency(currency, min(reso, max_reso))?;
 
-				// TODO: Pretty sure it is conceptually invalid to have this.
-				// entry.force_balance(VIRTUAL_ROUNDING_ERROR_ACCOUNT);
+				// Reduce is and should be the final step of entry processing
 				entry.reduce(vec![
 					VIRTUAL_CONVERSION_ACCOUNT,
 					VIRTUAL_ROUNDING_ERROR_ACCOUNT,
@@ -382,7 +391,7 @@ mod tests {
 		let mut ledger = Ledger::new(false);
 		let date = Date::from_str("2024-01-01").unwrap();
 
-		assert!(ledger.new_entry(date, "Test Entry".to_string()).is_ok());
+		assert!(ledger.new_entry(date, "Test Entry".to_string(), 0).is_ok());
 		assert!(ledger.pending_entry.is_some());
 		assert_eq!(ledger.pending_entry.unwrap().get_date(), &date);
 	}
@@ -396,7 +405,7 @@ mod tests {
 			.declare_account("Assets:Cash".to_string(), date)
 			.unwrap();
 
-		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
+		ledger.new_entry(date, "Test Entry".to_string(), 0).unwrap();
 
 		assert!(ledger
 			.add_detail(
@@ -417,7 +426,7 @@ mod tests {
 			.declare_account("Assets:Cash".to_string(), date)
 			.unwrap();
 
-		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
+		ledger.new_entry(date, "Test Entry".to_string(), 0).unwrap();
 
 		assert!(ledger
 			.add_detail(
@@ -436,7 +445,7 @@ mod tests {
 		let date = Date::from_str("2024-01-01").unwrap();
 		ledger.declare_currency("USD", date).unwrap();
 
-		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
+		ledger.new_entry(date, "Test Entry".to_string(), 0).unwrap();
 
 		assert!(ledger
 			.add_detail(
@@ -468,7 +477,7 @@ mod tests {
 	fn test_finish_entry() {
 		let mut ledger = Ledger::new(false);
 		let date = Date::from_str("2024-01-01").unwrap();
-		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
+		ledger.new_entry(date, "Test Entry".to_string(), 0).unwrap();
 		assert!(ledger.finish_entry().is_ok());
 		assert!(ledger.pending_entry.is_none());
 		assert_eq!(ledger.entries.len(), 1);
@@ -482,7 +491,7 @@ mod tests {
 			.declare_currency("USD", Date::from_str("2024-1-2").unwrap())
 			.unwrap();
 
-		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
+		ledger.new_entry(date, "Test Entry".to_string(), 0).unwrap();
 		let result = ledger.check_currency("USD");
 
 		assert!(result.is_err());
@@ -499,7 +508,7 @@ mod tests {
 			)
 			.unwrap();
 
-		ledger.new_entry(date, "Test Entry".to_string()).unwrap();
+		ledger.new_entry(date, "Test Entry".to_string(), 0).unwrap();
 		let result = ledger.check_account(&"Assets:Cash".to_string());
 
 		assert!(result.is_err());
@@ -511,7 +520,7 @@ mod tests {
 		let date = Date::from_str("2024-01-01").unwrap();
 
 		ledger
-			.new_entry(date, "Lenient Test Entry".to_string())
+			.new_entry(date, "Lenient Test Entry".to_string(), 0)
 			.unwrap();
 
 		assert!(ledger
@@ -531,7 +540,7 @@ mod tests {
 		let date = Date::from_str("2024-01-01").unwrap();
 
 		ledger
-			.new_entry(date, "Lenient Test Entry".to_string())
+			.new_entry(date, "Lenient Test Entry".to_string(), 0)
 			.unwrap();
 
 		assert!(ledger
@@ -551,7 +560,7 @@ mod tests {
 		let date = Date::from_str("2024-01-01").unwrap();
 
 		ledger
-			.new_entry(date, "Lenient Virtual Detail Test".to_string())
+			.new_entry(date, "Lenient Virtual Detail Test".to_string(), 0)
 			.unwrap();
 
 		assert!(ledger
