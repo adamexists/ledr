@@ -372,6 +372,15 @@ impl Ledger {
 	pub fn take_entries(self) -> Vec<Entry> {
 		self.entries
 	}
+
+	/// Prints the fully resolved form of all entries.
+	pub fn print(&self, begin: &Date) {
+		for entry in &self.entries {
+			if entry.get_date() >= begin {
+				println!("{}", entry);
+			}
+		}
+	}
 }
 
 #[cfg(test)]

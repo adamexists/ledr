@@ -420,6 +420,88 @@ impl Entry {
 	}
 }
 
+use std::fmt;
+
+impl fmt::Display for Entry {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		// Render the header line with date and description
+		writeln!(f, "{} {}", self.date, self.desc)?;
+
+		// Render the reference lines, word-wrapping at 80 characters overall
+		if let Some(r) = &self.reference {
+			let wrapped_lines = wrap_text(r, 69);
+			for line in wrapped_lines {
+				writeln!(f, "\t// {}", line)?;
+			}
+		}
+
+		if self.details.is_empty() {
+			return Ok(());
+		}
+
+		// Calculate the maximum width of the account strings
+		let account_width = self
+			.details
+			.iter()
+			.map(|d| d.account.len())
+			.max()
+			.unwrap_or(0);
+
+		// Align amounts and currencies properly
+		let mut detail_lines = Vec::new();
+		let mut max_value_width = 0;
+		for detail in &self.details {
+			let value_str = format!("{}", detail.value());
+			max_value_width = max_value_width.max(value_str.len());
+			detail_lines.push((
+				detail.account.clone(),
+				value_str,
+				detail.currency().clone(),
+			));
+		}
+
+		// Format the detail lines with proper alignment
+		for (account, value, currency) in detail_lines {
+			writeln!(
+				f,
+				"\t{:<account_width$}  {:>value_width$} {}",
+				account,
+				value,
+				currency,
+				account_width = account_width,
+				value_width = max_value_width
+			)?;
+		}
+
+		Ok(())
+	}
+}
+
+/// Helper function to wrap text into lines of specified width
+fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
+	let mut lines = Vec::new();
+	let mut current_line = String::new();
+
+	for word in text.split_whitespace() {
+		if !current_line.is_empty()
+			&& current_line.len() + word.len() + 1 > max_width
+		{
+			lines.push(current_line);
+			current_line = String::new();
+		}
+		if !current_line.is_empty() {
+			current_line.push(' ');
+		}
+		current_line.push_str(word);
+	}
+
+	if !current_line.is_empty() {
+		lines.push(current_line);
+	}
+
+	lines
+}
+
 impl PartialEq for Entry {
 	fn eq(&self, other: &Self) -> bool {
 		self.date == other.date && self.desc == other.desc

@@ -173,6 +173,12 @@ fn test_integration_misc_flags() {
 	);
 }
 
+#[test]
+fn test_integration_canonical_fmt() {
+	let test_cases = collect_test_cases("canon");
+	execute("canon", test_cases, true, "fmt", vec!["-b", "2024-11-10"]);
+}
+
 fn execute(
 	subfolder: &str,
 	test_cases: Vec<(String, String)>,

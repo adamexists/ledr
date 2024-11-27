@@ -125,6 +125,8 @@ enum Directive {
 	Lots, // open lots report
 	Rgl,  // realized gains/losses report
 	Ugl,  // unrealized gains/losses report
+
+	Fmt, // format and output the ledger's entries
 }
 
 fn main() -> Result<(), Error> {
@@ -214,6 +216,9 @@ fn main() -> Result<(), Error> {
 				&end.min(today()),
 				&ledger.exchange_rates,
 			)
+		},
+		Directive::Fmt => {
+			ledger.print(&begin);
 		},
 	}
 
