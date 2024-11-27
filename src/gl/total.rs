@@ -57,7 +57,9 @@ impl Total {
 	}
 
 	/// Recursively calculates the total amounts for this Total and all its
-	/// subtotals.
+	/// subtotals, and returns the result. This is an abstraction that allows
+	/// any Total in the hierarchy to report the sum of itself and any Totals
+	/// below it.
 	pub fn amounts(&self) -> BTreeMap<String, Quant> {
 		let mut aggregated_amounts: BTreeMap<String, Quant> =
 			self.amounts.clone();
@@ -140,7 +142,7 @@ impl Total {
 	}
 
 	/// Designed for use with currency reports, we convert all totals to
-	/// the target currency. If not possible, currencies are retained iff
+	/// the target currency. If not possible, currencies are dropped iff
 	/// the given bool is marked true.
 	pub fn collapse_to(
 		&mut self,
@@ -151,18 +153,14 @@ impl Total {
 		let mut converted_total = Quant::zero();
 		let mut retained_balances = BTreeMap::new();
 
-		// Iterate through all balances in `self.amounts` and attempt to convert them
 		for (c, balance) in &self.amounts {
 			if c == currency {
-				// Add existing balances in the target currency directly
 				converted_total += *balance;
 			} else if let Some(rate) =
 				exchange_rates.get_latest_rate(c, currency)
 			{
-				// Convert balances using the exchange rate
 				converted_total += *balance * rate;
 			} else if !ignore_non_convertable_balances {
-				// Retain the balance if conversion is not possible and retention is allowed
 				retained_balances.insert(c.clone(), *balance);
 			}
 		}
@@ -199,6 +197,12 @@ impl Total {
 	/// precision observed in the ledger for its currency, whichever is lower.
 	///
 	/// Banker's rounding is used for all rounding operations.
+	///
+	/// This procedure may introduce rounding error if the precision for any
+	/// given balance is too low to represent the actual total. In such
+	/// cases, cumulative rounding error is reported to the user as a virtual
+	/// posting to Equity:Rounding, provided it impacts the final report at
+	/// the requested precision.
 	pub fn round(
 		&mut self,
 		max_precision: u32,

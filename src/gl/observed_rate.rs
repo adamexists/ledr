@@ -40,14 +40,14 @@ impl ObservedRate {
 		}
 	}
 
-	/// Ensures the exchange rate is rendered as nonzero when printed.
+	/// Ensures the exchange rate is rendered as nonzero when printed
+	/// by increasing its precision.
 	pub fn make_visible(&mut self) {
 		self.rate.make_visible();
 	}
 }
 
-/// The nature of an observation: right now, whether it was a direct trade
-/// or an indirect inference gathered from multiple other rates.
+/// The nature of an observation of an exchange rate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ObservationType {
 	/// The user told us this rate in the abstract, so it is gospel

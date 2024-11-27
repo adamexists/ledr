@@ -79,10 +79,6 @@ struct Cli {
 	#[arg(short, long)]
 	depth: Option<usize>,
 
-	/// Enable warning messages for potential data integrity problems
-	#[arg(long)]
-	emit_warnings: bool,
-
 	/// Negates all currency values
 	#[arg(short, long)]
 	invert: bool,
@@ -128,6 +124,8 @@ enum Directive {
 	As,   // account summary
 	Fmt,  // format and output the ledger's entries
 	Find, // search for entries by description
+
+	Check, // find possible data integrity concerns
 }
 
 fn main() -> Result<(), Error> {
@@ -136,18 +134,14 @@ fn main() -> Result<(), Error> {
 
 	let (begin, end) = get_range(&args)?;
 
-	let mut ledger = Ledger::new(args.lenient);
+	let mut ledger =
+		Ledger::new(args.lenient, args.command == Directive::Check);
 
 	let mut parser = parsing::parser::Parser::new();
 	let parse_result = parser.parse(&args.file, &mut ledger, &end)?;
 
-	let portfolio = finalize_ledger(
-		&mut ledger,
-		args.precision,
-		&parse_result,
-		&begin,
-		args.emit_warnings,
-	)?;
+	let portfolio =
+		finalize_ledger(&mut ledger, args.precision, &parse_result, &begin)?;
 
 	match args.command {
 		Directive::Bs => financial_statement(
@@ -227,6 +221,10 @@ fn main() -> Result<(), Error> {
 		Directive::Fmt => {
 			ledger.print(&begin, None);
 		},
+		Directive::Check => {
+			// simple log; warnings occur dynamically throughout processing
+			println!("Done");
+		},
 	}
 
 	Ok(())
@@ -239,11 +237,10 @@ fn finalize_ledger(
 	max_precision: Option<u32>,
 	parse_result: &ParseResult,
 	begin: &Date,
-	emit_warnings: bool,
 ) -> Result<Portfolio, Error> {
 	ledger
 		.exchange_rates
-		.finalize(&parse_result.max_precision_by_currency, emit_warnings)?;
+		.finalize(&parse_result.max_precision_by_currency)?;
 
 	let portfolio = ledger.lots.tabulate()?;
 

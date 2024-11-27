@@ -61,10 +61,12 @@ pub struct Ledger {
 	// conceptually distinct modules the ledger must populate or access
 	pub exchange_rates: ExchangeRates,
 	pub lots: ActionBuffer,
+
+	allow_warnings: bool,
 }
 
 impl Ledger {
-	pub fn new(lenient: bool) -> Self {
+	pub fn new(lenient: bool, warnings: bool) -> Self {
 		Self {
 			entries: vec![],
 			pending_entry: None,
@@ -72,8 +74,9 @@ impl Ledger {
 			declared_currencies: Default::default(),
 			declared_accounts: Default::default(),
 			declared_clears: Default::default(),
-			exchange_rates: ExchangeRates::new(),
+			exchange_rates: ExchangeRates::new(warnings),
 			lots: Default::default(),
+			allow_warnings: warnings,
 		}
 	}
 
@@ -221,9 +224,10 @@ impl Ledger {
 
 	/// Sets the account name of the entry with no accompanying balance or
 	/// currency. This account is then assumed to be the counterparty to all
-	/// other detail lines in the entry that create any imbalance.
+	/// other detail lines in the entry that remain with any imbalance at
+	/// the end of processing.
 	///
-	/// In general, setting this forces an entry to balance, one way or
+	/// In most cases, setting this forces an entry to balance, one way or
 	/// another.
 	pub fn set_virtual_detail(&mut self, account: String) -> Result<(), Error> {
 		if !self.lenient_mode {
@@ -261,7 +265,8 @@ impl Ledger {
 					bail!("Empty entry")
 				}
 
-				let actions = entry.finalize(&mut self.exchange_rates)?;
+				let actions = entry
+					.finalize(&mut self.exchange_rates, self.allow_warnings)?;
 				for action in actions {
 					self.lots.add_action(action);
 				}
@@ -399,17 +404,18 @@ mod tests {
 
 	#[test]
 	fn test_ledger_initialization() {
-		let ledger = Ledger::new(true);
+		let ledger = Ledger::new(true, true);
 		assert!(ledger.entries.is_empty());
 		assert!(ledger.pending_entry.is_none());
 		assert!(ledger.declared_currencies.is_empty());
 		assert!(ledger.declared_accounts.is_empty());
 		assert!(ledger.lenient_mode);
+		assert!(ledger.allow_warnings);
 	}
 
 	#[test]
 	fn test_declare_currency() {
-		let mut ledger = Ledger::new(false);
+		let mut ledger = Ledger::new(false, false);
 		let date = Date::from_str("2024-1-1").unwrap();
 
 		assert!(ledger.declare_currency("USD", date).is_ok());
@@ -420,7 +426,7 @@ mod tests {
 
 	#[test]
 	fn test_declare_account() {
-		let mut ledger = Ledger::new(false);
+		let mut ledger = Ledger::new(false, false);
 		let date = Date::from_str("2024-01-01").unwrap();
 
 		assert!(ledger
@@ -435,7 +441,7 @@ mod tests {
 
 	#[test]
 	fn test_new_entry() {
-		let mut ledger = Ledger::new(false);
+		let mut ledger = Ledger::new(false, false);
 		let date = Date::from_str("2024-01-01").unwrap();
 
 		assert!(ledger.new_entry(date, "Test Entry".to_string(), 0).is_ok());
@@ -445,7 +451,7 @@ mod tests {
 
 	#[test]
 	fn test_add_detail_valid() {
-		let mut ledger = Ledger::new(false);
+		let mut ledger = Ledger::new(false, false);
 		let date = Date::from_str("2024-01-01").unwrap();
 		ledger.declare_currency("USD", date).unwrap();
 		ledger
@@ -467,7 +473,7 @@ mod tests {
 
 	#[test]
 	fn test_add_detail_invalid_currency() {
-		let mut ledger = Ledger::new(false);
+		let mut ledger = Ledger::new(false, false);
 		let date = Date::from_str("2024-01-01").unwrap();
 		ledger
 			.declare_account("Assets:Cash".to_string(), date)
@@ -488,7 +494,7 @@ mod tests {
 
 	#[test]
 	fn test_add_detail_invalid_account() {
-		let mut ledger = Ledger::new(false);
+		let mut ledger = Ledger::new(false, false);
 		let date = Date::from_str("2024-01-01").unwrap();
 		ledger.declare_currency("USD", date).unwrap();
 
@@ -507,7 +513,7 @@ mod tests {
 
 	#[test]
 	fn test_add_detail_orphaned_entry() {
-		let mut ledger = Ledger::new(false);
+		let mut ledger = Ledger::new(false, false);
 
 		assert!(ledger
 			.add_detail(
@@ -522,7 +528,7 @@ mod tests {
 
 	#[test]
 	fn test_finish_entry() {
-		let mut ledger = Ledger::new(false);
+		let mut ledger = Ledger::new(false, false);
 		let date = Date::from_str("2024-01-01").unwrap();
 		ledger.new_entry(date, "Test Entry".to_string(), 0).unwrap();
 		ledger
@@ -554,7 +560,7 @@ mod tests {
 
 	#[test]
 	fn test_check_currency_before_declaration() {
-		let mut ledger = Ledger::new(false);
+		let mut ledger = Ledger::new(false, false);
 		let date = Date::from_str("2024-01-01").unwrap();
 		ledger
 			.declare_currency("USD", Date::from_str("2024-1-2").unwrap())
@@ -568,7 +574,7 @@ mod tests {
 
 	#[test]
 	fn test_check_account_before_declaration() {
-		let mut ledger = Ledger::new(false);
+		let mut ledger = Ledger::new(false, false);
 		let date = Date::from_str("2024-01-01").unwrap();
 		ledger
 			.declare_account(
@@ -585,7 +591,7 @@ mod tests {
 
 	#[test]
 	fn test_add_detail_without_currency_declaration_in_lenient_mode() {
-		let mut ledger = Ledger::new(true);
+		let mut ledger = Ledger::new(true, false);
 		let date = Date::from_str("2024-01-01").unwrap();
 
 		ledger
@@ -605,7 +611,7 @@ mod tests {
 
 	#[test]
 	fn test_add_detail_without_account_declaration_in_lenient_mode() {
-		let mut ledger = Ledger::new(true);
+		let mut ledger = Ledger::new(true, false);
 		let date = Date::from_str("2024-01-01").unwrap();
 
 		ledger
@@ -625,7 +631,7 @@ mod tests {
 
 	#[test]
 	fn test_set_virtual_detail_without_account_declaration_in_lenient_mode() {
-		let mut ledger = Ledger::new(true);
+		let mut ledger = Ledger::new(true, false);
 		let date = Date::from_str("2024-01-01").unwrap();
 
 		ledger

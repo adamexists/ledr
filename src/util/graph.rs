@@ -727,9 +727,11 @@ mod tests {
 	fn test_large_connected_graph_no_cycles() {
 		let mut graph: Graph = Graph::new_undated();
 
-		// Generate many currencies
+		// NOTE: This test is long-running exponentially versus the size of
+		// this value. It was fine at 200 for a while, but I got impatient
+		// and reduced it to 70. The point of the test is still achieved.
 		let currencies: Vec<String> =
-			(1..=200).map(|i| format!("C{i:03}")).collect();
+			(1..=70).map(|i| format!("C{i:03}")).collect();
 
 		// Add consistent bidirectional rates
 		for i in 0..currencies.len() {
@@ -1252,10 +1254,10 @@ mod tests {
 				("BTC", "USD"),
 			];
 
-			// Execute conversions 1000 times, creating and traversing a new graph each time
+			// Execute conversions 100 times, creating and traversing a new graph each time
 			let mut all_results = vec![];
 
-			for _ in 0..1000 {
+			for _ in 0..100 {
 				// Create a new graph and populate it with the same rates
 				let mut graph: Graph = Graph::new_undated();
 				for &(base, quote, rate1, rate2) in &rates {

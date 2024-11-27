@@ -30,8 +30,9 @@ pub struct ExchangeRates {
 	primary_graph: Graph,
 
 	is_finalized: bool,
+	allow_warnings: bool,
 
-	/// Preprocessed data for constant-time lookups, only available after
+	/// Preprocessed data for performant lookups, only available after
 	/// finalize() has been called on this.
 	resolved_rates: BTreeMap<(String, String), Vec<ObservedRate>>,
 
@@ -40,13 +41,14 @@ pub struct ExchangeRates {
 }
 
 impl ExchangeRates {
-	pub fn new() -> Self {
+	pub fn new(warnings: bool) -> Self {
 		Self {
 			daily_graphs: Default::default(),
 			resolved_rates: Default::default(),
 			primary_graph: Graph::new_undated(),
 			is_finalized: false,
 			worthless: Default::default(),
+			allow_warnings: warnings,
 		}
 	}
 
@@ -144,13 +146,12 @@ impl ExchangeRates {
 	pub fn finalize(
 		&mut self,
 		max_precision_by_currency: &BTreeMap<String, u32>,
-		emit_warnings: bool,
 	) -> Result<(), Error> {
 		let mut resolved = BTreeMap::new();
 
 		for (date, graph) in &self.daily_graphs {
-			if emit_warnings && graph.has_inconsistent_cycle() {
-				println!("Warning: currency conversion rates on {} are not internally consistent", date);
+			if self.allow_warnings && graph.has_inconsistent_cycle() {
+				println!("[{}]: currency conversion rates on this date are not internally consistent", date);
 			}
 
 			// Make sure exchange rates inherit desired precision from user
@@ -252,13 +253,9 @@ mod tests {
 	use crate::util::date::Date;
 	use crate::util::quant::Quant;
 
-	fn setup_exchange_rates() -> ExchangeRates {
-		ExchangeRates::new()
-	}
-
 	#[test]
 	fn test_declare_valid_rate() {
-		let mut exchange_rates = setup_exchange_rates();
+		let mut exchange_rates = ExchangeRates::new(false);
 		let date = Date::from_str("2024-1-1").unwrap();
 		let base = "USD".to_string();
 		let quote = "EUR".to_string();
@@ -288,7 +285,7 @@ mod tests {
 
 	#[test]
 	fn test_declare_self_exchange() {
-		let mut exchange_rates = setup_exchange_rates();
+		let mut exchange_rates = ExchangeRates::new(false);
 		let date = Date::from_str("2024-1-1").unwrap();
 		let base = "USD".to_string();
 		let rate = Quant::new(11, 1);
@@ -317,7 +314,7 @@ mod tests {
 
 	#[test]
 	fn test_declare_non_positive_rate() {
-		let mut exchange_rates = setup_exchange_rates();
+		let mut exchange_rates = ExchangeRates::new(false);
 		let date = Date::from_str("2024-11-01").unwrap();
 		let base = "USD".to_string();
 		let quote = "EUR".to_string();
@@ -344,7 +341,7 @@ mod tests {
 
 	#[test]
 	fn test_infer_rate_within_tolerance() {
-		let mut exchange_rates = setup_exchange_rates();
+		let mut exchange_rates = ExchangeRates::new(false);
 		let date = Date::from_str("2024-11-01").unwrap();
 		let base = "USD".to_string();
 		let quote = "EUR".to_string();

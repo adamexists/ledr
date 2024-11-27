@@ -205,6 +205,7 @@ impl Entry {
 	pub fn finalize(
 		&mut self,
 		rates: &mut ExchangeRates,
+		allow_warnings: bool,
 	) -> Result<Vec<Action>, Error> {
 		let actual_details = self.get_actual_details();
 		let actions = self.actions.clone();
@@ -245,7 +246,7 @@ impl Entry {
 		}
 
 		// Attach proceeds to associated sell actions if possible
-		self.resolve_sell_action_proceeds(actual_details);
+		self.resolve_sell_action_proceeds(actual_details, allow_warnings);
 
 		// If a virtual detail exists, it can absorb all imbalances.
 		// Otherwise, if any remain, we fail the entry as unbalanced.
@@ -299,7 +300,11 @@ impl Entry {
 
 	/// Adds proceeds to applicable Sell lot actions iff they can be
 	/// inferred from user input.
-	fn resolve_sell_action_proceeds(&mut self, actual_details: Vec<Detail>) {
+	fn resolve_sell_action_proceeds(
+		&mut self,
+		actual_details: Vec<Detail>,
+		allow_warnings: bool,
+	) {
 		let actions_copy = self.actions.clone();
 		for sale in &mut self.actions {
 			if sale.direction == Direction::Buy {
@@ -309,17 +314,37 @@ impl Entry {
 			if actual_details.len() > 2
 				|| (actual_details.len() == 2 && self.virtual_detail.is_some())
 			{
+				if allow_warnings {
+					println!(
+						"[{} {}] entry has ambiguous proceeds from lot sale",
+						self.date, self.desc
+					);
+				}
 				return;
 			}
 
 			if self.virtual_detail.is_some() {
 				// Perfectly netted out against the cost basis
+				if allow_warnings {
+					println!(
+						"[{} {}] entry has lot sale netted against nonspecific \
+						detail, implying break-even (is this intentional?)",
+						self.date, self.desc
+					);
+				}
 				sale.add_unit_proceeds(sale.commodity.cost_basis().clone());
 				return;
 			}
 
+			// If the only other Detail is a buy action, net against its cost
+			// basis, but log a warning if allowed because it can be ambiguous
 			if let Some(other_action) = actions_copy.iter().find(|a| *a != sale)
 			{
+				println!(
+					"[{} {}] entry marks the purchase of a lot as the \
+						 proceeds of another (consider separating these)",
+					self.date, self.desc,
+				);
 				let other_quantity = match &other_action.direction {
 					Direction::Buy => other_action.quantity,
 					Direction::Sell(_) => -other_action.quantity,
@@ -331,6 +356,8 @@ impl Entry {
 					&other_action.commodity.cost_basis().currency,
 				));
 			} else {
+				// The normal case, where the other Detail is a normal line,
+				// so we associate it as the proceeds of the sale of this lot
 				let detail_opt = actual_details.iter().find(|&a| {
 					a.amount.currency != sale.commodity.symbol()
 						|| a.amount.value != -sale.quantity
@@ -633,8 +660,8 @@ mod tests {
 			)
 			.unwrap();
 
-		let mut rates = ExchangeRates::new();
-		let result = entry.finalize(&mut rates);
+		let mut rates = ExchangeRates::new(false);
+		let result = entry.finalize(&mut rates, false);
 
 		assert!(result.is_err());
 	}
@@ -652,8 +679,8 @@ mod tests {
 			)
 			.unwrap();
 
-		let mut rates = ExchangeRates::new();
-		let result = entry.finalize(&mut rates);
+		let mut rates = ExchangeRates::new(false);
+		let result = entry.finalize(&mut rates, false);
 
 		assert!(result.is_ok());
 	}
@@ -697,7 +724,7 @@ mod tests {
 			.add_detail("Assets:Bank", Amount::new(Quant::new(-2000, 1), "EUR"))
 			.unwrap();
 
-		let mut rates = ExchangeRates::new();
+		let mut rates = ExchangeRates::new(false);
 		let mut imbalances = entry.get_imbalances();
 		let result = entry.multiline_implicit_currency_conversion(
 			&mut imbalances,
