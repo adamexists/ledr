@@ -1,4 +1,5 @@
-# Tests the existence and proper reporting of accumulated rounding error
+# Tests that balances are correct even after rounding
+# correction for intermediate accounts
 
 ! 2024-11-10 currency USD
 ! 2024-11-10 currency MIDDLE1
@@ -6,12 +7,11 @@
 ! 2024-11-10 currency EUR
 
 ! 2024-11-10 account Assets:USD
+! 2024-11-10 account Assets:USD:Hello
 ! 2024-11-10 account Assets:Middle1
 ! 2024-11-10 account Assets:Middle2
 ! 2024-11-10 account Assets:EUR
 ! 2024-11-10 account Equity:OpeningBalances
-
-! 2024-11-10 rate USD EUR 1
 
 2024-11-10 Test Case
     Assets:USD                 1000.1210 USD
@@ -26,7 +26,7 @@
     Assets:USD                -250.1117 USD
 
 2024-11-10 Test Case
-    Assets:Middle2             250.0890 MIDDLE2
+    Assets:USD:Hello             250.0890 MIDDLE2
     Assets:USD                -250.112138 USD
 
 2024-11-10 Test Case

@@ -135,6 +135,9 @@ impl Parser {
 			match directive[0] {
 				"account" if directive.len() == 2 => {
 					let account = directive[1].to_string();
+					if !account.contains(":") {
+						bail!("Top level accounts cannot be used on their own (line {})", i);
+					}
 					ledger
 						.declare_account(account, date)
 						.map_err(|e| anyhow!("{} (line {})", e, i))?;

@@ -279,29 +279,44 @@ impl Graph {
 			current_currency,
 			current_rate,
 			depth,
-			mut declared_count,
+			declared_count,
 		)) = queue.pop_front()
 		{
 			if let Some(node) = self.nodes.get(&current_currency) {
 				for (neighbor, rate) in &node.edges {
 					let new_rate = current_rate * rate.avg();
-					if rate.observation_type == ObservationType::Declared {
-						declared_count += 1;
-					}
+					let new_declared_count =
+						if rate.observation_type == ObservationType::Declared {
+							declared_count + 1
+						} else {
+							declared_count
+						};
 
 					if neighbor == base {
 						match shortest_path_length {
 							Some(path_len) if depth + 1 < path_len => {
 								shortest_path_length = Some(depth + 1);
 								rates.clear();
-								rates.push((new_rate, declared_count));
+								rates.push((
+									new_rate,
+									new_declared_count,
+									depth + 1,
+								));
 							},
 							Some(path_len) if depth + 1 == path_len => {
-								rates.push((new_rate, declared_count));
+								rates.push((
+									new_rate,
+									new_declared_count,
+									depth + 1,
+								));
 							},
 							None => {
 								shortest_path_length = Some(depth + 1);
-								rates.push((new_rate, declared_count));
+								rates.push((
+									new_rate,
+									new_declared_count,
+									depth + 1,
+								));
 							},
 							_ => {},
 						}
@@ -315,7 +330,7 @@ impl Graph {
 							neighbor.clone(),
 							new_rate,
 							depth + 1,
-							declared_count,
+							new_declared_count,
 						));
 					}
 				}
@@ -330,20 +345,23 @@ impl Graph {
 		// of declared rates. Basically, ignore paths that inferred more
 		// than necessary.
 		let max_declared_count =
-			rates.iter().map(|&(_, count)| count).max().unwrap_or(0);
+			rates.iter().map(|&(_, count, _)| count).max().unwrap_or(0);
 
 		// average all rates from the set with the highest declared rate count
 		let (total_rate, count) = rates
 			.iter()
-			.filter(|&&(_, count)| count == max_declared_count)
-			.fold((Quant::zero(), 0), |(acc_rate, acc_count), &(rate, _)| {
-				(acc_rate + rate, acc_count + 1)
-			});
+			.filter(|&&(_, count, _)| count == max_declared_count)
+			.fold(
+				(Quant::zero(), 0),
+				|(acc_rate, acc_count), &(rate, _, _)| {
+					(acc_rate + rate, acc_count + 1)
+				},
+			);
 
 		Some((
 			total_rate / count,
 			shortest_path_length.unwrap(),
-			max_declared_count > 0,
+			max_declared_count > 0 && max_declared_count == rates[0].2, // (depth)
 		))
 	}
 

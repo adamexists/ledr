@@ -29,8 +29,10 @@
     Assets:USD                 -250.00 USD
 
 2024-11-10 Test Case
-    Assets:Middle2        1,000,000.00 MIDDLE2
-    Assets:USD                 -250.00 USD
+    // this gnarly rate gets ignored in EUR/USD conversion
+    // because it was not declared and another path was
+    Assets:Middle2               1,000,000.00 MIDDLE2
+    Assets:USD                 -2500000000.00 USD
 
 2024-11-10 Test Case
     Assets:EUR                  100.00 EUR

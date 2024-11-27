@@ -257,6 +257,10 @@ impl Ledger {
 		match self.pending_entry.take() {
 			None => Ok(()),
 			Some(mut entry) => {
+				if entry.details().is_empty() {
+					bail!("Empty entry")
+				}
+
 				let actions = entry.finalize(&mut self.exchange_rates)?;
 				for action in actions {
 					self.lots.add_action(action);
@@ -504,6 +508,28 @@ mod tests {
 		let mut ledger = Ledger::new(false);
 		let date = Date::from_str("2024-01-01").unwrap();
 		ledger.new_entry(date, "Test Entry".to_string(), 0).unwrap();
+		ledger
+			.declared_accounts
+			.insert("Assets:Cash".to_string(), date);
+		ledger.declared_currencies.insert("USD".to_string(), date);
+		ledger
+			.add_detail(
+				"Assets:Cash".to_string(),
+				Amount::new(Quant::new(1000, 1), "USD"),
+				None,
+				None,
+				None,
+			)
+			.unwrap();
+		ledger
+			.add_detail(
+				"Assets:Cash".to_string(),
+				Amount::new(Quant::new(-1000, 1), "USD"),
+				None,
+				None,
+				None,
+			)
+			.unwrap();
 		assert!(ledger.finish_entry().is_ok());
 		assert!(ledger.pending_entry.is_none());
 		assert_eq!(ledger.entries.len(), 1);

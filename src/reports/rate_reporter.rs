@@ -56,9 +56,9 @@ impl RateReporter {
 					&reported_date,
 					&observation.rate.to_string(),
 					match observation.observation_type {
-						ObservationType::Declared => "D",
-						ObservationType::Direct => "O",
-						ObservationType::Inferred => "I",
+						ObservationType::Declared => "De",
+						ObservationType::Direct => "Ob",
+						ObservationType::Inferred => "In",
 					},
 				])
 			}

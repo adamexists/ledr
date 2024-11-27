@@ -229,7 +229,7 @@ impl Total {
 
 				self.ingest_details(&vec![Detail::new(
 					VIRTUAL_ROUNDING_ERROR_ACCOUNT,
-					Amount::new(-*quant, &currency),
+					Amount::new(-*quant, currency),
 					true,
 				)])
 			}
@@ -351,7 +351,10 @@ mod tests {
 		assert!(!total.subtotals.contains_key("Liabilities"));
 
 		let assets_total = &total.subtotals["Assets"];
-		assert_eq!(assets_total.amounts.get("USD"), Some(&Quant::new(1000, 1)));
+		assert_eq!(
+			assets_total.amounts().get("USD"),
+			Some(&Quant::new(1000, 1))
+		);
 	}
 
 	#[test]

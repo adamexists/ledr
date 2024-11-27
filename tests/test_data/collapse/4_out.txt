@@ -5,7 +5,7 @@
     USD 50,000.00        Boring
        USD 100.00        Cool
            ETH 20        Neutral
-            USD 0        ↩
+         USD 0.00        ↩
    USD -25,000.50      Cash
           ETH -20    Equity
    USD -25,099.50    ↩
