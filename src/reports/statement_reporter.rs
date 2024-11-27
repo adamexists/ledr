@@ -29,8 +29,8 @@ pub struct StatementReporter {
 impl StatementReporter {
 	pub fn from_total(t: Total) -> Self {
 		Self {
-			account: t.account,
-			amounts: t.amounts.into_iter().collect(),
+			account: t.account.clone(),
+			amounts: t.amounts().into_iter().collect(),
 			subtotals: t
 				.subtotals
 				.into_iter()

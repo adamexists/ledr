@@ -14,9 +14,12 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+const VIRTUAL_ROUNDING_ERROR_ACCOUNT: &str = "Equity:Rounding";
+
 use crate::gl::entry::Detail;
 use crate::gl::exchange_rates::ExchangeRates;
 use crate::gl::ledger::Ledger;
+use crate::util::amount::Amount;
 use crate::util::quant::Quant;
 use std::collections::BTreeMap;
 
@@ -39,14 +42,36 @@ use std::collections::BTreeMap;
 #[derive(Debug, Default)]
 pub struct Total {
 	pub account: String,
-	pub amounts: BTreeMap<String, Quant>, // currency -> balance held
 	pub subtotals: BTreeMap<String, Total>, // account name -> next total
 	pub depth: u32, // top level total is depth 0; Income/Expenses is 1, etc.
+
+	/// Note that a Total does not need to be last in the chain
+	/// to have amounts on it. These amounts do not include those
+	/// on leaves below.
+	amounts: BTreeMap<String, Quant>, // currency -> balance held
 }
 
 impl Total {
 	pub fn new() -> Self {
 		Default::default()
+	}
+
+	/// Recursively calculates the total amounts for this Total and all its
+	/// subtotals.
+	pub fn amounts(&self) -> BTreeMap<String, Quant> {
+		let mut aggregated_amounts: BTreeMap<String, Quant> =
+			self.amounts.clone();
+
+		for subtotal in self.subtotals.values() {
+			for (currency, amount) in subtotal.amounts() {
+				aggregated_amounts
+					.entry(currency)
+					.and_modify(|e| *e += amount)
+					.or_insert(amount);
+			}
+		}
+
+		aggregated_amounts
 	}
 
 	pub fn from_ledger(ledger: &Ledger) -> Self {
@@ -67,12 +92,6 @@ impl Total {
 			let mut current = &mut *self;
 
 			for segment in detail.account().split(":").collect::<Vec<&str>>() {
-				// Update each total along the hierarchy
-				*current
-					.amounts
-					.entry(detail.currency().to_string())
-					.or_insert_with(Quant::zero) += detail.value();
-
 				current = current
 					.subtotals
 					.entry(segment.to_string())
@@ -180,23 +199,40 @@ impl Total {
 	/// precision observed in the ledger for its currency, whichever is lower.
 	///
 	/// Banker's rounding is used for all rounding operations.
-	/// TODO: Each total should accumulate sum of error from its subtotals
-	///  and then diff itself with how it, itself, rounds; it could do this by
-	///  summing all its subtotals and comparing that figure to itself, then
-	///  reporting that figure as sum of error.
 	pub fn round(
 		&mut self,
 		max_precision: u32,
 		max_reso_by_currency: &mut BTreeMap<String, u32>,
+		is_top_level: bool,
 	) {
+		// Round off amounts on this
 		for (currency, quant) in self.amounts.iter_mut() {
-			let reso = max_reso_by_currency.get(currency.as_str()).unwrap();
+			let reso = max_reso_by_currency
+				.get(currency.as_str())
+				.unwrap_or(&max_precision);
 
 			quant.round(*reso.min(&max_precision));
 		}
 
+		// Recursively round down the stack of any subtotals this has.
 		for subtotal in self.subtotals.values_mut() {
-			subtotal.round(max_precision, max_reso_by_currency);
+			subtotal.round(max_precision, max_reso_by_currency, false);
+		}
+
+		// If rounding error has propagated to the top-level, then
+		// the only recourse is to book a rounding error entry.
+		if is_top_level {
+			for (currency, quant) in &self.amounts() {
+				if *quant == 0 {
+					continue;
+				}
+
+				self.ingest_details(&vec![Detail::new(
+					VIRTUAL_ROUNDING_ERROR_ACCOUNT,
+					Amount::new(-*quant, &currency),
+					true,
+				)])
+			}
 		}
 	}
 }

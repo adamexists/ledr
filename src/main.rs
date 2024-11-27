@@ -261,6 +261,7 @@ fn financial_statement(
 	totals.round(
 		args.precision.unwrap_or(u32::MAX),
 		&mut max_precision_by_currency,
+		true,
 	);
 
 	let mut top_levels = top_level_accounts_to_show;
