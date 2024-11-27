@@ -1992,6 +1992,8 @@ mod tests {
 
 	mod extremes {
 		use super::*;
+		use rand::Rng;
+		use std::time::{Duration, Instant};
 
 		#[test]
 		fn test_large_numbers() {
@@ -2116,6 +2118,50 @@ mod tests {
 				quant.denominator,
 				12152941675747802266549093122563150409
 			);
+		}
+
+		#[test]
+		fn test_arithmetic_stress() {
+			let duration = Duration::from_secs(1);
+			let start_time = Instant::now();
+
+			let mut rng = rand::thread_rng();
+
+			while Instant::now() - start_time < duration {
+				// Generate random numerators and denominators within i128 bounds
+				let mut numerator_a: i128 = rng.gen_range(1..10i128.pow(19));
+				let mut numerator_b: i128 = rng.gen_range(1..10i128.pow(19));
+				if rng.gen_bool(0.5) {
+					numerator_a = -numerator_a;
+				}
+				if rng.gen_bool(0.5) {
+					numerator_b = -numerator_b;
+				}
+
+				let denominator_a: i128 = rng.gen_range(1..10i128.pow(19));
+				let denominator_b: i128 = rng.gen_range(1..10i128.pow(19));
+
+				let quant_a = Quant::from_frac(numerator_a, denominator_a);
+				let quant_b = Quant::from_frac(numerator_b, denominator_b);
+
+				// Randomly pick an operation to perform
+				let operation: u8 = rng.gen_range(0..4); // 0: add, 1: sub, 2: mul, 3: div
+
+				let mut result = match operation {
+					0 => quant_a + quant_b,
+					1 => quant_a - quant_b,
+					2 => quant_a * quant_b,
+					3 => {
+						if quant_b.numerator == 0 {
+							continue; // Skip division by zero
+						}
+						quant_a / quant_b
+					},
+					_ => unreachable!(),
+				};
+
+				result.reduce();
+			}
 		}
 	}
 

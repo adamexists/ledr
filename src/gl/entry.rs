@@ -242,6 +242,7 @@ impl Entry {
 			self.multiline_implicit_currency_conversion(
 				&mut imbalances,
 				rates,
+				allow_warnings,
 			)?;
 		}
 
@@ -274,9 +275,17 @@ impl Entry {
 		&mut self,
 		imbalances: &mut Vec<(String, Quant)>,
 		rates: &mut ExchangeRates,
+		allow_warnings: bool,
 	) -> Result<(), Error> {
 		let (currency1, amount1) = imbalances.remove(0);
 		let (currency2, amount2) = imbalances.remove(0);
+
+		if allow_warnings
+			&& ((amount1 > 0 && amount2 > 0) || (amount1 < 0 && amount2 < 0))
+		{
+			println!("[{} {}] entry implies a negative exchange rate (is this intentional?)",
+			self.date, self.desc)
+		}
 
 		self.add_system_detail(
 			VIRTUAL_CONVERSION_ACCOUNT,

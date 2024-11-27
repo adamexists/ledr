@@ -28,3 +28,7 @@
     Assets:Cash           -0.1 BTC { 20,000 USD }
     Equity:OpeningBalances 20.00 USD
     Equity:OpeningBalances
+    
+2024-11-14 Heinous Exchange Rate
+    Assets:Cash            100 USD
+    Assets:Cash            100 CAD

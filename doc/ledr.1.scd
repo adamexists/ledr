@@ -24,10 +24,16 @@ Here's what this doc should contain in the future:
   the last of the set will be used for all reporting. This is the only time
   where the order of entries matters outside of lot-counting, potentially.
 - `ledr` uses integer math for all numbers, and is tested & accurate for all
-  values within 10E-18 and 10E+18 to at least 18 decimal places. Its actual
-  bounds are higher, but nobody needs more than this.
+  values that can be stored as a fraction of numbers with numerator and
+  denominator both between 10E-19 and 10E+19. This comfortably allows
+  management of numbers in the quadrillions or higher, down to decimal
+  precision beyond the requirements of any human system.
+- `ledr` does no internal rounding and stores all quantities and exchange
+  rates exactly, without loss. Reports are, of course, rounded as needed,
+  and when rounding occurs, cumulative rounding error is reported to the user,
+  but the full precision of all numbers is always optionally available to see.
 - The default visible precision of every report is the maximum precision of
-  any entry in the ledger for that given currency. You can reduce the visible
+  any entry in the ledger for that given currency. You can adjust the visible
   precision using the -p command line flag. Internal math is never rounded;
   just the visible results. Rounding is done using banker's rounding.
 - If you want to short something, then that's a lot with a negative cost basis
