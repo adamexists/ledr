@@ -44,13 +44,17 @@ struct Cli {
 	/// The command to execute
 	command: Directive,
 
-	/// The search term for the AS command
+	/// The search term for the AS and Find commands
 	#[arg(required = false)]
 	term: Option<String>,
 
 	// -----------
 	// -- FLAGS --
 	// -----------
+	/// Specifies the input file
+	#[arg(short)]
+	file: String,
+
 	/// Ignore entries prior to this date (YYYY-MM-DD)
 	#[arg(short, long, required = false)]
 	begin: Option<String>,
@@ -58,10 +62,6 @@ struct Cli {
 	/// Ignore entries after this date (YYYY-MM-DD)
 	#[arg(short, long, required = false)]
 	end: Option<String>,
-
-	/// Specifies the input file
-	#[arg(short)]
-	file: String,
 
 	/// Convert all possible balances to this currency
 	#[arg(short, long)]
@@ -119,14 +119,15 @@ enum Directive {
 	Is, // income statement
 	Tb, // trial balance
 
-	As, // account summary
 	Er, // exchange rates
 
 	Lots, // open lots report
 	Rgl,  // realized gains/losses report
 	Ugl,  // unrealized gains/losses report
 
-	Fmt, // format and output the ledger's entries
+	As,   // account summary
+	Fmt,  // format and output the ledger's entries
+	Find, // search for entries by description
 }
 
 fn main() -> Result<(), Error> {
@@ -170,17 +171,6 @@ fn main() -> Result<(), Error> {
 			vec!["Assets", "Liabilities", "Income", "Expenses"],
 			parse_result.max_precision_by_currency,
 		)?,
-		Directive::As => {
-			// Ensure the search term is provided for the AS command
-			if let Some(account) = &args.term {
-				let entries = LedgerReporter::new(ledger.take_entries());
-				// no need to pass ignore_other_currencies in here because
-				// this report always does that
-				entries.account_summary(account, args.currency)
-			} else {
-				bail!("No account specified");
-			}
-		},
 		Directive::Er => {
 			let rates = ledger.exchange_rates.take_all_rates();
 			let reporter = RateReporter::new(rates);
@@ -217,8 +207,25 @@ fn main() -> Result<(), Error> {
 				&ledger.exchange_rates,
 			)
 		},
+		Directive::As => {
+			// Ensure the search term is provided for the AS command
+			if let Some(account) = &args.term {
+				let entries = LedgerReporter::new(ledger.take_entries());
+				// no need to pass ignore_other_currencies in here because
+				// this report always does that
+				entries.account_summary(account, args.currency)
+			} else {
+				bail!("No account specified");
+			}
+		},
+		Directive::Find => {
+			if args.term.is_none() {
+				bail!("No search term specified");
+			}
+			ledger.print(&begin, args.term);
+		},
 		Directive::Fmt => {
-			ledger.print(&begin);
+			ledger.print(&begin, None);
 		},
 	}
 

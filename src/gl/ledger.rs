@@ -373,9 +373,17 @@ impl Ledger {
 		self.entries
 	}
 
-	/// Prints the fully resolved form of all entries.
-	pub fn print(&self, begin: &Date) {
+	/// Prints the fully resolved form of all entries where the
+	/// description matches the specified fuzzy string, if any.
+	/// If None, all entries are printed.
+	pub fn print(&self, begin: &Date, term: Option<String>) {
 		for entry in &self.entries {
+			if let Some(t) = &term {
+				if !entry.get_desc().contains(t) {
+					continue;
+				}
+			}
+
 			if entry.get_date() >= begin {
 				println!("{}", entry);
 			}
