@@ -40,15 +40,12 @@ someone is in.
 ## Roadmap
 
 The current targeted features are:
-- Completing functionality related to lot management and capital gains/losses
-- Thereafter, expanding the set of reports available, including at least:
-  - Lots, capital gains / losses, assignment strategies, holdings, & net worth
+- Expanding the set of reports available, including at least:
   - Transaction-based reports, views, & searching
   - Arbitrary filtering of financial statement reports (fuzzy account matching)
-  - Prices and rates, declared and inferred, over time 
 
 Once the project is feature-complete, I will do a documentation push, which
-will signal the end of the first phase of development. I am targeting Q2 2025
+will signal the end of the first phase of development. I am targeting Q1 2025
 for this.
 
 The second phase of development is looser, but will likely consist of an API

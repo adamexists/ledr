@@ -137,6 +137,8 @@ impl Quant {
 	/// that rounded amount + error == original amount. If original is higher,
 	/// returned number will be negative.
 	pub fn round(&mut self, decimal_places: u32) -> Self {
+		self.reduce();
+
 		let initial = *self;
 
 		let scale = 10u128.pow(decimal_places);
@@ -1985,6 +1987,135 @@ mod tests {
 			let mut a = Quant::from_str("1074.96875").unwrap();
 			a.round(2);
 			assert_eq!(a.to_string(), "1,074.97")
+		}
+	}
+
+	mod extremes {
+		use super::*;
+
+		#[test]
+		fn test_large_numbers() {
+			let quant = Quant::from_frac(i128::MAX, 1);
+			assert_eq!(
+				quant.numerator, 170141183460469231731687303715884105727,
+				"Reduction should not occur with 1 denominator"
+			);
+			assert_eq!(quant.denominator, 1, "Denominator should remain 1");
+			assert!(!quant.is_negative, "Quant should not be negative");
+		}
+
+		#[test]
+		fn test_large_fraction() {
+			let quant = Quant::from_frac(i128::MAX, i128::MAX / 10);
+			assert_eq!(
+				quant.numerator, 170141183460469231731687303715884105727,
+				"Numerator should have been reduced once"
+			);
+			assert_eq!(
+				quant.denominator, 17014118346046923173168730371588410572,
+				"Denominator should be one order of magnitude lesser"
+			);
+			assert!(!quant.is_negative, "Quant should not be negative");
+		}
+
+		#[test]
+		fn test_bizarre_fractions() {
+			let quant = Quant::from_frac(17190837190231, 1837619237101091);
+			assert_eq!(quant.numerator, 904780904749);
+			assert_eq!(quant.denominator, 96716801952689);
+			assert!(!quant.is_negative, "Quant should not be negative");
+		}
+
+		#[test]
+		fn test_large_number_with_high_precision() {
+			let quant = Quant::new(i128::MAX, 20);
+			assert_eq!(
+				quant.numerator,
+				i128::MAX as u128,
+				"Numerator should match the maximum i128 value"
+			);
+			assert_eq!(
+				quant.denominator,
+				10u128.pow(20),
+				"Denominator should match the specified precision"
+			);
+			assert_eq!(
+				quant.render_precision, 20,
+				"Render precision should be 20"
+			);
+			assert!(!quant.is_negative, "Quant should not be negative");
+		}
+
+		#[test]
+		fn test_large_number_reduction() {
+			let quant = Quant::from_frac(i128::MAX, i128::MAX);
+			assert_eq!(quant.numerator, 1, "Numerator should reduce to 1");
+			assert_eq!(quant.denominator, 1, "Denominator should reduce to 1");
+		}
+
+		#[test]
+		fn test_large_negative_number() {
+			let quant = Quant::from_frac(-i128::MAX, 10);
+			assert_eq!(
+				quant.numerator,
+				i128::MAX as u128,
+				"Numerator should be the absolute value of i128::MAX"
+			);
+			assert_eq!(
+				quant.denominator, 10,
+				"Denominator should remain as specified"
+			);
+			assert!(quant.is_negative, "Quant should be negative");
+		}
+
+		#[test]
+		fn test_small_fraction_high_precision() {
+			let quant = Quant::from_frac(1, 10i128.pow(30));
+			assert_eq!(
+				quant.numerator, 1,
+				"Numerator should remain 1 for smallest fraction"
+			);
+			assert_eq!(
+				quant.denominator,
+				10u128.pow(30),
+				"Denominator should match the specified precision"
+			);
+			assert!(!quant.is_negative, "Quant should not be negative");
+		}
+
+		#[test]
+		fn test_small_fraction_operations() {
+			let a = Quant::from_frac(100, 10i128.pow(11));
+			let b = Quant::from_frac(1100, 10i128.pow(12) + 13);
+			let result = a * b;
+			assert_eq!(result.numerator, 11);
+			assert_eq!(result.denominator, 10000000000130000000);
+		}
+
+		#[test]
+		fn test_large_and_small_mixed_operations() {
+			let a = Quant::from_frac(i128::MAX, 1);
+			let b = Quant::from_frac(2, 3);
+			let result = a * b;
+			assert_eq!(
+				result.numerator, 340282366920938463463374607431768211454,
+				"Reduction should occur prior to multiplication and not overflow"
+			);
+			assert_eq!(
+				result.denominator, 3,
+				"Resulting denominator should scale with the smaller fraction"
+			);
+		}
+
+		#[test]
+		fn test_reduce_very_large_fraction() {
+			let mut quant = Quant::from_frac(i128::MAX - 113, i128::MAX - 1);
+			quant.reduce();
+			assert_eq!(quant.numerator, 12152941675747802266549093122563150401);
+			assert_eq!(
+				quant.denominator,
+				12152941675747802266549093122563150409
+			);
 		}
 	}
 
