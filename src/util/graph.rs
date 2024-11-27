@@ -378,7 +378,6 @@ impl Graph {
 		Some(rate.avg())
 	}
 
-	/// TODO: Also need some gnarly tests to test new traversal behavior.
 	pub fn get_all_rates(&self) -> Vec<(String, String, ObservedRate)> {
 		let mut rates = Vec::new();
 

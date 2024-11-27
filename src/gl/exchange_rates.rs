@@ -87,7 +87,6 @@ impl ExchangeRates {
 		// We conceptually can't add zero-value rates; infinities are bad,
 		// and we also no-op if the user has declared something worthless;
 		// why convert it to anything in that case?
-		// TODO: Make a test for the worthless functionality.
 		if a.value == 0
 			|| b.value == 0
 			|| self.worthless.contains(&b.currency)

@@ -1979,6 +1979,13 @@ mod tests {
 				"The rounding error is incorrect."
 			);
 		}
+
+		#[test]
+		fn test_bankers_rounding_high_prec() {
+			let mut a = Quant::from_str("1074.96875").unwrap();
+			a.round(2);
+			assert_eq!(a.to_string(), "1,074.97")
+		}
 	}
 
 	mod other {

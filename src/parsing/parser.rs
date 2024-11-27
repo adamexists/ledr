@@ -35,9 +35,6 @@ pub struct Parser {
 	entry_count: usize,
 }
 
-// TODO: Switch out all strings everywhere possible with identifiers, then
-//  only go back to strings when necessary at the end. Get ziggy with it!
-
 impl Parser {
 	pub fn new() -> Self {
 		let re = Regex::new(r#""([^"]*)"|(\S+)"#).unwrap();

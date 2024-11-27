@@ -14,9 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::gl::entry::{
-	Entry, VIRTUAL_CONVERSION_ACCOUNT, VIRTUAL_ROUNDING_ERROR_ACCOUNT,
-};
+use crate::gl::entry::{Entry, VIRTUAL_CONVERSION_ACCOUNT};
 use crate::gl::exchange_rates::ExchangeRates;
 use crate::gl::observed_rate::ObservationType;
 use crate::investment::action::Action;
@@ -24,7 +22,6 @@ use crate::investment::action_buffer::ActionBuffer;
 use crate::util::amount::Amount;
 use crate::util::date::Date;
 use anyhow::{bail, Error};
-use std::cmp::min;
 use std::collections::BTreeMap;
 
 /// The only valid top-level account names. This is an accounting system, after
@@ -327,9 +324,9 @@ impl Ledger {
 	/// rounding error equity account.
 	pub fn finalize(
 		&mut self,
+		drop_before: &Date,
 		max_reso_by_currency: &BTreeMap<String, u32>,
 		overall_max_reso: Option<u32>,
-		drop_before: &Date,
 	) -> Result<(), Error> {
 		let max_reso = overall_max_reso.unwrap_or(u32::MAX);
 
@@ -354,14 +351,11 @@ impl Ledger {
 		self.entries.sort();
 		for entry in &mut self.entries {
 			for (currency, &reso) in max_reso_by_currency {
-				entry.round_for_currency(currency, min(reso, max_reso))?;
-
-				// Reduce cleans up redundancies without affecting balances
-				entry.reduce(vec![
-					VIRTUAL_CONVERSION_ACCOUNT,
-					VIRTUAL_ROUNDING_ERROR_ACCOUNT,
-				]);
+				entry
+					.set_precision_for_currency(currency, reso.min(max_reso))?;
 			}
+
+			entry.reduce(vec![VIRTUAL_CONVERSION_ACCOUNT])
 		}
 
 		Ok(())

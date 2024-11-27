@@ -27,6 +27,7 @@ use chrono::Local;
 use clap::{Parser, ValueEnum};
 use gl::ledger::Ledger;
 use std::cmp::PartialEq;
+use std::collections::BTreeMap;
 
 mod gl;
 mod investment;
@@ -151,18 +152,21 @@ fn main() -> Result<(), Error> {
 			args,
 			true,
 			vec!["Assets", "Liabilities"],
+			parse_result.max_precision_by_currency,
 		)?,
 		Directive::Is => financial_statement(
 			ledger,
 			args,
 			false,
 			vec!["Income", "Expenses"],
+			parse_result.max_precision_by_currency,
 		)?,
 		Directive::Tb => financial_statement(
 			ledger,
 			args,
 			true,
 			vec!["Assets", "Liabilities", "Income", "Expenses"],
+			parse_result.max_precision_by_currency,
 		)?,
 		Directive::As => {
 			// Ensure the search term is provided for the AS command
@@ -232,9 +236,9 @@ fn finalize_ledger(
 	let portfolio = ledger.lots.tabulate()?;
 
 	ledger.finalize(
+		begin,
 		&parse_result.max_precision_by_currency,
 		max_precision,
-		begin,
 	)?;
 
 	Ok(portfolio)
@@ -245,6 +249,7 @@ fn financial_statement(
 	args: Cli,
 	include_equity_by_default: bool,
 	top_level_accounts_to_show: Vec<&str>,
+	mut max_precision_by_currency: BTreeMap<String, u32>,
 ) -> Result<(), Error> {
 	let mut totals = ledger_to_totals(
 		ledger,
@@ -252,9 +257,11 @@ fn financial_statement(
 		args.invert,
 		args.ignore_other_currencies,
 	)?;
-	if let Some(p) = args.precision {
-		totals.set_max_precision(p);
-	}
+
+	totals.round(
+		args.precision.unwrap_or(u32::MAX),
+		&mut max_precision_by_currency,
+	);
 
 	let mut top_levels = top_level_accounts_to_show;
 	if include_equity_by_default && !args.ignore_equity {

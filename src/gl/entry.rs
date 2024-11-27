@@ -25,7 +25,6 @@ use std::collections::BTreeMap;
 use std::string::ToString;
 
 pub(crate) const VIRTUAL_CONVERSION_ACCOUNT: &str = "Equity:Conversions";
-pub(crate) const VIRTUAL_ROUNDING_ERROR_ACCOUNT: &str = "Equity:Rounding";
 
 #[derive(Clone, Debug, Eq)]
 pub struct Entry {
@@ -167,30 +166,20 @@ impl Entry {
 		net_map
 	}
 
-	/// Rounds all Details for a certain currency to a certain precision.
-	/// In doing so, precision may be lost, but not gained. This is more
-	/// about the clean display of currency amounts for reporting.
-	pub fn round_for_currency(
+	/// Sets render precision for all details of the given currency.
+	/// No effect on underlying value.
+	pub fn set_precision_for_currency(
 		&mut self,
 		currency: &str,
 		decimal_places: u32,
 	) -> Result<(), Error> {
-		let mut sum_of_error = Quant::zero();
 		for detail in &mut self.details {
 			if detail.amount.currency == *currency {
-				sum_of_error += detail.amount.value.round(decimal_places);
+				detail
+					.amount
+					.value
+					.set_render_precision(decimal_places, true);
 			}
-		}
-
-		// Add rounding error as a system entry, but subject it to the same
-		// precision requirement as everything else. So, it will get reduced
-		// away if it doesn't exceed half of minimum precision, but that's ok!
-		if sum_of_error != 0 {
-			sum_of_error.set_render_precision(decimal_places, true);
-			self.add_system_detail(
-				VIRTUAL_ROUNDING_ERROR_ACCOUNT,
-				Amount::new(-sum_of_error, currency),
-			)?;
 		}
 
 		Ok(())
@@ -758,65 +747,5 @@ mod tests {
 		entry.reduce(vec!["account1"]);
 
 		assert_eq!(entry.details.len(), 3);
-	}
-
-	mod determinism {
-		use super::*;
-		use rand::seq::IndexedRandom;
-		use rand::Rng;
-
-		#[test]
-		fn test_rounding_and_conversion_determinism() {
-			let mut rng = rand::thread_rng();
-			let currencies = ["USD", "EUR", "GBP", "JPY", "AUD"];
-			let decimal_places = 2;
-
-			// Generate a random Entry with random Details
-			let mut entry = create_entry();
-			for _ in 0..100 {
-				let amount = Amount::new(
-					Quant::from_frac(
-						rng.gen_range(-100..100),
-						rng.gen_range(1..10),
-					),
-					currencies.choose(&mut rng).unwrap(),
-				);
-				entry
-					.add_detail("Random:Account", amount)
-					.expect("Failed to add detail");
-			}
-
-			// Clone the original details for comparison
-			let original_details = entry.details.clone();
-
-			// Apply rounding and conversion multiple times
-			for _ in 0..100 {
-				let mut results = vec![];
-				let currency = currencies.choose(&mut rng).unwrap();
-				for _ in 0..100 {
-					let mut test_entry = entry.clone();
-
-					// Round for a random currency
-					test_entry
-						.round_for_currency(currency, decimal_places)
-						.expect("Rounding failed");
-
-					// Collect results
-					results.push(test_entry.details.clone());
-				}
-
-				// Verify determinism
-				for i in 1..results.len() {
-					assert_eq!(
-						results[0], results[i],
-						"Determinism failed: Details differ in iteration {}",
-						i
-					);
-				}
-			}
-
-			// Verify no modifications to original details
-			assert_eq!(entry.details, original_details);
-		}
 	}
 }

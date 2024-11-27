@@ -13,6 +13,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
+
 use crate::gl::entry::Detail;
 use crate::gl::exchange_rates::ExchangeRates;
 use crate::gl::ledger::Ledger;
@@ -174,13 +175,28 @@ impl Total {
 		}
 	}
 
-	pub fn set_max_precision(&mut self, max_precision: u32) {
-		for quant in self.amounts.values_mut() {
-			quant.set_render_precision(max_precision, true);
+	/// Rounds all totals in this and its hierarchy to the given precision.
+	/// The precision will be either the overall max precision, or the highest
+	/// precision observed in the ledger for its currency, whichever is lower.
+	///
+	/// Banker's rounding is used for all rounding operations.
+	/// TODO: Each total should accumulate sum of error from its subtotals
+	///  and then diff itself with how it, itself, rounds; it could do this by
+	///  summing all its subtotals and comparing that figure to itself, then
+	///  reporting that figure as sum of error.
+	pub fn round(
+		&mut self,
+		max_precision: u32,
+		max_reso_by_currency: &mut BTreeMap<String, u32>,
+	) {
+		for (currency, quant) in self.amounts.iter_mut() {
+			let reso = max_reso_by_currency.get(currency.as_str()).unwrap();
+
+			quant.round(*reso.min(&max_precision));
 		}
 
 		for subtotal in self.subtotals.values_mut() {
-			subtotal.set_max_precision(max_precision);
+			subtotal.round(max_precision, max_reso_by_currency);
 		}
 	}
 }
