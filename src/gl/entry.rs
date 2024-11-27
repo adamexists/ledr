@@ -738,6 +738,7 @@ mod tests {
 		let result = entry.multiline_implicit_currency_conversion(
 			&mut imbalances,
 			&mut rates,
+			false,
 		);
 
 		assert!(result.is_ok());
