@@ -17,9 +17,3 @@
     Assets:Investments:Neutral   20.11 ETH
     Assets:Cash              -25000.50 USD
     Equity:OpeningBalances
-
-# TODO: Currently precision is not carrying well here.
-#  BTC has precision 4, but USD doesn't, and USD is the
-#  one coming back with that precision. I should
-#  probably handle setting precision by currency all at
-#  once at the end of processing as well.

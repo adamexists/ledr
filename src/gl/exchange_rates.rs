@@ -39,8 +39,6 @@ pub struct ExchangeRates {
 	worthless: HashSet<String>,
 }
 
-// TODO: Sweep the project for unnecessary derived traits.
-
 impl ExchangeRates {
 	pub fn new() -> Self {
 		Self {
