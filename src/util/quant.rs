@@ -192,7 +192,7 @@ impl Quant {
 
 	/// Reduces the underlying fraction as much as possible while still
 	/// representing the same value. Has no user-visible effect; we call this
-	/// after every operation that effects the fraction, to guard against
+	/// after every operation that affects the fraction, to guard against
 	/// overflow when dealing with high-precision values.
 	fn reduce(&mut self) {
 		let gcd = Self::gcd(self.numerator, self.denominator);
