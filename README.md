@@ -2,8 +2,6 @@
 
 #### Plain text accounting tool
 
-[![builds.sr.ht status](https://builds.sr.ht/~house/ledr.svg)](https://builds.sr.ht/~house/ledr?)
-
 Ledr is a [plain text accounting](https://plaintextaccounting.org) tool,
 written in Rust, and designed for complex use cases. It includes a parser, a
 reporting engine, and rock-solid mathematics.
