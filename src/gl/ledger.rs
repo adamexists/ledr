@@ -14,6 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+use crate::gl::declaration::Declaration;
 use crate::gl::entry::{Entry, VIRTUAL_CONVERSION_ACCOUNT};
 use crate::gl::exchange_rates::ExchangeRates;
 use crate::gl::observed_rate::ObservationType;
@@ -54,7 +55,7 @@ pub struct Ledger {
 	/// currency -> the earliest date currency is allowed to appear
 	declared_currencies: BTreeMap<String, Date>,
 	/// account -> the earliest date account is allowed to appear
-	declared_accounts: BTreeMap<String, Date>,
+	declared_accounts: BTreeMap<String, Declaration>,
 	/// currency + the date prior to which we should ignore this currency
 	declared_clears: Vec<(String, Date)>,
 
@@ -115,7 +116,10 @@ impl Ledger {
 			bail!("Account {} declared twice", account)
 		}
 
-		self.declared_accounts.insert(account.clone(), date);
+		let mut declaration = Declaration::new();
+		declaration.open_account(date)?;
+
+		self.declared_accounts.insert(account.clone(), declaration);
 
 		Ok(())
 	}
@@ -129,6 +133,33 @@ impl Ledger {
 	/// records of history.
 	pub fn declare_clear(&mut self, account: String, date: Date) {
 		self.declared_clears.push((account, date));
+	}
+
+	/// Reopens a closed account. If the account was not closed, this isn't
+	/// ideal syntax, but it's alright to use "open" to declare an account
+	/// initially, I think. The reverse does not hold; you cannot use
+	/// "account" to reopen a closed account.
+	pub fn declare_account_open(
+		&mut self,
+		account: String,
+		date: Date,
+	) -> Result<(), Error> {
+		self.declared_accounts
+			.entry(account.clone())
+			.or_insert_with(Declaration::new)
+			.open_account(date)
+			.or_else(|_| self.declare_account(account, date))
+	}
+
+	pub fn declare_account_closure(
+		&mut self,
+		account: String,
+		date: Date,
+	) -> Result<(), Error> {
+		self.declared_accounts
+			.entry(account)
+			.or_insert_with(Declaration::new)
+			.close_account(date)
 	}
 
 	pub fn new_entry(
@@ -301,17 +332,15 @@ impl Ledger {
 	/// pending entry to make sure the declaration date is not ahead of the
 	/// pending entry where the account appears.
 	fn check_account(&self, account: &String) -> Result<(), Error> {
-		let declaration_date = match self.declared_accounts.get(account) {
+		let declaration = match self.declared_accounts.get(account) {
 			Some(d) => d,
 			None => bail!("Account {} used without declaration", account),
 		};
 
-		if self.pending_entry.as_ref().unwrap().get_date() < declaration_date {
-			bail!(
-				"Account {} used prior to declaration on {}",
-				account,
-				declaration_date
-			)
+		if !declaration
+			.is_open_on(self.pending_entry.as_ref().unwrap().get_date())
+		{
+			bail!("Account {} is not open", account)
 		}
 
 		Ok(())
@@ -531,9 +560,11 @@ mod tests {
 		let mut ledger = Ledger::new(false, false);
 		let date = Date::from_str("2024-01-01").unwrap();
 		ledger.new_entry(date, "Test Entry".to_string(), 0).unwrap();
+		let mut dec = Declaration::new();
+		dec.open_account(date).unwrap();
 		ledger
 			.declared_accounts
-			.insert("Assets:Cash".to_string(), date);
+			.insert("Assets:Cash".to_string(), dec);
 		ledger.declared_currencies.insert("USD".to_string(), date);
 		ledger
 			.add_detail(

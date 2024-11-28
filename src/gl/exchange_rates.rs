@@ -27,6 +27,8 @@ pub struct ExchangeRates {
 	/// Stores a set of Graphs, one per date
 	daily_graphs: BTreeMap<Date, Graph>,
 
+	/// Graph that incorporates the most recent date of observations for each
+	/// pair; less accurate across many hops, but much more complete.
 	primary_graph: Graph,
 
 	is_finalized: bool,

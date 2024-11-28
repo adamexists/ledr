@@ -30,8 +30,9 @@ pub(crate) const VIRTUAL_CONVERSION_ACCOUNT: &str = "Equity:Conversions";
 pub struct Entry {
 	date: Date,
 
+	/// The position in the ledger of this, relative to other Entry objects.
 	/// Used to properly order these on some reports.
-	appearance_order: usize,
+	index: usize,
 
 	desc: String,
 	details: Vec<Detail>,
@@ -50,7 +51,7 @@ impl Entry {
 	pub fn new(date: Date, desc: String, index: usize) -> Self {
 		Self {
 			date,
-			appearance_order: index,
+			index,
 			desc,
 			details: vec![],
 			virtual_detail: None,
@@ -140,11 +141,6 @@ impl Entry {
 
 	pub fn details(&self) -> &Vec<Detail> {
 		&self.details
-	}
-
-	/// Reports the order in which this entry appeared according to the parser
-	pub fn index(&self) -> usize {
-		self.appearance_order
 	}
 
 	/// Returns the net amount from this entry on the given account, i.e.
@@ -549,7 +545,7 @@ impl Ord for Entry {
 	fn cmp(&self, other: &Self) -> Ordering {
 		self.date
 			.cmp(&other.date)
-			.then_with(|| self.index().cmp(&other.index()))
+			.then_with(|| self.index.cmp(&other.index))
 			.then_with(|| self.desc.cmp(&other.desc))
 			.then_with(|| self.details.len().cmp(&other.details.len()))
 			.then_with(|| self.actions.len().cmp(&other.actions.len()))
@@ -562,6 +558,8 @@ impl PartialOrd for Entry {
 	}
 }
 
+/// A specific line item in an Entry, indicating a credit or debit and the
+/// associated account.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Detail {
 	account: String,

@@ -14,6 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+mod declaration;
 pub mod entry;
 pub mod exchange_rates;
 pub mod ledger;
