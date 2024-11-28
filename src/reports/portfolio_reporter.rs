@@ -67,6 +67,7 @@ impl PortfolioReporter {
 	}
 
 	/// Prints an abbreviated table format, meant to contain open lots only.
+	/// TODO: Remove this because we have ugl report now.
 	pub fn print_open_lots(&self, as_of: &Date) {
 		if self.lots.is_empty() {
 			println!("No open lots");

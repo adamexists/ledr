@@ -38,6 +38,9 @@ mod parsing;
 mod reports;
 mod util;
 
+// TODO: Support negative precision input, which is a way of rounding off
+//  numbers to e.g. tens, hundreds, or thousands. i.e. Halliburton financials.
+
 #[derive(Parser)]
 #[command(name = "ledr", version = "1.0", about = "Plain text accounting tool")]
 struct Cli {
