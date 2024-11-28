@@ -239,7 +239,7 @@ fn main() -> Result<(), Error> {
 			// Right now, only this command inspects config in any way, so we
 			// don't bother to check for it or parse it until this point
 			let config = fs.get_config(args.config.as_ref(), true)?;
-			import::importer::import(config, args)?;
+			import::importer::import(config, args, ledger)?;
 		},
 	}
 

@@ -14,6 +14,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::config::config_file::Config;
+use crate::gl::ledger::Ledger;
 use crate::import::mercury::core::MercuryImporter;
 use crate::util::date::Date;
 use crate::Cli;
@@ -23,7 +24,7 @@ pub const PLACEHOLDER: &str = "Equity:PLACEHOLDER";
 
 /// The entry point for all import functionality. Currently, the only import
 /// target is Mercury, the financial services firm based in the United States.
-pub fn import(config: Config, args: Cli) -> Result<(), Error> {
+pub fn import(config: Config, args: Cli, ledger: Ledger) -> Result<(), Error> {
 	if args.begin.is_none() || args.end.is_none() {
 		bail!("Import requires begin and end dates");
 	} else if args.term.is_none() {
@@ -45,7 +46,7 @@ pub fn import(config: Config, args: Cli) -> Result<(), Error> {
 	let import_target = ImportTarget::from_str(&target)?;
 	match import_target {
 		ImportTarget::Mercury => {
-			let mercury = MercuryImporter::new(mercury_config)?;
+			let mercury = MercuryImporter::new(mercury_config, ledger)?;
 			mercury.run(b, e, args.file)?
 		},
 	};

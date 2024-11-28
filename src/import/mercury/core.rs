@@ -15,6 +15,8 @@
  */
 use crate::config::config_file::Mercury;
 use crate::gl::entry::Entry;
+use crate::gl::ledger::Ledger;
+use crate::import::account_guesser::AccountGuesser;
 use crate::import::http::Client;
 use crate::import::importer::PLACEHOLDER;
 use crate::import::mercury::models::{
@@ -44,10 +46,12 @@ pub struct MercuryImporter {
 	/// If set, ignore accounts other than this. Can match on
 	/// account nickname or account number (not routing).
 	account_filter: Option<String>,
+
+	account_guesser: AccountGuesser,
 }
 
 impl MercuryImporter {
-	pub fn new(config: Mercury) -> Result<Self, Error> {
+	pub fn new(config: Mercury, ledger: Ledger) -> Result<Self, Error> {
 		if config.api_key.is_none() {
 			bail!("no mercury api key in config");
 		}
@@ -64,6 +68,7 @@ impl MercuryImporter {
 				.account_prefix
 				.unwrap_or(ACCOUNT_PREFIX.to_owned()),
 			account_filter: config.account,
+			account_guesser: AccountGuesser::new(ledger),
 		})
 	}
 
@@ -141,11 +146,23 @@ impl MercuryImporter {
 
 		let is_internal = t.kind == "internalTransfer";
 
+		// Resolve entry name from whether it is internal, and resolve
+		// counterparty based on whether we have seen the same one before.
 		let (entry_name, counterparty) = if is_internal {
 			(
 				"Internal Transfer".to_string(),
 				format!("{}:{}", self.account_prefix, t.name(true)),
 			)
+		} else if let Some(guessed) =
+			self.account_guesser.lookup(&t.name(false))
+		{
+			println!(
+				"[{}] using previously used account {} for counterparty {}",
+				t.date(),
+				guessed,
+				t.name(false)
+			);
+			(t.name(false), guessed)
 		} else {
 			(t.name(false), PLACEHOLDER.to_string())
 		};

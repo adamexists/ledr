@@ -450,6 +450,28 @@ impl Entry {
 			.cloned()
 			.collect()
 	}
+
+	/// Helper designed for use with the importer. If the entry has exactly
+	/// two line items, one of them is an Asset account, and the other is not,
+	/// returns the other Detail that is not an Asset account. Else None.
+	///
+	/// Ignores system-created details in this procedure.
+	pub fn get_counterparty_detail(&self) -> Option<Detail> {
+		let details = self.get_actual_details();
+
+		if details.len() != 2 {
+			return None;
+		}
+
+		let asset_detail =
+			details.iter().find(|d| d.account.starts_with("Assets:"));
+
+		if let Some(asset) = asset_detail {
+			details.iter().find(|d| d.account != asset.account).cloned()
+		} else {
+			None
+		}
+	}
 }
 
 use std::fmt;
@@ -864,5 +886,81 @@ mod tests {
 		entry.reduce(vec!["account1"]);
 
 		assert_eq!(entry.details.len(), 3);
+	}
+
+	#[test]
+	fn test_get_counterparty_detail_with_two_details() {
+		let mut entry = create_entry();
+		entry
+			.add_detail("Assets:Cash", Amount::new(Quant::new(1000, 1), "USD"))
+			.unwrap();
+		entry
+			.add_detail(
+				"Income:Salary",
+				Amount::new(Quant::new(-1000, 1), "USD"),
+			)
+			.unwrap();
+
+		let counterparty = entry.get_counterparty_detail();
+
+		assert!(counterparty.is_some());
+		let counterparty = counterparty.unwrap();
+		assert_eq!(counterparty.account, "Income:Salary");
+		assert_eq!(counterparty.amount.value, Quant::new(-1000, 1));
+		assert_eq!(counterparty.amount.currency, "USD");
+	}
+
+	#[test]
+	fn test_get_counterparty_detail_with_no_asset_account() {
+		let mut entry = create_entry();
+		entry
+			.add_detail(
+				"Expenses:Food",
+				Amount::new(Quant::new(-500, 1), "USD"),
+			)
+			.unwrap();
+		entry
+			.add_detail("Income:Bonus", Amount::new(Quant::new(500, 1), "USD"))
+			.unwrap();
+
+		let counterparty = entry.get_counterparty_detail();
+
+		assert!(counterparty.is_none());
+	}
+
+	#[test]
+	fn test_get_counterparty_detail_with_more_than_two_details() {
+		let mut entry = create_entry();
+		entry
+			.add_detail("Assets:Cash", Amount::new(Quant::new(1000, 1), "USD"))
+			.unwrap();
+		entry
+			.add_detail(
+				"Income:Salary",
+				Amount::new(Quant::new(-1000, 1), "USD"),
+			)
+			.unwrap();
+		entry
+			.add_detail(
+				"Expenses:Taxes",
+				Amount::new(Quant::new(-200, 1), "USD"),
+			)
+			.unwrap();
+
+		let counterparty = entry.get_counterparty_detail();
+
+		assert!(counterparty.is_none());
+	}
+
+	#[test]
+	fn test_get_counterparty_detail_with_one_detail() {
+		let mut entry = create_entry();
+		entry
+			.add_detail("Assets:Bank", Amount::new(Quant::new(1000, 1), "USD"))
+			.unwrap();
+
+		let counterparty = entry.get_counterparty_detail();
+
+		assert!(counterparty.is_none());
 	}
 }
