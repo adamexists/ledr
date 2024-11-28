@@ -172,7 +172,7 @@ fn main() -> Result<(), Error> {
 			ledger,
 			args,
 			true,
-			vec!["Assets", "Liabilities", "Income", "Expenses"],
+			vec!["Assets", "Liabilities", "Income", "Expenses", "Equity"],
 			parse_result.max_precision_by_currency,
 		)?,
 		Directive::Er => {
