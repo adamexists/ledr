@@ -27,7 +27,12 @@ pub struct Imports {
 
 #[derive(Debug, Default, Deserialize)]
 pub struct Mercury {
-	// TODO: Implement api_key_cmd or something to avoid plaintext key.
-	pub api_key: String,
+	pub api_key: Option<String>,
+	pub api_key_cmd: Option<String>,
 	pub api_url: Option<String>,
+	pub account_prefix: Option<String>,
+
+	/// If set, importer will only query the specified account.
+	/// Can be the account nickname or account number as string.
+	pub account: Option<String>,
 }

@@ -142,11 +142,7 @@ fn main() -> Result<(), Error> {
 	args.validate()?;
 
 	let (begin, end) = get_range(&args)?;
-
 	let fs = Filesystem::new();
-	let config = fs.get_config(args.config.as_ref())?;
-	// TODO: Augment and react to config more. It should contain all the same
-	//  options as flags do, for the most part, but be overridden by flags.
 
 	let mut ledger =
 		Ledger::new(args.lenient, args.command == Directive::Check);
@@ -240,6 +236,9 @@ fn main() -> Result<(), Error> {
 			println!("Done");
 		},
 		Directive::Import => {
+			// Right now, only this command inspects config in any way, so we
+			// don't bother to check for it or parse it until this point
+			let config = fs.get_config(args.config.as_ref(), true)?;
 			import::importer::import(config, args)?;
 		},
 	}

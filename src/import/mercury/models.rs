@@ -1,9 +1,6 @@
 use crate::util::date::Date;
 use serde::{Deserialize, Serialize};
 
-// TODO: Allow custom prefixing.
-pub const ACCOUNT_PREFIX: &str = "Assets:US:Mercury";
-
 // -------------
 // -- SENDING --
 // -------------
@@ -31,26 +28,27 @@ pub struct AccountsHolder {
 #[serde(rename_all = "camelCase")]
 pub struct Account {
 	pub id: String,
+	pub account_number: String,
 	pub status: String, // "active" only for what we care about
 
 	#[serde(rename = "type")]
 	pub typ: String, // "mercury" only for what we care about
 
-	nickname: Option<String>,
+	pub nickname: Option<String>,
 }
 
 impl Account {
-	pub fn name(&self) -> String {
+	pub fn name(&self, prefix: &str) -> String {
 		if let Some(name) = &self.nickname {
 			format!(
 				"{}:{}",
-				ACCOUNT_PREFIX,
+				prefix,
 				name.chars()
 					.filter(|&c| !c.is_whitespace() && c != '#')
 					.collect::<String>()
 			)
 		} else {
-			ACCOUNT_PREFIX.to_string()
+			prefix.to_string()
 		}
 	}
 }
@@ -76,8 +74,21 @@ pub struct Transaction {
 	pub posted_at: Option<String>,
 
 	pub status: String,
-	// TODO: Implement convertedFromCurrency & convertedToCurrency
-	//  (on currencyExchangeInfo sub-object)
+
+	pub currency_exchange_info: Option<CurrencyExchangeInfo>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrencyExchangeInfo {
+	pub converted_from_currency: String,
+	pub converted_to_currency: String,
+
+	#[serde(deserialize_with = "deserialize_number_as_string")]
+	pub converted_from_amount: String,
+
+	#[serde(deserialize_with = "deserialize_number_as_string")]
+	pub converted_to_amount: String,
 }
 
 impl Transaction {
