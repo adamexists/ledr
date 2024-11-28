@@ -13,6 +13,20 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
+use serde::Deserialize;
 
-pub mod filesystem;
-pub mod parser;
+#[derive(Debug, Deserialize)]
+pub struct Config {
+	pub imports: Imports,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Imports {
+	pub mercury: Mercury,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Mercury {
+	pub api_key: String,
+	pub api_url: Option<String>,
+}

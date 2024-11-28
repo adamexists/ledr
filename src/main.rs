@@ -16,6 +16,7 @@
 use crate::gl::total::Total;
 use crate::investment::lot::LotStatus;
 use crate::investment::portfolio::{LotFilter, Portfolio};
+use crate::parsing::filesystem::Filesystem;
 use crate::parsing::parser::ParseResult;
 use crate::reports::ledger_reporter::LedgerReporter;
 use crate::reports::portfolio_reporter::PortfolioReporter;
@@ -29,7 +30,9 @@ use gl::ledger::Ledger;
 use std::cmp::PartialEq;
 use std::collections::BTreeMap;
 
+mod config;
 mod gl;
+mod import;
 mod investment;
 mod parsing;
 mod reports;
@@ -56,12 +59,16 @@ struct Cli {
 	file: String,
 
 	/// Ignore entries prior to this date (YYYY-MM-DD)
-	#[arg(short, long, required = false)]
+	#[arg(short, long)]
 	begin: Option<String>,
 
 	/// Ignore entries after this date (YYYY-MM-DD)
-	#[arg(short, long, required = false)]
+	#[arg(short, long)]
 	end: Option<String>,
+
+	/// Custom config file location (default: ~/.config/ledr/config.toml)
+	#[arg(long)]
+	config: Option<String>,
 
 	/// Convert all possible balances to this currency
 	#[arg(short, long)]
@@ -126,6 +133,8 @@ enum Directive {
 	Find, // search for entries by description
 
 	Check, // find possible data integrity concerns
+
+	Import, // import data from specific targets
 }
 
 fn main() -> Result<(), Error> {
@@ -133,6 +142,11 @@ fn main() -> Result<(), Error> {
 	args.validate()?;
 
 	let (begin, end) = get_range(&args)?;
+
+	let fs = Filesystem::new();
+	let config = fs.get_config(args.config.as_ref())?;
+	// TODO: Augment and react to config more. It should contain all the same
+	//  options as flags do, for the most part, but be overridden by flags.
 
 	let mut ledger =
 		Ledger::new(args.lenient, args.command == Directive::Check);
@@ -224,6 +238,9 @@ fn main() -> Result<(), Error> {
 		Directive::Check => {
 			// simple log; warnings occur dynamically throughout processing
 			println!("Done");
+		},
+		Directive::Import => {
+			import::importer::import(config, args)?;
 		},
 	}
 
