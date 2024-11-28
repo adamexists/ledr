@@ -1,6 +1,9 @@
 use crate::util::date::Date;
 use serde::{Deserialize, Serialize};
 
+// TODO: Allow custom prefixing.
+pub const ACCOUNT_PREFIX: &str = "Assets:US:Mercury";
+
 // -------------
 // -- SENDING --
 // -------------
@@ -37,8 +40,18 @@ pub struct Account {
 }
 
 impl Account {
-	pub fn name(&self) -> Option<String> {
-		self.nickname.clone()
+	pub fn name(&self) -> String {
+		if let Some(name) = &self.nickname {
+			format!(
+				"{}:{}",
+				ACCOUNT_PREFIX,
+				name.chars()
+					.filter(|&c| !c.is_whitespace() && c != '#')
+					.collect::<String>()
+			)
+		} else {
+			ACCOUNT_PREFIX.to_string()
+		}
 	}
 }
 
@@ -55,6 +68,8 @@ pub struct Transaction {
 	#[serde(deserialize_with = "deserialize_number_as_string")]
 	pub amount: String,
 
+	pub kind: String,
+
 	pub counterparty_name: String,
 	pub counterparty_nickname: Option<String>,
 
@@ -66,11 +81,19 @@ pub struct Transaction {
 }
 
 impl Transaction {
-	pub fn name(&self) -> String {
-		if let Some(nickname) = &self.counterparty_nickname {
+	pub fn name(&self, remove_whitespace: bool) -> String {
+		let out = if let Some(nickname) = &self.counterparty_nickname {
 			nickname.clone()
 		} else {
 			self.counterparty_name.clone()
+		};
+
+		if remove_whitespace {
+			out.chars()
+				.filter(|&c| !c.is_whitespace() && c != '#')
+				.collect::<String>()
+		} else {
+			out.chars().filter(|&c| c != '#').collect::<String>()
 		}
 	}
 

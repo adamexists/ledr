@@ -19,7 +19,7 @@ use crate::util::date::Date;
 use crate::Cli;
 use anyhow::{bail, Error};
 
-pub const PLACEHOLDER: &str = "PLACEHOLDER";
+pub const PLACEHOLDER: &str = "Equity:PLACEHOLDER";
 
 /// The entry point for all import functionality. Currently, the only import
 /// target is Mercury, the financial services firm based in the United States.
@@ -30,6 +30,12 @@ pub fn import(config: Config, args: Cli) -> Result<(), Error> {
 		bail!("Please specify the system to import from");
 	}
 
+	let mercury_config = config
+		.imports
+		.unwrap_or_default()
+		.mercury
+		.unwrap_or_default();
+
 	let (b, e, target) = (
 		Date::from_str(&args.begin.unwrap())?,
 		Date::from_str(&args.end.unwrap())?,
@@ -39,7 +45,7 @@ pub fn import(config: Config, args: Cli) -> Result<(), Error> {
 	let import_target = ImportTarget::from_str(&target)?;
 	match import_target {
 		ImportTarget::Mercury => {
-			let mercury = MercuryImporter::new(config.imports.mercury)?;
+			let mercury = MercuryImporter::new(mercury_config)?;
 			mercury.run(b, e, args.file)?
 		},
 	};

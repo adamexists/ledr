@@ -19,7 +19,7 @@ use crate::import::http::Client;
 use crate::import::importer::PLACEHOLDER;
 use crate::import::mercury::models::{
 	Account, AccountParams, AccountTransactionsParams, AccountsHolder,
-	Transaction, TransactionHolder,
+	Transaction, TransactionHolder, ACCOUNT_PREFIX,
 };
 use crate::util::amount::Amount;
 use crate::util::date::Date;
@@ -29,9 +29,6 @@ use std::fs::OpenOptions;
 use std::io::Write;
 
 const MERCURY_API_URL: &str = "https://api.mercury.com/api/v1";
-
-// TODO: Allow custom prefixing.
-const ACCOUNT_PREFIX: &str = "Assets:US:Mercury";
 
 /// The importer that knows how to contact the Mercury API to grab
 /// transactions. Read-only implementation.
@@ -66,6 +63,8 @@ impl MercuryImporter {
 		let mut file =
 			OpenOptions::new().append(true).create(true).open(file)?;
 
+		let mut entries: Vec<Entry> = Vec::new();
+
 		// get accounts
 		// TODO: Implement filtering or specifying these.
 		let resp: AccountsHolder =
@@ -90,16 +89,19 @@ impl MercuryImporter {
 				bail!("Too many transactions in range; please shorten range and try again");
 			}
 
-			let mut entries: Vec<Entry> = resp
-				.transactions
-				.into_iter()
-				.filter_map(|t| parse_transaction(account, t).unwrap_or(None))
-				.collect();
+			entries.extend(
+				resp.transactions
+					.into_iter()
+					.filter_map(|t| {
+						parse_transaction(account, t).unwrap_or(None)
+					})
+					.collect::<Vec<_>>(),
+			);
+		}
 
-			entries.sort();
-			for e in entries {
-				writeln!(file, "{}", e)?;
-			}
+		entries.sort();
+		for e in entries {
+			writeln!(file, "{}", e)?;
 		}
 
 		Ok(())
@@ -115,17 +117,25 @@ fn parse_transaction(
 		return Ok(None);
 	}
 
-	let mut entry = Entry::new(t.date(), t.name(), 0);
-
-	let amount = Quant::from_str(&t.amount)?;
-	let name = if let Some(name) = a.name() {
-		&format!("{}:{}", ACCOUNT_PREFIX, name)
+	let entry_name = if t.kind == "internalTransfer" {
+		"Internal Transfer".to_string()
 	} else {
-		&ACCOUNT_PREFIX.to_string()
+		t.name(false)
 	};
 
-	entry.add_detail(PLACEHOLDER, Amount::new(-amount, "USD"))?;
-	entry.add_detail(name, Amount::new(amount, "USD"))?;
+	let mut entry = Entry::new(t.date(), entry_name, 0);
+
+	let amount = Quant::from_str(&t.amount)?;
+	let account_name = a.name();
+
+	let counterparty = if t.kind == "internalTransfer" {
+		format!("{}:{}", ACCOUNT_PREFIX, t.name(true))
+	} else {
+		PLACEHOLDER.to_string()
+	};
+
+	entry.add_detail(&counterparty, Amount::new(-amount, "USD"))?;
+	entry.add_detail(&account_name, Amount::new(amount, "USD"))?;
 
 	Ok(Some(entry))
 }

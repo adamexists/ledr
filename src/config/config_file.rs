@@ -15,18 +15,19 @@
  */
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Config {
-	pub imports: Imports,
+	pub imports: Option<Imports>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Imports {
-	pub mercury: Mercury,
+	pub mercury: Option<Mercury>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Mercury {
+	// TODO: Implement api_key_cmd or something to avoid plaintext key.
 	pub api_key: String,
 	pub api_url: Option<String>,
 }
