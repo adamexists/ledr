@@ -22,6 +22,7 @@ clean: fmt
 doc:
 	mkdir -p target
 	scdoc < doc/ledr.1.scd > target/ledr.1
+	scdoc < doc/ledr.5.scd > target/ledr.5
 
 install:
 	install -m 755 target/release/ledr $(DESTDIR)$(BINDIR)/ledr

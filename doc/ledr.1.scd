@@ -1,4 +1,4 @@
-ledr(1)
+LEDR(1)
 
 # NAME
 
