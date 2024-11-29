@@ -275,6 +275,11 @@ example:
 
 	Assets:US:Chase:Checking    1232.34 USD
 
+Exactly one detail line per entry may omit the amount and currency. If this is
+done, it is assumed that any imbalance left over by any other entries is
+balanced by the account indicated in the entry with amount and currency
+omitted.
+
 A detail line can optionally include additional content after the currency. The
 available forms are as follows:
 
