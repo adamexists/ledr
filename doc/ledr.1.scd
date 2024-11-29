@@ -50,7 +50,197 @@ expenses during a certain period.
 ## ledr tb
 
 Trial balance. Displays a summary of all accounts across all five categories.
-Generally used to verify that
+Generally used to verify that a ledger balances, or to get an overview of its
+complete contents.
+
+# LOT REPORTS
+
+## ledr rgl
+
+Realized gains and losses. Displays a table containing all lot sales in the
+given interval, with cost basis information for each, proceeds information if
+available, and (if both are available), the net unit and total gain/loss for
+each lot.
+
+## ledr ugl
+
+Unrealized gains and losses. Displays a table containing all open lots and
+their associated quantities, cost bases and, if exchange rates are available,
+estimations of their present value and the net unit and total unrealized
+gain/loss for each lot.
+
+## Remarks
+
+Lot reports rely on the entry of data in certain ways to make sure *ledr* can
+correctly interpret the proceeds from a given lot sale. For detailed discussion
+on this topic, consult _ledr_(7).
+
+# AUXILIARY FUNCTIONS
+
+This section contains all commands that do not fit into either of the above
+categories.
+
+## ledr er
+
+Exchange rates report. Prints a table containing each of the declared,
+observed, or inferred exchange rates that *ledr* has interpreted from the
+ledger within a given time range.
+
+Each rate has a corresponding type. There are three types, listed below in
+descending order of accuracy:
+
+- _De_: a declared rate, i.e. a rate abstractly specified in a rate directive
+- _Ob_: an observed rate, i.e. a rate directly observed as having occurred
+between two currencies
+- _In_: an inferred rate, i.e. a rate deduced by converting multiple times
+internally using other declared or observed rates. Only possible between
+currencies that have not directly traded with each other.
+
+Note that, if two currencies that have not directly traded with each other both
+have declared rates with one or more intermediary currencies (or, in other
+words, if there is an unbroken chain of declared exchange rates between the
+currencies), then that rate will also be reported as declared, because it must
+logically follow from the data in the ledger file.
+
+## ledr as <ACCOUNT>
+
+Account summary. Given an account name, prints a summary of all entries that
+affected the balance of that account, and the net impact on that account.
+Accepts partial name matches, and therefore can be used to summarize a specific
+account or a group of accounts that share part of their name.
+
+## ledr fmt
+
+Format command. In this mode, *ledr* processes the ledger file as normal, then
+outputs the final computed results to standard output in a standard format.
+This can be used to validate *ledr* understood an entry correctly, for
+debugging, or to sanitize the formatting of the ledger file.
+
+## ledr find <TERM>
+
+Find command. Reports a list of all entries whose descriptions match the given
+search term in a standard format. Like *ledr fmt*, but filtered.
+
+## ledr check
+
+Check command. Processes the ledger and reports possible common data quality or
+integrity problems to standard output. Most of the things this command checks
+for relate to lot management and currency conversion. Additional functions of
+this command are a useful point of feedback. The intention is for it to provide
+a useful way to validate a ledger file's data accuracy.
+
+## ledr import
+
+Import command. For documentation on this command, consult _ledr-import_(1).
+
+# FLAGS
+
+Almost all *ledr* commands support flags to modify their behavior in useful
+ways. This section lists all supported flags.
+
+## -f <FILE>
+
+Specifies the input file. Required.
+
+## -b <DATE> / --begin <DATE>
+
+Ignore entries prior to the given date. Ignored for balance sheet and open lot
+reports such as unrealized capital gains and losses.
+
+## -e <DATE> / --end <DATE>
+
+Ignore entries after the given date. Always respected. This allows you to
+produce any report as though you were processing the ledger on a specific date
+in the past.
+
+## --config <CONFIG>
+
+Indicate a custom config file location. The default is
+_~/.config/ledr/config.toml_. The config file is only used for the *import*
+command, and is otherwise ignored. You can safely ignore this flag if you don't
+intend to use the importer.
+
+For more details, first consult _ledr-import_(1).
+
+## -c <SYMBOL> / --currency <SYMBOL>
+
+Convert all balances to this currency at most recent prevailing rates.
+Currencies that cannot be converted to the requested currency will be preserved
+on the report unless the *--ioc* flag is also used.
+
+## --ioc
+
+Ignore other currencies. This only has an effect when combined with the
+*-c / --currency* flag indicated above. When used, any currencies that cannot
+be converted to the requested currency will be omitted from the report.
+
+## -E / --ignore-equity
+
+Ignore equity accounts. Equity accounts tend to mean very little to individuals
+doing personal accounting, so this option exists to omit them. Has no effect
+on trial balance reports.
+
+## -d / --depth <NUMBER>
+
+Accounts have a nested structure. This option exists to limit the detail of
+reports to the given "depth" from the base account. For example, if your ledger
+has accounts that look like this:
+
+	Assets
+		US
+			Cash++
+AR++
+Investments
+	Liabilities
+		US
+			Loans
+				Chase
+			Cards
+				Discover
+		CA
+			Cards
+				Amex
+
+Using a depth flag could reduce it to look like this:
+
+	Assets
+		US
+	Liabilities
+		US++
+CA
+
+The intention is to give you the option to summarize highly complex ledgers in
+a more readable way, as desired.
+
+## -i / --invert
+
+Negates all values. This is most typically used for income statements; one of
+the most commonly confusing quirks to newcomers to accounting is that income is
+reported as negative and expenses are reported as positive, so this option
+allows you to render an income statement where the amounts' signs are
+intuitive.
+
+## --lenient
+
+By default, *ledr* expects you to declare each currency and each account
+somewhere in your ledger. This option disables those checks if you are not
+interested in listing them out.
+
+## -p <NUMBER> / --precision <NUMBER>
+
+Rounds or expands all values to the given number of decimal places. The default
+precision is set on a currency-by-currency basis, and is equal to the highest
+number of decimal places for that currency in the ledger. This flag overrides
+all of that and forces the report to render at the number of decimal places
+provided.
+
+## -h / --help
+
+Prints a concise guide to the usage of *ledr*.
+
+## -V / --version
+
+Prints the version of *ledr* that you have installed.
 
 # ACCOUNTING PRINCIPLES
 
@@ -59,8 +249,8 @@ accounting principles in its design. This means that for every debit (i.e.
 increase in the balance of an account) there must be a corresponding, equal
 and opposite credit (i.e. decrease in the balance of an account). A general
 description of accounting principles is beyond the scope of this manual, but
-*ledr* will not be of much interest to you if you are not familiar with the
-general principles of double-entry accounting.
+*ledr* will not be of much interest to you if you are not familiar with, or
+interested in learning, the general principles of double-entry accounting.
 
 ## Rounding
 
@@ -96,15 +286,15 @@ is always optionally available to see.
 # LOT MANAGEMENT
 
 *ledr* includes support for the tracking of lots. Those familiar with the
-surrounding concepts can freely skip the *Background* section below.
+surrounding concepts can comfortably skip the *Background* section below.
 
 ## Background
 
-*ledr* includes support for the tracking of lots. A _lot_ is a certain quantity
-of a certain asset or commodity that was purchased at a specific time for a
-specific amount. An investor, for example, will hold many lots, and in general,
-one can say that the sum of one's lots that relate to a certain asset or
-commodity would be that investor's _position_.
+A _lot_ is a certain quantity of a certain asset or commodity that was
+purchased at a specific time for a specific amount. An investor, for example,
+will hold many lots, and in general, one can say that the sum of one's open
+lots that relate to a certain asset or commodity would be that investor's
+_position_.
 
 In most jurisdictions, lots are the basis of capital gain and loss calculation.
 To determine how much one gained or lost in a given year through investment
@@ -152,13 +342,30 @@ document.)
 For further details on the syntax required to declare and assign a name to a
 lot, consult _ledr_(5).
 
-## Currency Conversion
+# CURRENCY CONVERSION
 
 *ledr* is a multicurrency system, and supports multicurrency transactions.
 In general, all currency amounts must independently balance. *ledr* handles
 this by inserting entries to the _Equity:Conversions_ account whenever a
-currency conversion takes place. Further discussion of how to handle currency
-conversion is available in _ledr_(7).
+currency conversion takes place.
+
+Internally, *ledr* constructs a graph data structure containing all currencies
+and their exchange rates to each other. *ledr* then estimates the value of one
+currency in terms of another by traversing this graph. This means *ledr* is
+able to be perfectly accurate relative to imported data for direct conversions
+and perform reasonable estimations of value in indirect situations, like when
+you buy a lot in one currency and sell it in another, or when you have
+entered exchange rates between currency A to B, B to C, and C to D, but then
+currencies A and D directly trade.
+
+Currency conversion is, in many ways, an art, not a science, from an accounting
+perspective. It is also the only significant place in which loss of precision
+occurs due to fluctuating rates, fees, and rounding error.
+
+For details on the syntax required to declare exchange rates and the
+circumstances in which *ledr* infers them, consult _ledr_(5). For further
+discussion of how to best handle cases of complex currency conversion, consult
+_ledr_(7).
 
 # SEE ALSO
 
@@ -166,6 +373,8 @@ _ledr_(5) - general ledger file format
 
 _ledr_(7) - data integrity guidance, further discussion of lot management and
 currency conversion
+
+_ledr-import_(1) - ledger transaction importer documentation
 
 # DISCLAIMER
 
@@ -184,23 +393,13 @@ found at *github.com/adamexists/ledr* and contributions are accepted via GitHub.
 Here's what this doc should contain in the future:
 
 - If multiple lots are reported at the same date, all buys are assumed to
-  come before all sells. Logic with lots is FIFO by default. You can
-  control this by indicating specific lot IDs to match with, using quotes
-  in the lot syntax.
+  come before all sells. Logic with lots is FIFO by default.
 - Include instructions are not directives. They have different syntax. It
   is best practice to use fully qualified paths with them, else it'll be
   relative to the current working directory. Document all directives too.
 - If two or more implicit exchange rates are inferred from the same date,
-  the last of the set will be used for all reporting. This is the only time
-  where the order of entries matters outside of lot-counting, potentially.
-- The default visible precision of every report is the maximum precision of
-  any entry in the ledger for that given currency. You can adjust the visible
-  precision using the -p command line flag. Internal math is never rounded;
-  just the visible results. Rounding is done using banker's rounding.
+  each will be averaged.
 - If you want to short something, then that's a lot with a negative cost basis
-- Should document the details of what lenient mode does, from making account
-  and currency declarations optional to skipping coherence checks on currency
-  conversion graphs.
 - We allow for entries that may not make sense at first glance, like if there
   are two lines in different currencies that are both positive. This actually
   implies a negative exchange rate between the two currencies, as ledr will
@@ -221,5 +420,3 @@ Here's what this doc should contain in the future:
 - Describe how highly different currency conversions on the same day can yield
   unexpected results and significant conversion error. Also, describe rounding
   error in similar form.
-- I should take care to document the meaning of the headers and row contents
-  of each report, in proper detail befitting an accounting system's audience.
