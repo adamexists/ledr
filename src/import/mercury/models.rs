@@ -86,7 +86,7 @@ pub struct Transaction {
 	pub counterparty_name: String,
 	pub counterparty_nickname: Option<String>,
 
-	pub posted_at: Option<String>,
+	pub created_at: String,
 
 	pub status: String,
 
@@ -126,7 +126,7 @@ impl Transaction {
 	/// Extracts first 10 characters, which is the ISO-8601 date.
 	/// Will panic if posted_at is None.
 	pub fn date(&self) -> Date {
-		Date::from_str(&self.posted_at.clone().unwrap()[..10]).unwrap()
+		Date::from_str(&self.created_at.clone()[..10]).unwrap()
 	}
 }
 

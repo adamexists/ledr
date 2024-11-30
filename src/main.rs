@@ -328,11 +328,17 @@ fn ledger_to_totals(
 }
 
 fn get_range(args: &Cli) -> Result<(Date, Date), Error> {
-	let begin = Date::from_str(
+	let mut begin = Date::from_str(
 		args.begin.as_ref().unwrap_or(&Date::min().to_string()),
 	)?;
 	let end =
 		Date::from_str(args.end.as_ref().unwrap_or(&Date::max().to_string()))?;
+
+	// for importing, we want to use the entire ledger up to that point for
+	// account matching
+	if args.command == Directive::Import {
+		begin = Date::min();
+	}
 
 	Ok((begin, end))
 }

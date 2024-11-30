@@ -249,7 +249,7 @@ impl Parser {
 
 			// Lines that start with two slashes are reference lines.
 			// Empty references are fine; they just do nothing
-			if l.starts_with("//") && l.len() > 2 {
+			if l.starts_with("//") && l.len() > 2 && !ignore_until_next_entry {
 				let content = l[2..].trim();
 				if !content.is_empty() {
 					ledger.add_reference(content.to_string())?;

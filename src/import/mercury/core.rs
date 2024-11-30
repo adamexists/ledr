@@ -28,6 +28,7 @@ use crate::util::date::Date;
 use crate::util::quant::Quant;
 use anyhow::{bail, Error};
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::ops::Neg;
@@ -84,6 +85,10 @@ impl MercuryImporter {
 
 		let mut entries: Vec<Entry> = Vec::new();
 
+		// hold unique transaction amounts & creation times to not count e.g.
+		// internal transfers twice (b/c they show up in multiple txn lists)
+		let mut internal_txn_holder: HashSet<(Quant, String)> = HashSet::new();
+
 		// get accounts
 		let resp: AccountsHolder =
 			self.http.get("accounts", None::<AccountParams>)?;
@@ -120,6 +125,19 @@ impl MercuryImporter {
 			}
 
 			entries.extend(resp.transactions.into_iter().filter_map(|txn| {
+				let (amt, created_at) = (
+					Quant::from_str(&txn.amount.clone()).unwrap().abs(),
+					txn.created_at.clone(),
+				);
+
+				if txn.kind == "internalTransfer" {
+					if internal_txn_holder.contains(&(amt, created_at.clone()))
+					{
+						return None;
+					}
+					internal_txn_holder.insert((amt, created_at));
+				}
+
 				self.parse_transaction(account, txn).unwrap_or(None)
 			}));
 		}
@@ -137,10 +155,7 @@ impl MercuryImporter {
 		a: &Account,
 		t: Transaction,
 	) -> Result<Option<Entry>, Error> {
-		if t.posted_at.is_none()
-			|| t.status == "cancelled"
-			|| t.status == "failed"
-		{
+		if t.status == "cancelled" || t.status == "failed" {
 			return Ok(None);
 		}
 
