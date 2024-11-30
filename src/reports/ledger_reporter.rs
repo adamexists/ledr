@@ -33,6 +33,9 @@ impl LedgerReporter {
 	/// all entries unless a currency is provided, in which case sums not in
 	/// the given currency will be filtered out. There is no currency
 	/// conversion in this report; currency is a simple filter.
+	///
+	/// Has three sections: individual entries, totals by merchant, and grand
+	/// total.
 	pub fn account_summary(
 		&self,
 		account: &String,
@@ -48,6 +51,9 @@ impl LedgerReporter {
 
 		let mut totals = BTreeMap::new();
 
+		// desc -> map of currency to total net movement
+		let mut totals_by_desc = BTreeMap::new();
+
 		for entry in &self.entries {
 			let net_map = entry.net_for_account(account);
 			for (i, (currency, total)) in net_map.iter().enumerate() {
@@ -56,6 +62,12 @@ impl LedgerReporter {
 				{
 					continue;
 				}
+
+				*totals_by_desc
+					.entry(entry.get_desc().clone())
+					.or_insert_with(BTreeMap::new)
+					.entry(currency.clone())
+					.or_insert(Quant::zero()) += *total;
 
 				if i == 0 {
 					// first row we print full detail
@@ -79,6 +91,14 @@ impl LedgerReporter {
 
 				*totals.entry(currency.clone()).or_insert(Quant::zero()) +=
 					*total;
+			}
+		}
+
+		table.add_partial_separator(vec![1, 2]);
+
+		for (desc, m) in &totals_by_desc {
+			for (currency, total) in m {
+				table.add_row(vec!["", desc, &total.to_string(), currency, ""]);
 			}
 		}
 
