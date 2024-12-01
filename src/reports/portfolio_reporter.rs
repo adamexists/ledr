@@ -66,61 +66,6 @@ impl PortfolioReporter {
 		Self { lots }
 	}
 
-	/// Prints an abbreviated table format, meant to contain open lots only.
-	/// TODO: Remove this because we have ugl report now.
-	pub fn print_open_lots(&self, as_of: &Date) {
-		if self.lots.is_empty() {
-			println!("No open lots");
-			return;
-		}
-
-		let mut table = Table::new(7);
-		table.right_align(vec![0, 1, 2, 4, 5]);
-
-		table.add_header(vec![
-			"ID",
-			"Opened",
-			"Held",
-			"Asset",
-			"Qty",
-			"Cost Basis",
-			"Account",
-		]);
-
-		table.add_separator();
-		for l in self.lots.iter() {
-			table.add_row(vec![
-				&l.id,
-				&l.acquisition_date.to_string(),
-				&l.time_held(as_of).to_string(),
-				l.commodity.symbol(),
-				&l.quantity.to_string(),
-				&l.commodity.cost_basis().to_string(),
-				&l.account.to_string(),
-			])
-		}
-
-		let bottom_line = if self.lots.len() == 1 {
-			"Open Lot"
-		} else {
-			"Open Lots"
-		};
-
-		table.add_partial_separator(vec![1]);
-
-		// total just shows lot count
-		table.add_row(vec![
-			"",
-			&format!("{} {}", self.lots.len(), bottom_line),
-			"",
-			"",
-			"",
-			"",
-			"",
-		]);
-		table.print();
-	}
-
 	/// Prints a realized gain/loss report.
 	pub fn print_realized_gain_loss(
 		&self,

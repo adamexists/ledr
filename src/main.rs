@@ -38,9 +38,6 @@ mod parsing;
 mod reports;
 mod util;
 
-// TODO: Support negative precision input, which is a way of rounding off
-//  numbers to e.g. tens, hundreds, or thousands. i.e. Halliburton financials.
-
 #[derive(Parser)]
 #[command(name = "ledr", version = "1.0", about = "Plain text accounting tool")]
 struct Cli {
@@ -127,9 +124,8 @@ enum Directive {
 
 	Er, // exchange rates
 
-	Lots, // open lots report
-	Rgl,  // realized gains/losses report
-	Ugl,  // unrealized gains/losses report
+	Rgl, // realized gains/losses report
+	Ugl, // unrealized gains/losses report
 
 	As,   // account summary
 	Fmt,  // format and output the ledger's entries
@@ -182,14 +178,6 @@ fn main() -> Result<(), Error> {
 			let rates = ledger.exchange_rates.take_all_rates();
 			let reporter = RateReporter::new(rates);
 			reporter.print_all_rates();
-		},
-		Directive::Lots => {
-			let reporter = PortfolioReporter::new(
-				portfolio.take_lots(vec![LotFilter::Status(LotStatus::Open)]),
-				parse_result.max_precision_by_currency,
-				args.precision.unwrap_or(u32::MAX),
-			);
-			reporter.print_open_lots(&end.min(today()))
 		},
 		Directive::Rgl => {
 			let reporter = PortfolioReporter::new(
